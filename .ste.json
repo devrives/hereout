@@ -1,0 +1,5 @@
+{
+  "include": ["CLAUDE.md", ".claude/**/*.md"],
+  "exclude": [],
+  "noHangul": true
+}

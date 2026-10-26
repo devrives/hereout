@@ -1,0 +1,17 @@
+{
+  "extraKnownMarketplaces": {
+    "devrives-kit": {
+      "source": {
+        "source": "git",
+        "url": "git@gitlab.com:devrives/kit.git",
+        "ref": "main"
+      },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "core@devrives-kit": true,
+    "wiki@devrives-kit": true,
+    "devrives@devrives-kit": true
+  }
+}
