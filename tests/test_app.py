@@ -57,3 +57,4 @@ def test_page_and_robots():
     client = TestClient(create_app(None, use_env=False))
     assert "HereOut" in client.get("/").text
     assert "Disallow: /" in client.get("/robots.txt").text
+    assert client.head("/").status_code == 200

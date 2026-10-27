@@ -95,15 +95,15 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
     store = PlanStore()
     reads = RateLimit(READS_PER_WINDOW, READ_WINDOW)
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     def index():
         return FileResponse(WEB / "index.html")
 
-    @app.get("/robots.txt", response_class=PlainTextResponse)
+    @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)
     def robots():
         return "User-agent: *\nDisallow: /\n"
 
-    @app.get("/api/health")
+    @app.api_route("/api/health", methods=["GET", "HEAD"])
     def health():
         return {"ok": True, "model": client is not None}
 
