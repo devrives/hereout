@@ -57,6 +57,19 @@ button { background: transparent; color: var(--fg); border: 2px solid var(--line
 .stage.big { max-height: 80vh; overflow: auto; }
 .stage.big canvas { width: 220%; max-width: none; }
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+.view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.view button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+canvas:focus-visible { outline: 3px solid var(--fg); outline-offset: -3px; }
+canvas { cursor: crosshair; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 0; font-size: 0.9rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 34px; height: 12px; border-radius: 3px; }
+.sw-field { background: linear-gradient(90deg, rgb(10 125 59 / 0.55), rgb(245 190 20 / 0.55)); }
+.sw-way { height: 4px !important; background: rgb(6 64 34 / 0.8); }
+.sw-route { height: 6px !important; background: #1b5fd1; }
+.hint { margin: 8px 0 0; }
+#kbd-hint { color: var(--muted); }
+#kbd-hint::before { content: " "; }
 .fix { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
 #fix-hint { color: var(--muted); }
 .exits { display: flex; flex-wrap: wrap; gap: 8px; }

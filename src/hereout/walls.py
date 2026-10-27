@@ -5,6 +5,10 @@ black or grey, and then coloured ink is a sign or an arrow. Some plans draw
 walls in one colour (often red). When most of the ink in the floor drawing
 has one hue, that hue is the wall colour and we keep the ink of that hue
 instead. Small blobs are mostly text and are dropped.
+Thick ink much fainter than the darkest ink of the plan is a fill, not a
+wall: many plans paint the escape routes as soft bands, and the edge of a
+band looks like a line to the local threshold. Thin faint lines stay, because
+a thin wall looks faint in a blurred photo.
 Door gaps are kept open: we never close gaps. Door swings, hatching and
 text are drawn thinner than walls, so strokes much thinner than the usual
 wall stroke are removed.
@@ -27,6 +31,8 @@ THIN_SHARE = 0.55      # strokes thinner than this share of the wall stroke go
 MIN_BLOB_SHARE = 0.05   # a blob whose box is smaller than this share of the image is text,
 MIN_BAR_SHARE = 0.015   # unless it is a thin bar (a short wall piece) at least this long
 BAR_ASPECT = 4.0
+FAINT_SHARE = 0.5      # ink fainter than this share of the strong ink (90th percentile) may be a fill
+FILL_SHARE = 0.005     # faint ink at least this share of the image thick is a fill
 
 
 def _ink(img: np.ndarray) -> np.ndarray:
@@ -35,6 +41,24 @@ def _ink(img: np.ndarray) -> np.ndarray:
     block = max(15, (max(h, w) // 24) | 1)
     return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                  cv2.THRESH_BINARY_INV, block, 18)
+
+
+def _drop_faint(img: np.ndarray, ink: np.ndarray, plan_box=None) -> None:
+    """Clear thick ink whose darkness against the local paper is weak, in place."""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    k = max(15, (max(h, w) // 40) | 1)
+    # A closing removes the lines and leaves the paper around them.
+    paper = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (k, k)))
+    contrast = paper.astype(int) - gray.astype(int)
+    ys, xs = _box_slice(img.shape, plan_box)
+    sel = ink[ys, xs] > 0
+    if sel.sum() <= 100:
+        return
+    faint = ((ink > 0) & (contrast < FAINT_SHARE * np.percentile(contrast[ys, xs][sel], 90))).astype(np.uint8)
+    t = max(3, round(FILL_SHARE * max(h, w)))
+    fill = cv2.morphologyEx(faint, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (t, t)))
+    ink[fill > 0] = 0
 
 
 def _box_slice(shape, plan_box):
@@ -96,6 +120,7 @@ def wall_mask(img: np.ndarray, plan_box: tuple[float, float, float, float] | Non
     """
     h, w = img.shape[:2]
     dark = _ink(img)
+    _drop_faint(img, dark, plan_box)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     hue, sat = hsv[:, :, 0].astype(int), hsv[:, :, 1]
     target = wall_hue(img, plan_box, dark)

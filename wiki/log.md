@@ -40,3 +40,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/model-provider.md`: both model calls use low reasoning effort, with the test on 30 plans.
 - Source: the owner request about time and cost, and the test.
+
+## [2026-10-27] ingest | Escape map and routes in the browser
+
+- Added `decisions/browser-routing.md`.
+- Updated `components/plan-reader.md` (escape field, map, thick faint ink, known limits) and `components/gallery.md` (no server state, route results found again).
+- Source: the owner request for all ways to the exits, the parity test and the check on PT-commons_000107.

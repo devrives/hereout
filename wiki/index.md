@@ -14,6 +14,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 ## Decisions
 
 - [Read plans with Muse Spark through Baseten](decisions/model-provider.md): model, endpoint and spend cap.
+- [Find the routes in the browser from an escape field](decisions/browser-routing.md): escape map, routes from any spot, no upload store.
 
 ## Timelines
 

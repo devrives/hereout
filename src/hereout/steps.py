@@ -7,25 +7,49 @@ turn relative to the step before it, which holds however the plan is turned.
 
 The plan has no reliable scale, so lengths are relative: a short, medium or
 long walk compared with the size of the plan.
+
+web/route.js has the same steps in JS. Change both.
 """
 
 from __future__ import annotations
 
 import math
 
-import cv2
-import numpy as np
-
 SIMPLIFY_SHARE = 0.015   # path points closer than this share of the plan to a line merge
 MIN_LEG_SHARE = 0.03     # legs shorter than this share are folded into the next one
+
+
+def _line_gap(p, a, b) -> float:
+    """Distance of p from the line through a and b."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = math.sqrt(dx * dx + dy * dy)
+    if n == 0:
+        return math.dist(p, a)
+    return abs(dy * (p[0] - a[0]) - dx * (p[1] - a[1])) / n
+
+
+def _douglas_peucker(points: list, eps: float) -> list:
+    keep = [False] * len(points)
+    keep[0] = keep[-1] = True
+    todo = [(0, len(points) - 1)]
+    while todo:
+        lo, hi = todo.pop()
+        far, far_i = -1.0, -1
+        for i in range(lo + 1, hi):
+            g = _line_gap(points[i], points[lo], points[hi])
+            if g > far:
+                far, far_i = g, i
+        if far_i >= 0 and far > eps:
+            keep[far_i] = True
+            todo.append((lo, far_i))
+            todo.append((far_i, hi))
+    return [p for p, k in zip(points, keep) if k]
 
 
 def simplify(points: list[tuple[float, float]], plan_size: float) -> list[tuple[float, float]]:
     if len(points) < 3:
         return list(points)
-    curve = np.array(points, dtype=np.float32).reshape(-1, 1, 2)
-    approx = cv2.approxPolyDP(curve, SIMPLIFY_SHARE * plan_size, False).reshape(-1, 2)
-    out = [tuple(map(float, p)) for p in approx]
+    out = [(float(x), float(y)) for x, y in _douglas_peucker(list(points), SIMPLIFY_SHARE * plan_size)]
     # Drop tiny legs, but always keep the start and the exit.
     kept = [out[0]]
     for p in out[1:-1]:

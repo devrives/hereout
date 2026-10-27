@@ -26,3 +26,13 @@ def draw_plan(w=800, h=500):
 @pytest.fixture
 def plan():
     return draw_plan()
+
+
+def field_from_payload(grid, exits, clear=()):
+    """The escape field from the grid the server sends, as the browser builds it."""
+    import base64
+
+    from hereout.route import Field
+    bits = np.unpackbits(np.frombuffer(base64.b64decode(grid["bits"]), np.uint8))
+    blocked = bits[: grid["w"] * grid["h"]].reshape(grid["h"], grid["w"]).astype(bool)
+    return Field(blocked, grid["scale"], exits, clear=clear)

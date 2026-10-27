@@ -27,6 +27,15 @@ def test_walls_skip_signs_and_text(plan):
     assert not walls[160, 400]       # the door stays open
 
 
+def test_soft_route_band_is_not_a_wall():
+    img, here, exit_ = draw_plan()
+    # A grey-green band painted along the corridor, as many plans mark the escape route.
+    cv2.rectangle(img, (420, 60), (500, 440), (175, 190, 170), -1)
+    walls = wall_mask(img)
+    assert not walls[60:440, 420:500].any()
+    assert walls[300, 400]  # the inner wall next to it stays
+
+
 def test_route_goes_through_the_door(plan):
     img, here, exit_ = plan
     route = find_route(wall_mask(img), here, [exit_])

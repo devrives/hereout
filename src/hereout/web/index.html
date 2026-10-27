@@ -24,17 +24,28 @@
 
   <section id="result" hidden aria-labelledby="result-head">
     <h2 id="result-head" tabindex="-1">Your route</h2>
-    <div class="stage" id="stage" role="region" aria-label="Plan">
-      <canvas id="plan" role="img" aria-label="The plan, no route yet"></canvas>
+    <div class="view" role="group" aria-label="What the plan shows">
+      <button id="show-map" type="button" aria-pressed="true">Escape map</button>
+      <button id="show-photo" type="button" aria-pressed="false">Original photo</button>
+      <button id="enlarge" type="button" aria-pressed="false">Larger plan</button>
     </div>
+    <div class="stage" id="stage" role="region" aria-label="Plan">
+      <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
+    </div>
+    <div id="legend" class="legend" hidden>
+      <span><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
+      <span><i class="sw-way" aria-hidden="true"></i>Ways out</span>
+      <span><i class="sw-route" aria-hidden="true"></i>Your route</span>
+    </div>
+    <p id="tap-hint" class="hint">Tap any open spot on the plan to see the way out from there.<span id="kbd-hint" hidden></span></p>
     <p id="credit" class="credit" hidden></p>
     <div class="fix">
-      <button id="fix" type="button">Fix the marks</button>
-      <button id="enlarge" type="button" aria-pressed="false">Larger plan</button>
-      <span id="fix-hint" hidden>Tap where you are, then tap the exit.<span id="kbd-hint" hidden> With a keyboard: arrow keys to move, Enter to place, Escape to stop.</span></span>
+      <button id="fix" type="button">Mark the exit</button>
+      <button id="to-mark" type="button" hidden>Start at "you are here"</button>
+      <span id="fix-hint" hidden>Tap the exit on the plan. It takes the place of the exits found.</span>
     </div>
     <h2 id="steps-head">Steps</h2>
-    <p class="muted">Tap a step to see it on the plan.</p>
+    <p id="steps-hint" class="muted">Tap a step to see it on the plan.</p>
     <ol id="steps" tabindex="-1" aria-labelledby="steps-head"></ol>
     <button id="speak" type="button">Read the steps aloud</button>
     <button id="back-to-samples" type="button" hidden>Back to the samples</button>
@@ -55,6 +66,7 @@
     </details>
   </section>
 </main>
+<script src="/static/route.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

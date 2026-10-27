@@ -3,8 +3,9 @@ from fastapi.testclient import TestClient
 
 from hereout.app import create_app
 from hereout.reader import Reading
+from hereout.route import NoRoute
 
-from conftest import draw_plan
+from conftest import draw_plan, field_from_payload
 
 
 class FakeReader:
@@ -28,17 +29,21 @@ def test_plan_with_marks_gets_a_route():
     r = upload(client, img)
     assert r.status_code == 200
     data = r.json()
-    assert data["route"] and data["steps"][-1]["kind"] == "arrive"
     assert data["image"].startswith("data:image/jpeg;base64,")
+    assert data["id"] is None and data["here"] == list(here)
+    # The grid the browser gets is enough to find the route.
+    exits = [(e["x"], e["y"]) for e in data["exits"]]
+    field = field_from_payload(data["grid"], exits, clear=[data["here"]])
+    assert field.route(data["here"]).exit_index == 0
 
 
-def test_no_model_then_two_taps():
+def test_no_model_still_sends_the_grid():
     img, here, exit_ = draw_plan()
     client = TestClient(create_app(None, use_env=False))
     data = upload(client, img).json()
-    assert data["route"] is None and data["model_error"] == "model not configured"
-    r = client.post("/api/route", json={"id": data["id"], "here": here, "exits": [exit_]})
-    assert r.status_code == 200 and r.json()["route"]
+    assert data["here"] is None and data["model_error"] == "model not configured"
+    # Marks the user places by hand are routed on the same grid.
+    assert field_from_payload(data["grid"], [exit_]).route(here).exit_index == 0
 
 
 def test_bad_upload():
@@ -47,10 +52,17 @@ def test_bad_upload():
     assert r.status_code == 400
 
 
-def test_unknown_plan_id():
+def test_sealed_start_has_no_route():
+    img, here, exit_ = draw_plan()
+    cv2.line(img, (400, 130), (400, 190), (20, 20, 20), 8)  # close the door
     client = TestClient(create_app(None, use_env=False))
-    r = client.post("/api/route", json={"id": "nope", "here": [1, 1], "exits": [[2, 2]]})
-    assert r.status_code == 404
+    data = upload(client, img).json()
+    try:
+        field_from_payload(data["grid"], [exit_]).route(here)
+    except NoRoute as e:
+        assert str(e) == "no open way to an exit"
+        return
+    raise AssertionError("expected NoRoute")
 
 
 def test_page_and_robots():
@@ -83,11 +95,9 @@ def test_gallery_list_and_open(tmp_path):
     assert [p["id"] for p in plans] == ["XX-test_1"]
     assert client.get(plans[0]["thumb"]).status_code == 200
     data = client.post("/api/gallery/XX-test_1").json()
-    assert data["route"] and data["credit"]["author"] == "A"
+    assert data["credit"]["author"] == "A" and data["grid"]["bits"]
     assert data["id"] == "g-XX-test_1"
-    # The opened plan can be routed again with new marks.
-    r = client.post("/api/route", json={"id": data["id"], "here": data["here"], "exits": [[data["exits"][0]["x"], data["exits"][0]["y"]]]})
-    assert r.status_code == 200 and r.json()["route"]
+    assert client.post("/api/route", json={}).status_code in (404, 405)
 
 
 def test_gallery_unknown_and_absent(tmp_path):

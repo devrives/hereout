@@ -1,18 +1,28 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+const R = HereOutRoute;
 const canvas = $("plan");
 const ctx = canvas.getContext("2d");
 const img = new Image();
-let state = null;   // the last answer from the server
-let taps = null;    // [] while the user fixes the marks
-let cursor = null;  // [x, y] keyboard cursor while the user fixes the marks
-let saved = null;   // the marks and route before "Fix the marks", to restore on cancel or failure
-let planSeq = 0;    // only the newest upload may change the page
-let routeSeq = 0;   // only the newest route request may change the page
-let selected = -1;  // the step shown on the plan, or -1
+// The plan: the server answer, plus the start, the exits and the chosen exit
+// as the user set them. Everything else is found again from it in the browser.
+let state = null;
+let view = null;      // the escape field, the map layer, the route and the steps for state
+let marking = false;  // true while the user marks the exit
+let cursor = null;    // [x, y] keyboard marker on the plan
+let keyboard = false; // show the marker only after an arrow key
+let planSeq = 0;      // only the newest upload may change the page
+let selected = -1;    // the step shown on the plan, or -1
+let showMap = true;
+let photoOnly = false;
 const canSpeak = "speechSynthesis" in window;
 const STORE_KEY = "hereout:last";
+
+// Map colours: green near an exit, yellow far from one.
+const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
+const MAP_ALPHA = 110;
+const ROUTE = "#1b5fd1";
 
 function say(text) { $("status").textContent = text; }
 
@@ -26,23 +36,134 @@ function remember() {
   try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage full or blocked */ }
 }
 
+const exitPoints = () => state.exits.map((e) => [e.x, e.y]);
+
+// The escape field for the current exits. The ink of the plan's own marks
+// is not a wall.
+function buildField() {
+  const g = state.grid;
+  const blocked = R.decodeGrid(g);
+  const clear = state.here ? [state.here] : [];
+  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, [...clear, ...exitPoints()]);
+  const field = make(exitPoints());
+  const single = new Map();  // a field to one exit, made when the user picks that exit
+  view = { field, layer: null, route: null, steps: [], error: null,
+           toExit: (i) => { if (!single.has(i)) single.set(i, make([exitPoints()[i]])); return single.get(i); } };
+  view.reachable = field.owner.some((o) => o >= 0);
+}
+
+function findRoute() {
+  view.route = null;
+  view.steps = [];
+  view.error = null;
+  if (!state.start || !state.exits.length) return;
+  const field = state.exitChoice >= 0 ? view.toExit(state.exitChoice) : view.field;
+  try {
+    const r = field.route(state.start);
+    const exitIndex = state.exitChoice >= 0 ? state.exitChoice : r.exitIndex;
+    view.route = { points: r.points, exitIndex };
+    view.steps = R.directions(r.points, state.width, state.height);
+  } catch (e) {
+    if (!(e instanceof R.NoRoute)) throw e;
+    view.error = e.message;
+  }
+}
+
+// The escape map: colour by the cost to the nearest exit, and lines along
+// the ways that many routes share. Made once for each field.
+function mapLayer() {
+  if (view.layer) return view.layer;
+  const f = view.field;
+  const n = f.gw * f.gh;
+  const tint = document.createElement("canvas");
+  tint.width = f.gw;
+  tint.height = f.gh;
+  const tctx = tint.getContext("2d");
+  const data = tctx.createImageData(f.gw, f.gh);
+  let max = 0;
+  for (let i = 0; i < n; i++) if (f.owner[i] >= 0 && f.dist[i] > max) max = f.dist[i];
+  for (let i = 0; i < n; i++) {
+    if (f.owner[i] < 0) continue;
+    const t = max ? Math.sqrt(f.dist[i] / max) : 0;
+    for (let k = 0; k < 3; k++) data.data[i * 4 + k] = NEAR[k] + (FAR_C[k] - NEAR[k]) * t;
+    data.data[i * 4 + 3] = MAP_ALPHA;
+  }
+  tctx.putImageData(data, 0, 0);
+
+  const layer = document.createElement("canvas");
+  layer.width = state.width;
+  layer.height = state.height;
+  const l = layer.getContext("2d");
+  l.imageSmoothingEnabled = true;
+  l.drawImage(tint, 0, 0, f.gw / f.scale, f.gh / f.scale);
+
+  const { acc, order } = f.flow();
+  const min = Math.max(20, order.length * 0.004);
+  const unit = Math.max(state.width, state.height) / 160;
+  const widths = [[], [], [], [], [], []];
+  for (const i of order) {
+    if (acc[i] < min || f.next[i] < 0) continue;
+    widths[Math.min(5, Math.floor(Math.log2(acc[i] / min)))].push(i);
+  }
+  l.lineCap = l.lineJoin = "round";
+  l.strokeStyle = "rgba(6, 64, 34, 0.75)";
+  widths.forEach((cells, b) => {
+    l.lineWidth = unit * (0.22 + 0.16 * b);
+    l.beginPath();
+    for (const i of cells) {
+      const a = f.toPx(i), z = f.toPx(f.next[i]);
+      l.moveTo(a[0], a[1]);
+      l.lineTo(z[0], z[1]);
+    }
+    l.stroke();
+  });
+
+  // Arrow heads on the main ways, at even steps of cost, pointing to the exit.
+  const spacing = 0.09 * Math.max(f.gw, f.gh);
+  l.fillStyle = "rgba(6, 64, 34, 0.9)";
+  for (const i of order) {
+    const j = f.next[i];
+    if (acc[i] < min * 4 || j < 0 || Math.floor(f.dist[i] / spacing) === Math.floor(f.dist[j] / spacing)) continue;
+    let k = j;
+    for (let s = 0; s < 3 && f.next[k] >= 0; s++) k = f.next[k];
+    const a = f.toPx(i), z = f.toPx(k);
+    const ang = Math.atan2(z[1] - a[1], z[0] - a[0]);
+    const r = unit * 1.3;
+    l.beginPath();
+    l.moveTo(a[0] + Math.cos(ang) * r, a[1] + Math.sin(ang) * r);
+    l.lineTo(a[0] + Math.cos(ang + 2.5) * r, a[1] + Math.sin(ang + 2.5) * r);
+    l.lineTo(a[0] + Math.cos(ang - 2.5) * r, a[1] + Math.sin(ang - 2.5) * r);
+    l.closePath();
+    l.fill();
+  }
+  view.layer = layer;
+  return layer;
+}
+
 function draw() {
   if (!state) return;
   canvas.width = state.width;
   canvas.height = state.height;
   ctx.drawImage(img, 0, 0);
   const unit = Math.max(state.width, state.height) / 160;
+  if (!photoOnly) {
+    if (showMap && view.reachable) ctx.drawImage(mapLayer(), 0, 0);
+    drawMarks(unit);
+  }
+  if (cursor && keyboard && document.activeElement === canvas) cross(cursor[0], cursor[1], unit * 4);
+}
 
+function drawMarks(unit) {
   // Exit and "you are here" differ in shape and label, not only in colour.
-  const here = state.here;
-  for (const e of state.exits) exitMark(e.x, e.y, unit * 2.2);
+  const here = state.start;
+  state.exits.forEach((e, i) => exitMark(e.x, e.y, unit * 2.2, i + 1));
   if (here) hereMark(here[0], here[1], unit * 2.4);
 
   // The route goes over the marks, so a short route stays visible.
-  const pts = state.route && state.route.points;
+  const pts = view.route && view.route.points;
   if (pts && pts.length > 1) {
     ctx.lineJoin = ctx.lineCap = "round";
-    for (const [color, width] of [["#ffffff", unit * 2], ["#0a7d3b", unit * 1.1]]) {
+    for (const [color, width] of [["#ffffff", unit * 2], [ROUTE, unit * 1.1]]) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.beginPath();
@@ -52,7 +173,7 @@ function draw() {
     }
   }
 
-  const step = state.steps[selected];
+  const step = view.steps[selected];
   if (step && step.kind === "walk") {
     ctx.lineCap = "round";
     for (const [color, width] of [["#ffffff", unit * 3.2], ["#d9480f", unit * 2]]) {
@@ -72,27 +193,31 @@ function draw() {
     label("EXIT", e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
   }
   if (here) label("YOU", here[0], here[1] - unit * 2.4 * 1.8, unit * 2.4, "bottom");
-
-  if (taps && cursor && document.activeElement === canvas) cross(cursor[0], cursor[1], unit * 4);
-  if (!taps) canvas.setAttribute("aria-label", state.route ? "The plan with the route" : "The plan, no route yet");
 }
 
 function hereMark(x, y, r) {
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = "#1b5fd1";
+  ctx.fillStyle = ROUTE;
   ctx.fill();
   ctx.lineWidth = r / 2.5;
   ctx.strokeStyle = "#ffffff";
   ctx.stroke();
 }
 
-function exitMark(x, y, r) {
+// The number matches the exit buttons below the plan.
+function exitMark(x, y, r, n) {
   ctx.fillStyle = "#0a7d3b";
   ctx.lineWidth = r / 2.5;
   ctx.strokeStyle = "#ffffff";
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
   ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+  if (state.exits.length < 2) return;
+  ctx.font = `bold ${Math.round(r * (n > 9 ? 1.1 : 1.4))}px system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(String(n), x, y + r * 0.08);
 }
 
 function label(text, x, y, r, baseline) {
@@ -121,7 +246,7 @@ function showSteps() {
   const list = $("steps");
   list.replaceChildren();
   selected = -1;
-  state.steps.forEach((s, i) => {
+  view.steps.forEach((s, i) => {
     const li = document.createElement("li");
     if (s.kind === "walk") {
       const b = document.createElement("button");
@@ -136,8 +261,9 @@ function showSteps() {
     }
     list.append(li);
   });
-  $("steps-head").hidden = state.steps.length === 0;
-  $("speak").hidden = state.steps.length === 0 || !canSpeak;
+  const none = view.steps.length === 0;
+  $("steps-head").hidden = $("steps-hint").hidden = none;
+  $("speak").hidden = none || !canSpeak;
   stopSpeaking();
 }
 
@@ -145,8 +271,9 @@ function showSteps() {
 function select(i) {
   selected = i;
   $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
+  if (photoOnly) setPhotoOnly(false);
   draw();
-  const step = state.steps[i];
+  const step = view.steps[i];
   if (!step || step.kind !== "walk") return;
   const mid = [(step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2];
   scrollToPoint(mid);
@@ -156,19 +283,31 @@ function select(i) {
   if (y < 0 || y > window.innerHeight) $("stage").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
-// One button for each other exit the model found, so the route can go to
-// another exit without placing marks on the picture.
+// Model labels are often all "Exit", so the number tells the exits apart.
+function exitName(i) {
+  const l = (state.exits[i].label || "").trim();
+  return !l || /^exit$/i.test(l) ? `Exit ${i + 1}` : `${l} (${i + 1})`;
+}
+
+// One button for each other exit, so the route can go to another exit
+// without placing marks on the picture.
 function showExits() {
   const box = $("exits");
   box.replaceChildren();
-  const used = state.route ? state.route.exit_index : -1;
-  const others = state.here ? state.exits.map((e, i) => [e, i]).filter(([, i]) => i !== used) : [];
-  $("exits-wrap").hidden = others.length === 0 || !state.route;
-  for (const [e, i] of others) {
+  const used = view.route ? view.route.exitIndex : -1;
+  const others = view.route ? state.exits.map((e, i) => i).filter((i) => i !== used) : [];
+  $("exits-wrap").hidden = others.length === 0;
+  for (const i of others) {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = e.label || `Exit ${i + 1}`;
-    b.addEventListener("click", () => route(state.here, [[e.x, e.y]], state.exits, i));
+    b.textContent = exitName(i);
+    b.addEventListener("click", () => {
+      state.exitChoice = i;
+      update();
+      remember();
+      if (view.route) say(`Route to ${exitName(i)}. Check it against the plan.`);
+      $("steps").focus();
+    });
     box.append(b);
   }
 }
@@ -187,7 +326,7 @@ function showCredit() {
     a.rel = "noopener";
     return a;
   };
-  const changes = [...(c.changes || []), "marks and route drawn on top"].join(", ");
+  const changes = [...(c.changes || []), "marks, escape map and route drawn on top"].join(", ");
   box.append(`Sample plan. Photo: “${c.title}” by ${c.author}, `,
              link(c.licence, c.licence_url), ", ", link("source", c.source_url),
              `. Changes: ${changes}.`,
@@ -195,63 +334,138 @@ function showCredit() {
              " This sample uses a saved model reading.");
 }
 
-function showAll() {
-  showCredit();
+// Find the route again and show everything that depends on it.
+function update() {
+  findRoute();
   draw();
   showSteps();
   showExits();
-  explain();
+  $("to-mark").hidden = !state.here || !state.start ||
+    (state.start[0] === state.here[0] && state.start[1] === state.here[1]);
+  showLegend();
 }
 
-function explain() {
-  if (state.route) { say("Route found. Check it against the plan."); return; }
-  const next = `Tap "Fix the marks" and mark it yourself, or ${state.credit ? "pick another sample" : "take the photo again"}.`;
-  if (state.model_error) say(`Could not read the plan. ${next}`);
-  else if (!state.here) say(`No "you are here" mark found. ${next}`);
-  else if (!state.exits.length) say(`No exit found. ${next}`);
-  else say('No route from that point. Tap "Fix the marks" and mark a spot in a corridor.');
+const showLegend = () => { $("legend").hidden = !showMap || photoOnly || !view.reachable; };
+
+const ROUTE_ERRORS = {
+  "start is inside a wall": "That spot is inside a wall. Tap an open spot in a corridor or a room.",
+  "no open way to an exit": "No open way from that spot to an exit on this plan. Try a spot in a corridor.",
+  "every exit is inside a wall": 'The exits on this plan are inside walls. Tap "Mark the exit" and mark one in a doorway.',
+};
+
+function explain(fromTap) {
+  if (!state.exits.length) {
+    say(state.model_error
+      ? 'Could not read the plan. Tap "Mark the exit" and mark it, then tap where you are.'
+      : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
+  } else if (!state.start) {
+    say('No "you are here" mark found. Tap where you are on the plan.');
+  } else if (view.error) {
+    say(!fromTap && view.error === "no open way to an exit"
+      ? 'No open way from "you are here" to an exit. Tap an open spot near it.'
+      : ROUTE_ERRORS[view.error] || "No route from that spot.");
+  } else {
+    say(fromTap ? "Route from the spot you marked. Check it against the plan."
+                : 'Route from "you are here" to the nearest exit. Check it against the plan.');
+  }
 }
 
-function startFixing(byKeyboard) {
-  saved = { here: state.here, exits: state.exits, route: state.route, steps: state.steps };
-  taps = [];
-  cursor = state.here ? [...state.here] : [state.width / 2, state.height / 2];
+function setPhotoOnly(on) {
+  photoOnly = on;
+  $("show-photo").setAttribute("aria-pressed", String(on));
+  $("show-map").disabled = on;
+  showLegend();
+  draw();
+}
+
+$("show-map").addEventListener("click", () => {
+  showMap = !showMap;
+  $("show-map").setAttribute("aria-pressed", String(showMap));
+  showLegend();
+  draw();
+});
+$("show-photo").addEventListener("click", () => setPhotoOnly(!photoOnly));
+
+function startMarking() {
+  marking = true;
   $("fix").textContent = "Cancel";
   $("fix-hint").hidden = false;
-  $("kbd-hint").hidden = !byKeyboard;
-  canvas.tabIndex = 0;
-  canvas.setAttribute("role", "application");
-  canvas.setAttribute("aria-label", "Plan. Arrow keys move the marker, Enter places it, Escape cancels.");
-  if (byKeyboard) canvas.focus();
-  draw();
-  say("Mark where you are.");
+  hints();
+  if (photoOnly) setPhotoOnly(false);
+  say("Tap the exit on the plan.");
 }
 
-function stopFixing() {
-  taps = null;
-  cursor = null;
-  canvas.removeAttribute("tabindex");
-  canvas.setAttribute("role", "img");
-  $("fix").textContent = "Fix the marks";
+function stopMarking() {
+  marking = false;
+  $("fix").textContent = "Mark the exit";
   $("fix-hint").hidden = true;
+  hints();
 }
 
-// Put back the marks, route and steps from before "Fix the marks".
-function restore() {
-  if (saved) Object.assign(state, saved);
-  saved = null;
-  stopFixing();
-  showAll();
+$("fix").addEventListener("click", (ev) => {
+  if (marking) { stopMarking(); explain(false); return; }
+  startMarking();
+  // A click from Enter or Space has detail 0: go on with the keyboard.
+  if (ev.detail === 0) canvas.focus();
+});
+
+// The user's exit takes the place of the exits the model found.
+function setExit(x, y) {
+  stopMarking();
+  state.exits = [{ x: Math.round(x), y: Math.round(y), label: "" }];
+  state.exitChoice = -1;
+  buildField();
+  update();
+  remember();
+  explain(true);
+}
+
+function setStart(x, y) {
+  state.start = [Math.round(x), Math.round(y)];
+  state.exitChoice = -1;
+  if (photoOnly) setPhotoOnly(false);
+  update();
+  remember();
+  explain(true);
+}
+
+function place(x, y) {
+  if (marking) setExit(x, y);
+  else if (state.exits.length) setStart(x, y);
+  else say('Mark an exit first: tap "Mark the exit".');
+}
+
+$("to-mark").addEventListener("click", () => {
+  state.start = [...state.here];
+  state.exitChoice = -1;
+  update();
+  remember();
+  explain(false);
+});
+
+function hints() {
+  $("kbd-hint").textContent = marking
+    ? "Arrow keys move the marker. Enter places the exit. Escape stops."
+    : "Arrow keys move the marker. Enter starts the route there.";
+  canvas.setAttribute("aria-label", marking
+    ? "Plan. Mark the exit: tap it, or move the marker with the arrow keys and press Enter."
+    : "Plan. Tap a spot to see the route from there, or move the marker with the arrow keys and press Enter.");
 }
 
 function showPlan(answer, focusResult) {
   state = answer;
-  saved = null;
-  stopFixing();
+  if (state.start === undefined) state.start = state.here;
+  if (state.exitChoice === undefined) state.exitChoice = -1;
+  stopMarking();
+  cursor = null;
+  keyboard = false;
   img.onload = () => {
     $("result").hidden = false;
-    showAll();
-    if ($("stage").classList.contains("big")) centreOnHere();
+    buildField();
+    showCredit();
+    update();
+    explain(false);
+    if ($("stage").classList.contains("big")) centreOnStart();
     markOpenSample();
     if (focusResult) {
       $("result").scrollIntoView({ block: "start" });
@@ -264,9 +478,8 @@ function showPlan(answer, focusResult) {
 // Load a plan from an upload or the gallery. Only the newest request wins.
 async function loadPlan(request, waitText) {
   const n = ++planSeq;
-  routeSeq++;
   stopSpeaking();
-  if (taps) restore();
+  if (marking) stopMarking();
   $("photo").disabled = true;
   say(waitText);
   let answer;
@@ -386,107 +599,47 @@ async function showGallery() {
 }
 showGallery();
 
-$("fix").addEventListener("click", (ev) => {
-  if (taps) { restore(); $("fix").focus(); return; }
-  // A click from Enter or Space has detail 0.
-  startFixing(ev.detail === 0);
-});
-
-async function route(here, exits, allExits, exitIndex) {
-  const n = ++routeSeq;
-  say("Finding the route…");
-  let answer;
-  try {
-    const r = await fetch("/api/route", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: state.id, here, exits }),
-    });
-    if (!r.ok) {
-      if (n !== routeSeq) return;
-      const text = r.status === 404
-        ? "This photo is no longer on the server (photos are kept for 15 minutes). Take it again."
-        : await errorText(r, "Route failed. Try again.");
-      restore();
-      say(text);
-      $("fix").focus();
-      return;
-    }
-    answer = await r.json();
-  } catch (e) {
-    if (n !== routeSeq) return;
-    restore();
-    say("Route failed. Check the connection and try again.");
-    $("fix").focus();
-    return;
-  }
-  if (n !== routeSeq) return;
-  // The server answers for the exits it was sent. Keep the full exit list
-  // and point exit_index into it.
-  Object.assign(state, answer, { model_error: null, here, exits: allExits });
-  if (state.route) state.route.exit_index = exitIndex;
-  saved = null;
-  showAll();
-  remember();
-  $("steps").focus();
-}
-
-function place(x, y) {
-  taps.push([Math.round(x), Math.round(y)]);
-  if (taps.length === 1) {
-    state.here = taps[0];
-    state.route = null;
-    state.steps = [];  // old steps no longer match the plan
-    showSteps();
-    $("exits-wrap").hidden = true;
-    draw();
-    say("Now mark the exit.");
-    return;
-  }
-  const exit = taps[1];
-  const here = state.here;
-  stopFixing();
-  state.exits = [{ x: exit[0], y: exit[1], label: "" }];
-  draw();
-  route(here, [exit], state.exits, 0);
-}
-
 canvas.addEventListener("click", (ev) => {
-  if (!taps) return;
+  if (!state) return;
   const box = canvas.getBoundingClientRect();
   place((ev.clientX - box.left) * (canvas.width / box.width),
         (ev.clientY - box.top) * (canvas.height / box.height));
 });
 
-// Keyboard: arrow keys move a cross, Enter or Space places the mark.
+// Keyboard: arrow keys move a cross, Enter or Space places the start or the exit.
 canvas.addEventListener("keydown", (ev) => {
-  if (!taps || !cursor) return;
+  if (!state) return;
   const step = Math.max(state.width, state.height) * (ev.shiftKey ? 0.05 : 0.01);
   const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[ev.key];
+  if (!cursor) cursor = state.start ? [...state.start] : [state.width / 2, state.height / 2];
   if (move) {
+    keyboard = true;
+    $("kbd-hint").hidden = false;
     cursor = [Math.min(state.width, Math.max(0, cursor[0] + move[0])),
               Math.min(state.height, Math.max(0, cursor[1] + move[1]))];
     draw();
     scrollToPoint(cursor);
   } else if (ev.key === "Enter" || ev.key === " ") {
+    keyboard = true;
     place(cursor[0], cursor[1]);
-  } else if (ev.key === "Escape") {
-    restore();
-    $("fix").focus();
+  } else if (ev.key === "Escape" && marking) {
+    stopMarking();
+    explain(false);
   } else {
     return;
   }
   ev.preventDefault();
 });
-canvas.addEventListener("focus", () => { if (taps) $("kbd-hint").hidden = false; draw(); });
-canvas.addEventListener("blur", draw);
+// The keyboard hint only for keyboard focus, not after a tap.
+canvas.addEventListener("focus", () => { $("kbd-hint").hidden = !canvas.matches(":focus-visible"); draw(); });
+canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; draw(); });
 
-// In the larger plan, put "you are here" in the middle, so the start of the route is in view.
-function centreOnHere() {
-  if (!state || !state.here) return;
+// In the larger plan, put the start in the middle, so the start of the route is in view.
+function centreOnStart() {
+  if (!state || !state.start) return;
   const st = $("stage");
-  st.scrollLeft = state.here[0] / state.width * canvas.clientWidth - st.clientWidth / 2;
-  st.scrollTop = state.here[1] / state.height * canvas.clientHeight - st.clientHeight / 2;
+  st.scrollLeft = state.start[0] / state.width * canvas.clientWidth - st.clientWidth / 2;
+  st.scrollTop = state.start[1] / state.height * canvas.clientHeight - st.clientHeight / 2;
 }
 
 // In the larger plan, scroll so that a plan point is in the middle of the view.
@@ -503,7 +656,7 @@ $("enlarge").addEventListener("click", () => {
   $("enlarge").setAttribute("aria-pressed", String(big));
   if (big) {
     $("stage").tabIndex = 0;
-    centreOnHere();
+    centreOnStart();
     $("stage").scrollIntoView({ block: "nearest" });
   } else {
     $("stage").removeAttribute("tabindex");
@@ -522,7 +675,7 @@ $("speak").addEventListener("click", () => {
   if (!canSpeak || !state) return;
   if (speaking) { stopSpeaking(); return; }
   speechSynthesis.cancel();
-  const lines = ["Check this route against the plan.", ...state.steps.map((s) => s.text)];
+  const lines = ["Check this route against the plan.", ...view.steps.map((s) => s.text)];
   lines.forEach((text, i) => {
     const u = new SpeechSynthesisUtterance(text);
     if (i > 0) u.onstart = () => select(i - 1);
@@ -534,13 +687,13 @@ $("speak").addEventListener("click", () => {
 });
 
 // A link with ?sample=<id> opens that sample. Otherwise, after a reload, show
-// the last answer again. Rerouting works while the server still keeps the photo.
+// the last plan again. The browser has all it needs to route it again.
 const startSample = new URL(location.href).searchParams.get("sample");
 if (startSample) {
   openSample(startSample);
 } else {
   try {
     const last = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
-    if (last && last.image) showPlan(last);
+    if (last && last.image && last.grid) showPlan(last);
   } catch (e) { /* storage blocked */ }
 }

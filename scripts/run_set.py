@@ -6,7 +6,8 @@ Usage:
 
 --refresh makes no model call. It flattens each photo again with the current
 code. When the flat plan changed, it deletes the saved result, so the next run
-reads that photo again. Otherwise it only writes the credit again.
+reads that photo again. Otherwise it writes the credit again and finds the
+route again from the saved reading with the current wall and route code.
 
 INDEX.csv has one row per photo: zip_name (path relative to the CSV folder),
 country, licence, author, title, url, readable, security_sensitive. Only rows
@@ -35,7 +36,7 @@ import cv2
 import numpy as np
 
 from hereout.pipeline import decode_photo, plan_route, prepare, read_marks
-from hereout.reader import ModelClient
+from hereout.reader import ModelClient, Reading
 
 THUMB_SIDE = 360
 RETRIES = 3
@@ -78,6 +79,16 @@ def item_id(row: dict) -> str:
     return row["zip_name"].rsplit(".", 1)[0].replace("/", "-")
 
 
+def route_result(plan, reading: Reading) -> dict:
+    if not reading.you_are_here:
+        return {"route_found": False, "route_error": "no you-are-here mark", "steps": 0}
+    if not reading.exits:
+        return {"route_found": False, "route_error": "no exits", "steps": 0}
+    result = plan_route(plan, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits])
+    return {"route_found": result["route"] is not None, "route_error": result["route_error"],
+            "steps": len(result["steps"])}
+
+
 def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threading.Lock) -> dict:
     pid = item_id(row)
     photo = decode_photo((base / row["zip_name"]).read_bytes())
@@ -109,13 +120,7 @@ def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threadi
             "plan_box": reading.plan_box, "notes": reading.notes,
         }
         item["cost_usd"] = round(reading.cost_usd, 5)
-        if reading.you_are_here and reading.exits:
-            result = plan_route(plan, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits])
-            item["route_found"] = result["route"] is not None
-            item["route_error"] = result["route_error"]
-            item["steps"] = len(result["steps"])
-        else:
-            item["route_error"] = "no you-are-here mark" if not reading.you_are_here else "no exits"
+        item.update(route_result(plan, reading))
     if err != "spend cap reached":
         with lock:
             (out / "items" / f"{pid}.json").write_text(json.dumps(item, ensure_ascii=False))
@@ -140,6 +145,13 @@ def refresh(rows: list[dict], base: Path, out: Path) -> None:
             continue
         item = json.loads(path.read_text())
         item["credit"] = {**credit(row), "changes": plan.changes}
+        r = item.get("reading")
+        if r:
+            reading = Reading(
+                you_are_here=tuple(r["you_are_here"]) if r.get("you_are_here") else None,
+                exits=r.get("exits") or [], plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None)
+            plan.use_reading(reading)
+            item.update(route_result(plan, reading))
         path.write_text(json.dumps(item, ensure_ascii=False))
         kept += 1
     print(f"refresh: {kept} kept, {stale} to read again", flush=True)
