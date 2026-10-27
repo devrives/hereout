@@ -7,7 +7,7 @@ services:
     container_name: hereout
     env_file: .env
     environment:
-      HEREOUT_SPEND_CAP_USD: "5"
+      HEREOUT_SPEND_CAP_USD: "60"
     volumes:
       - hereout-spend:/data
     logging:

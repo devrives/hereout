@@ -21,7 +21,7 @@ HereOut reads a photo of a posted evacuation plan and shows the way out. The use
 
 - `docker compose build hereout && docker compose up -d hereout`, then `curl -sI https://hereout.devrives.com/`.
 - The container reads `.env` for the key. The spend ledger is on the volume `hereout-spend` (`/data/spend.json`). Read it with `docker exec hereout cat /data/spend.json`.
-- The cap is `HEREOUT_SPEND_CAP_USD` in `docker-compose.yml`.
+- The Baseten credit is 100 USD (owner, 2026-10-27). The caps share it: 60 USD for the server (`HEREOUT_SPEND_CAP_USD` in `docker-compose.yml`) and 30 USD for local tests (`HEREOUT_SPEND_CAP_USD` in `.env`). Keep the sum below the credit, because each ledger has its own cap.
 
 ## Rules
 
