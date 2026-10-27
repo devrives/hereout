@@ -2,7 +2,10 @@
 type: component
 title: Plan reader
 updated: 2026-10-27
+checked: dc4ed5d
 sources:
+  - owner:2026-10-27
+  - src/hereout/web/app.js
   - src/hereout/plan.py
   - src/hereout/walls.py
   - src/hereout/wall_lines.py
@@ -44,9 +47,20 @@ The plan reader changes a photo of a posted evacuation plan into a route and spo
 
 ## Known limits
 
-- On the test plan PT-commons_000107, the exit signs stand in the doorways, so the wall grid closes those doors. The model also put the exits on the street side about 90 pixels outside the outer line of the building. So the routes in the hall go to the exits at the top, and the left wing has no open way.
+The owner asked on 2026-10-27 to record these problems and not to fix them now.
+
+- PT-commons_000107: the wavy side walls of the hall give no wall line. Their ink touches columns, dashed lines and door swings. A looser rule drew a wall across a double door and two escape bands, so the strict rule stays. Why: [Find the walls as straight lines](../decisions/wall-lines.md).
+- PT-commons_000107: the model put exits 9 to 13 outside the street-side line of the building. A tap in the lower hall goes out of the bottom door and walks along the pavement to Exit 8.
+- PT-commons_000107: the left wing has no open way to an exit.
+- The last leg of a route crosses a drawn line when the model put the exit mark on or past a wall line. Examples: TW-commons_000049 and US-openverse_000109.
+- US-openverse_000109: the outline of the printed red escape arrow becomes a wall line.
+- PT-commons_000107: the "YOU" label covers the number of Exit 4.
+- The first build of the ways out takes about 1.3 s on a phone-class CPU (4x slowdown in Chromium). A route after a tap takes less than 0.1 s.
+- Routes only draws lines outside the floor drawing, for example the frame of the sign and the legend strip. These lines change no route.
 
 ## Related
 
 - [Find the routes in the browser](../decisions/browser-routing.md)
 - [Read plans with Muse Spark through Baseten](../decisions/model-provider.md)
+- [Find the walls as straight lines](../decisions/wall-lines.md)
+- [Show the ways out as straight lines from door to door](../decisions/way-network.md)

@@ -68,3 +68,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/wall-lines.md`: joins and line ends only over ink, stair treads are not walls, one line for a wavy wall of one thin stroke. The PT hall walls still give no line.
 - Source: the owner request of 2026-10-27 and `src/hereout/wall_lines.py`.
+
+## [2026-10-27] ingest | Known problems, recorded only
+
+- Updated `components/plan-reader.md`: Known limits lists the open problems after the wall-line and door-to-door changes. The old item about exit signs in the doorways is gone, because symbols are no longer walls.
+- Source: the owner request of 2026-10-27 (record only, no fix now) and the ux reviews of 2026-10-27.
