@@ -46,3 +46,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/browser-routing.md`.
 - Updated `components/plan-reader.md` (escape field, map, thick faint ink, known limits) and `components/gallery.md` (no server state, route results found again).
 - Source: the owner request for all ways to the exits, the parity test and the check on PT-commons_000107.
+
+## [2026-10-27] ingest | Routes only view
+
+- Updated `decisions/browser-routing.md`: the "Routes only" view, with the walls of the routing grid in grey.
+- Source: the owner request to see the routes without the photo.

@@ -21,7 +21,8 @@ sources:
 - The server sends the wall grid with each plan: the blocked cells as packed bits.
 - The browser finds the escape field: Dijkstra from all exits at the same time gives the cost to the nearest exit and the next cell for each open cell. A route from a tapped spot is a walk along the next cells.
 - `route.js` does the same steps in the same order as `route.py` and `steps.py`. `tests/test_route_parity.py` runs node on the same grids and requires the same costs, routes and step text.
-- The plan view has an "Escape map" layer, an "Original photo" view with no drawing, and exits with numbers.
+- The plan view has an "Escape map" layer, a "Photo only" view with no drawing, and exits with numbers.
+- A "Routes only" view shows the map, the route and the marks without the photo. It draws the walls of the routing grid in grey. The user can compare these walls with the photo (owner request, 2026-10-27).
 - The server keeps no upload. The upload store and the route request were removed.
 
 ## Consequences

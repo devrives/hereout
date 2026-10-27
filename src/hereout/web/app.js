@@ -16,6 +16,7 @@ let planSeq = 0;      // only the newest upload may change the page
 let selected = -1;    // the step shown on the plan, or -1
 let showMap = true;
 let photoOnly = false;
+let routesOnly = false; // the routes on the walls HereOut read, with no photo
 const canSpeak = "speechSynthesis" in window;
 $("shoot").hidden = false;  // without JS the photo button would do nothing
 const STORE_KEY = "hereout:last";
@@ -24,6 +25,7 @@ const STORE_KEY = "hereout:last";
 const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
 const MAP_ALPHA = 110;
 const ROUTE = "#1b5fd1";
+const WALL = "#2b2f36";
 
 // Two status lines: one by the photo button for loading, one under the plan
 // for what happens on the plan, so the answer to a tap is in view.
@@ -51,7 +53,7 @@ function buildField() {
   const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, [...clear, ...exitPoints()]);
   const field = make(exitPoints());
   const single = new Map();  // a field to one exit, made when the user picks that exit
-  view = { field, layer: null, route: null, steps: [], error: null,
+  view = { field, layer: null, walls: null, route: null, steps: [], error: null,
            toExit: (i) => { if (!single.has(i)) single.set(i, make([exitPoints()[i]])); return single.get(i); } };
   view.reachable = field.owner.some((o) => o >= 0);
 }
@@ -144,11 +146,48 @@ function mapLayer() {
   return layer;
 }
 
+// The walls as HereOut reads them: the edge cells of the blocked grid. The
+// area outside the plan box is wall too, so only its edge shows.
+function wallLayer() {
+  if (view.walls) return view.walls;
+  const f = view.field;
+  const cells = document.createElement("canvas");
+  cells.width = f.gw;
+  cells.height = f.gh;
+  const cctx = cells.getContext("2d");
+  const data = cctx.createImageData(f.gw, f.gh);
+  const open = (r, c) => r >= 0 && r < f.gh && c >= 0 && c < f.gw && !f.blocked[r * f.gw + c];
+  for (let r = 0; r < f.gh; r++) {
+    for (let c = 0; c < f.gw; c++) {
+      if (!f.blocked[r * f.gw + c] || !(open(r - 1, c) || open(r + 1, c) || open(r, c - 1) || open(r, c + 1))) continue;
+      data.data[(r * f.gw + c) * 4 + 3] = 255;
+    }
+  }
+  cctx.putImageData(data, 0, 0);
+  const layer = document.createElement("canvas");
+  layer.width = state.width;
+  layer.height = state.height;
+  const l = layer.getContext("2d");
+  l.imageSmoothingEnabled = false;
+  l.drawImage(cells, 0, 0, f.gw / f.scale, f.gh / f.scale);
+  l.globalCompositeOperation = "source-in";
+  l.fillStyle = WALL;
+  l.fillRect(0, 0, layer.width, layer.height);
+  view.walls = layer;
+  return layer;
+}
+
 function draw() {
   if (!state) return;
   canvas.width = state.width;
   canvas.height = state.height;
-  ctx.drawImage(img, 0, 0);
+  if (routesOnly) {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(wallLayer(), 0, 0);
+  } else {
+    ctx.drawImage(img, 0, 0);
+  }
   const unit = Math.max(state.width, state.height) / 160;
   if (!photoOnly) {
     if (showMap && view.reachable) ctx.drawImage(mapLayer(), 0, 0);
@@ -364,7 +403,14 @@ function update() {
   showLegend();
 }
 
-const showLegend = () => { $("legend").hidden = !showMap || photoOnly || !view.reachable; };
+function showLegend() {
+  const map = showMap && view.reachable;
+  // In Photo only the legend keeps its space, so the text under the plan does not move.
+  $("legend").hidden = false;
+  $("legend").style.visibility = photoOnly ? "hidden" : "";
+  $("legend-field").hidden = $("legend-way").hidden = !map;
+  $("legend-wall").hidden = !routesOnly;
+}
 
 // The walls come from the photo, so the messages say what HereOut read,
 // not what the building is.
@@ -404,9 +450,12 @@ function explain(how) {
   }
 }
 
+// Photo only and Routes only change what is under the marks, so at most one is on.
 function setPhotoOnly(on) {
   photoOnly = on;
+  if (on) routesOnly = false;
   $("show-photo").setAttribute("aria-pressed", String(on));
+  $("show-routes").setAttribute("aria-pressed", String(routesOnly));
   $("show-map").disabled = on;
   $("show-map").setAttribute("aria-pressed", String(showMap && !on));
   showLegend();
@@ -420,6 +469,10 @@ $("show-map").addEventListener("click", () => {
   draw();
 });
 $("show-photo").addEventListener("click", () => setPhotoOnly(!photoOnly));
+$("show-routes").addEventListener("click", () => {
+  routesOnly = !routesOnly;
+  setPhotoOnly(false);
+});
 
 function startMarking() {
   marking = true;

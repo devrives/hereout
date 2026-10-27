@@ -27,14 +27,16 @@
     <div class="view" role="group" aria-label="What the plan shows">
       <button id="show-map" type="button" aria-pressed="true">Escape map</button>
       <button id="show-photo" type="button" aria-pressed="false">Photo only</button>
+      <button id="show-routes" type="button" aria-pressed="false">Routes only</button>
       <button id="enlarge" type="button" aria-pressed="false">Larger plan</button>
     </div>
     <div class="stage" id="stage" role="region" aria-label="Plan">
       <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
     </div>
     <div id="legend" class="legend" hidden>
-      <span><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
-      <span><i class="sw-way" aria-hidden="true"></i>Ways out</span>
+      <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i>Wall, as HereOut reads it</span>
+      <span id="legend-field"><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
+      <span id="legend-way"><i class="sw-way" aria-hidden="true"></i>Ways out</span>
       <span><i class="sw-route" aria-hidden="true"></i>Your route</span>
       <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
     </div>
