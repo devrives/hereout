@@ -17,6 +17,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Find the routes in the browser from an escape field](decisions/browser-routing.md): escape map, routes from any spot, no upload store.
 - [Show the ways out as straight lines from door to door](decisions/way-network.md): door-to-door network, routes along it.
 - [Find the walls as straight lines](decisions/wall-lines.md): wall lines and blocks from the wall mask.
+- [Check the exits with numbered marks](decisions/exit-mark-check.md): a second call keeps, moves or drops each exit (proposed).
 
 ## Timelines
 

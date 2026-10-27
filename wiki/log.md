@@ -80,3 +80,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/wall-lines.md`: the colour rule for printed routes, and why HSV saturation did not work.
 - Updated `decisions/way-network.md`: the network comes from a Web Worker.
 - Source: the owner request of 2026-10-27 (fix what needs no model call), `src/hereout/wall_lines.py`, `src/hereout/web/route.js`, `src/hereout/web/network-worker.js`, `src/hereout/web/app.js` and the gallery route check.
+
+## [2026-10-28] ingest | Exit check with numbered marks
+
+- Added `decisions/exit-mark-check.md`: research on coordinate formats, the failed local candidates, and the 30-plan test of a second call with numbered marks.
+- Updated `components/plan-reader.md`: the PT exit limit links the test.
+- Source: the owner requests of 2026-10-27 and 2026-10-28, and the test outputs.
