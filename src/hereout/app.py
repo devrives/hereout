@@ -7,7 +7,9 @@ nothing after it answers. Nothing is written to disk.
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -15,7 +17,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .gallery import Gallery
@@ -27,6 +29,18 @@ WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
 READS_PER_WINDOW = 12
 READ_WINDOW = 10 * 60
+
+
+def index_html() -> str:
+    """index.html with a content hash on each /static/ file.
+
+    The edge and the browsers keep static files for hours. A new hash makes
+    them load the new file, so a page never runs with an old script.
+    """
+    def versioned(m: re.Match) -> str:
+        digest = hashlib.sha256((WEB / m.group(2)).read_bytes()).hexdigest()[:10]
+        return f'{m.group(1)}/static/{m.group(2)}?v={digest}"'
+    return re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / "index.html").read_text())
 
 
 class RateLimit:
@@ -70,10 +84,11 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         gallery = Gallery(Path(os.environ["HEREOUT_GALLERY"]))
     app = FastAPI(title="HereOut", docs_url=None, redoc_url=None, openapi_url=None)
     reads = RateLimit(READS_PER_WINDOW, READ_WINDOW)
+    page = index_html()
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return FileResponse(WEB / "index.html")
+        return HTMLResponse(page)
 
     @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)
     def robots():

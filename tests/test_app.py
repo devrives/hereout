@@ -1,3 +1,5 @@
+import re
+
 import cv2
 from fastapi.testclient import TestClient
 
@@ -67,7 +69,11 @@ def test_sealed_start_has_no_route():
 
 def test_page_and_robots():
     client = TestClient(create_app(None, use_env=False))
-    assert "HereOut" in client.get("/").text
+    page = client.get("/").text
+    assert "HereOut" in page
+    # Each static file carries a content hash, so an old cached copy is never used.
+    assert re.search(r'src="/static/app\.js\?v=[0-9a-f]{10}"', page)
+    assert 'href="/static/style.css?v=' in page
     assert "Disallow: /" in client.get("/robots.txt").text
     assert client.head("/").status_code == 200
 
