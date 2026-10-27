@@ -17,6 +17,7 @@ let selected = -1;    // the step shown on the plan, or -1
 let showMap = true;
 let photoOnly = false;
 const canSpeak = "speechSynthesis" in window;
+$("shoot").hidden = false;  // without JS the photo button would do nothing
 const STORE_KEY = "hereout:last";
 
 // Map colours: green near an exit, yellow far from one.
@@ -24,7 +25,10 @@ const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
 const MAP_ALPHA = 110;
 const ROUTE = "#1b5fd1";
 
+// Two status lines: one by the photo button for loading, one under the plan
+// for what happens on the plan, so the answer to a tap is in view.
 function say(text) { $("status").textContent = text; }
+function sayPlan(text) { $("plan-status").textContent = text; }
 
 // Error bodies from a proxy may not be JSON, and a 422 detail is a list.
 async function errorText(r, fallback) {
@@ -156,10 +160,17 @@ function draw() {
 function drawMarks(unit) {
   // Exit and "you are here" differ in shape and label, not only in colour.
   const here = state.start;
-  state.exits.forEach((e, i) => exitMark(e.x, e.y, unit * 2.2, i + 1));
-  if (here) hereMark(here[0], here[1], unit * 2.4);
+  const used = view.route ? view.route.exitIndex : -1;
+  state.exits.forEach((e, i) => exitMark(e.x, e.y, unit * 2.2, i + 1, i === used));
+  // With two or more exits the numbers and the legend name them, and a row
+  // of "EXIT" words would hide the plan.
+  if (state.exits.length === 1) {
+    const e = state.exits[0];
+    const near = here && Math.hypot(e.x - here[0], e.y - here[1]) < unit * 14;
+    label("EXIT", e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
+  }
 
-  // The route goes over the marks, so a short route stays visible.
+  // The route and YOU go over the exits, so a short route stays visible.
   const pts = view.route && view.route.points;
   if (pts && pts.length > 1) {
     ctx.lineJoin = ctx.lineCap = "round";
@@ -184,15 +195,17 @@ function drawMarks(unit) {
       ctx.lineTo(step.to[0], step.to[1]);
       ctx.stroke();
     }
+  }
+  if (here) {
+    const r = unit * 2.4;
+    hereMark(here[0], here[1], r);
+    // Near the top edge the label goes below the mark, so it is not cut off.
+    const above = here[1] - r * 1.8 - r * 1.6 > 0;
+    label("YOU", here[0], above ? here[1] - r * 1.8 : here[1] + r * 1.8, r, above ? "bottom" : "top");
+  }
+  if (step && step.kind === "walk") {
     label(String(selected + 1), (step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2 - unit * 2.5, unit * 2.4, "bottom");
   }
-
-  // Labels last. An exit label close to YOU goes below its mark.
-  for (const e of state.exits) {
-    const near = here && Math.hypot(e.x - here[0], e.y - here[1]) < unit * 14;
-    label("EXIT", e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
-  }
-  if (here) label("YOU", here[0], here[1] - unit * 2.4 * 1.8, unit * 2.4, "bottom");
 }
 
 function hereMark(x, y, r) {
@@ -205,11 +218,12 @@ function hereMark(x, y, r) {
   ctx.stroke();
 }
 
-// The number matches the exit buttons below the plan.
-function exitMark(x, y, r, n) {
+// The number matches the exit buttons below the plan. The exit the route
+// goes to has a frame in the route colour.
+function exitMark(x, y, r, n, used) {
   ctx.fillStyle = "#0a7d3b";
-  ctx.lineWidth = r / 2.5;
-  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = used ? r / 1.6 : r / 2.5;
+  ctx.strokeStyle = used ? ROUTE : "#ffffff";
   ctx.fillRect(x - r, y - r, r * 2, r * 2);
   ctx.strokeRect(x - r, y - r, r * 2, r * 2);
   if (state.exits.length < 2) return;
@@ -289,30 +303,32 @@ function exitName(i) {
   return !l || /^exit$/i.test(l) ? `Exit ${i + 1}` : `${l} (${i + 1})`;
 }
 
-// One button for each other exit, so the route can go to another exit
-// without placing marks on the picture.
+// One button for each exit, in number order, so the route can go to another
+// exit without placing marks on the picture. The list does not move when the
+// route changes.
 function showExits() {
   const box = $("exits");
   box.replaceChildren();
-  // After a failed exit choice, the other exits stay on offer.
-  const used = view.route ? view.route.exitIndex : state.exitChoice;
-  const others = view.route || state.exitChoice >= 0 ? state.exits.map((e, i) => i).filter((i) => i !== used) : [];
-  $("exits-wrap").hidden = others.length === 0;
-  for (const i of others) {
+  const current = view.route ? view.route.exitIndex : state.exitChoice;
+  // A start that reaches no exit gets the message, not a list of dead buttons.
+  const open = state.start ? state.exits.map((e, i) => view.field.reaches(state.start, i)) : [];
+  $("exits-wrap").hidden = state.exits.length < 2 || !open.some(Boolean);
+  if ($("exits-wrap").hidden) return;
+  state.exits.forEach((e, i) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = exitName(i);
+    b.textContent = open[i] ? exitName(i) : `${exitName(i)} · no way found`;
+    b.setAttribute("aria-pressed", String(i === current));
     b.addEventListener("click", () => {
       state.exitChoice = i;
       update();
       remember();
-      say(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
-                     : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
-      const next = view.route ? $("steps") : $("exits").querySelector("button");
-      (next || $("fix")).focus();
+      sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
+                         : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
+      (view.route ? $("steps") : $("exits").children[i]).focus();
     });
     box.append(b);
-  }
+  });
 }
 
 function showCredit() {
@@ -344,6 +360,7 @@ function update() {
   showSteps();
   showExits();
   $("to-mark").hidden = !state.here || !state.start || startKind() === "mark";
+  $("found-exits").hidden = !state.exitsMarked || !state.foundExits.length;
   showLegend();
 }
 
@@ -368,19 +385,22 @@ const startKind = () => (state.here && state.start && state.start[0] === state.h
 // how: "mark" (the plan's "you are here"), "tap" (a start the user chose) or "exit" (an exit the user marked).
 function explain(how) {
   if (!state.exits.length) {
-    say(state.model_error
+    sayPlan(state.model_error
       ? 'Could not read the plan. Tap "Mark the exit" and mark it, then tap where you are.'
       : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
   } else if (!state.start) {
-    say('No "you are here" mark found. Tap where you are on the plan.');
+    sayPlan('No "you are here" mark found. Tap where you are on the plan.');
+  } else if (view.error && how === "exit") {
+    sayPlan(`HereOut found no way to the exit you marked. Mark it at a doorway${
+      state.foundExits.length ? ", or use the exits HereOut found" : ""}.`);
   } else if (view.error) {
-    say((how === "mark" && MARK_ERRORS[view.error]) || ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
+    sayPlan((how === "mark" && MARK_ERRORS[view.error]) || ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
   } else if (how === "exit") {
-    say("Route to the exit you marked. Check it against the plan.");
+    sayPlan("Route to the exit you marked. Check it against the plan.");
   } else if (how === "tap") {
-    say("Route from the spot you chose to the nearest exit. Check it against the plan.");
+    sayPlan("Route from the spot you chose to the nearest exit. Check it against the plan.");
   } else {
-    say('Route from "you are here" to the nearest exit. Check it against the plan.');
+    sayPlan('Route from "you are here" to the nearest exit. Check it against the plan.');
   }
 }
 
@@ -407,7 +427,7 @@ function startMarking() {
   $("fix-hint").hidden = false;
   hints();
   if (photoOnly) setPhotoOnly(false);
-  say("Tap the exit on the plan.");
+  sayPlan("Tap the exit on the plan.");
 }
 
 function stopMarking() {
@@ -428,6 +448,7 @@ $("fix").addEventListener("click", (ev) => {
 function setExit(x, y) {
   stopMarking();
   state.exits = [{ x: Math.round(x), y: Math.round(y), label: "" }];
+  state.exitsMarked = true;
   state.exitChoice = -1;
   buildField();
   update();
@@ -447,8 +468,20 @@ function setStart(x, y) {
 function place(x, y) {
   if (marking) setExit(x, y);
   else if (state.exits.length) setStart(x, y);
-  else say('Mark an exit first: tap "Mark the exit".');
+  else sayPlan('Mark an exit first: tap "Mark the exit".');
 }
+
+// Undo "Mark the exit": the exits from the reading come back.
+$("found-exits").addEventListener("click", () => {
+  state.exits = state.foundExits.map((e) => ({ ...e }));
+  state.exitsMarked = false;
+  state.exitChoice = -1;
+  buildField();
+  update();
+  remember();
+  explain(startKind());
+  $("fix").focus();  // this button is hidden now
+});
 
 $("to-mark").addEventListener("click", () => {
   state.start = [...state.here];
@@ -461,17 +494,19 @@ $("to-mark").addEventListener("click", () => {
 
 function hints() {
   $("kbd-hint").textContent = marking
-    ? "Arrow keys move the marker. Enter places the exit. Escape cancels."
-    : "Arrow keys move the marker. Enter starts the route there.";
+    ? "Arrow keys move the marker, Shift moves it faster. Enter places the exit. Escape cancels."
+    : "Arrow keys move the marker, Shift moves it faster. Enter starts the route there.";
   canvas.setAttribute("aria-label", marking
     ? "Plan. Mark the exit: tap it, or move the marker with the arrow keys and press Enter."
     : "Plan. Tap a spot to see the route from there, or move the marker with the arrow keys and press Enter.");
 }
 
-function showPlan(answer, focusResult) {
+function showPlan(answer, focusResult, push) {
   state = answer;
   if (state.start === undefined) state.start = state.here;
   if (state.exitChoice === undefined) state.exitChoice = -1;
+  if (state.foundExits === undefined) state.foundExits = state.exits.map((e) => ({ ...e }));
+  say("");
   stopMarking();
   cursor = null;
   keyboard = false;
@@ -482,7 +517,7 @@ function showPlan(answer, focusResult) {
     update();
     explain(startKind());
     if ($("stage").classList.contains("big")) centreOnStart();
-    markOpenSample();
+    markOpenSample(push);
     if (focusResult) {
       $("result").scrollIntoView({ block: "start" });
       $("result-head").focus({ preventScroll: true });
@@ -492,7 +527,7 @@ function showPlan(answer, focusResult) {
 }
 
 // Load a plan from an upload or the gallery. Only the newest request wins.
-async function loadPlan(request, waitText) {
+async function loadPlan(request, waitText, push) {
   const n = ++planSeq;
   stopSpeaking();
   if (marking) stopMarking();
@@ -514,7 +549,7 @@ async function loadPlan(request, waitText) {
     }
   }
   if (n !== planSeq) return;
-  showPlan(answer, true);
+  showPlan(answer, true, push);
   remember();
 }
 
@@ -541,12 +576,13 @@ const countryName = (() => {
 
 const sampleId = (id) => (id && id.startsWith("g-") ? id.slice(2) : null);
 
-function openSample(gid) {
-  return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}`, { method: "POST" }), "Opening the sample plan…");
+// push: add a history entry, so Back returns to the plan before.
+function openSample(gid, push) {
+  return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}`, { method: "POST" }), "Opening the sample plan…", push);
 }
 
 // The open sample is marked in the gallery and named in the address, so it can be shared.
-function markOpenSample() {
+function markOpenSample(push) {
   const gid = sampleId(state && state.id);
   document.querySelectorAll("#gallery button.sample").forEach((b) => {
     if (b.dataset.id === gid) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
@@ -555,7 +591,8 @@ function markOpenSample() {
   if (!state) return;
   const url = new URL(location.href);
   if (gid) url.searchParams.set("sample", gid); else url.searchParams.delete("sample");
-  history.replaceState(null, "", url);
+  if (push && url.href !== location.href) history.pushState(null, "", url);
+  else history.replaceState(null, "", url);
 }
 
 $("back-to-samples").addEventListener("click", () => {
@@ -598,7 +635,7 @@ async function showGallery() {
       b.append(im, cap);
       // The name starts with the visible text, and the number tells equal names apart.
       b.setAttribute("aria-label", `${cap.textContent}, sample plan ${i + 1} of ${plans.length}`);
-      b.addEventListener("click", () => openSample(p.id));
+      b.addEventListener("click", () => openSample(p.id, true));
       li.append(b);
       grid.append(li);
     });
@@ -706,14 +743,22 @@ $("speak").addEventListener("click", () => {
   $("speak").textContent = "Stop reading";
 });
 
-// A link with ?sample=<id> opens that sample. Otherwise, after a reload, show
-// the last plan again. The browser has all it needs to route it again.
-const startSample = new URL(location.href).searchParams.get("sample");
-if (startSample) {
-  openSample(startSample);
-} else {
+function lastPlan() {
   try {
     const last = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
-    if (last && last.image && last.grid) showPlan(last);
-  } catch (e) { /* storage blocked */ }
+    return last && last.image && last.grid ? last : null;
+  } catch (e) { return null; /* storage blocked */ }
 }
+
+// A link with ?sample=<id> opens that sample. After a reload of the same
+// sample, the start and the exits the user set come back.
+function openFromAddress() {
+  const gid = new URL(location.href).searchParams.get("sample");
+  const last = lastPlan();
+  if (gid && last && last.id === `g-${gid}`) showPlan(last);
+  else if (gid) openSample(gid);
+  else if (last && !sampleId(last.id)) showPlan(last);
+  else if (state) { state = null; $("result").hidden = true; markOpenSample(); }
+}
+window.addEventListener("popstate", openFromAddress);
+openFromAddress();

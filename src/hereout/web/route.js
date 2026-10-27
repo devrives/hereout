@@ -178,6 +178,44 @@ const HereOutRoute = (() => {
       return { points: pts, exitIndex: k };
     }
 
+    // A number for each open area: two cells with the same number have a way
+    // between them, with the same moves as the field. Browser only.
+    areas() {
+      if (this._areas) return this._areas;
+      const { gw, gh, blocked } = this;
+      const area = new Int32Array(gw * gh).fill(-1);
+      let n = 0;
+      for (let s = 0; s < area.length; s++) {
+        if (blocked[s] || area[s] >= 0) continue;
+        const todo = [s];
+        area[s] = n;
+        while (todo.length) {
+          const i = todo.pop();
+          const r = Math.floor(i / gw), c = i - r * gw;
+          for (const [dr, dc] of NEIGHBOURS) {
+            const nr = r + dr, nc = c + dc;
+            if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
+            const j = nr * gw + nc;
+            if (blocked[j] || area[j] >= 0) continue;
+            if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+            area[j] = n;
+            todo.push(j);
+          }
+        }
+        n++;
+      }
+      this._areas = area;
+      return area;
+    }
+
+    // Is there a way from a start to exit k?
+    reaches(start, k) {
+      const s = this.snap(start), g = this.snap(this.exits[k]);
+      if (s === null || g === null) return false;
+      const area = this.areas();
+      return area[s] === area[g];
+    }
+
     // For each open cell, how many cells have their way out through it.
     // Large values are the main ways to the exits.
     flow() {

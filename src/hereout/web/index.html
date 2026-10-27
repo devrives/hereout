@@ -15,7 +15,7 @@
 </header>
 <main>
   <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
-  <label class="shoot">
+  <label class="shoot" id="shoot" hidden>
     <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
     <span id="shoot-text" aria-hidden="true">Take a photo of the plan</span>
   </label>
@@ -36,12 +36,14 @@
       <span><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
       <span><i class="sw-way" aria-hidden="true"></i>Ways out</span>
       <span><i class="sw-route" aria-hidden="true"></i>Your route</span>
+      <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
     </div>
     <p id="tap-hint" class="hint">Tap any open spot on the plan to see the route from there.<span id="kbd-hint" hidden></span></p>
-    <p id="credit" class="credit" hidden></p>
+    <p id="plan-status" class="plan-status" role="status" aria-live="polite"></p>
     <div class="fix">
       <button id="fix" type="button">Mark the exit</button>
       <button id="to-mark" type="button" hidden>Start at "you are here"</button>
+      <button id="found-exits" type="button" hidden>Use the exits HereOut found</button>
       <span id="fix-hint" hidden>Tap the exit on the plan. HereOut then routes to that exit only.</span>
     </div>
     <h2 id="steps-head">Steps</h2>
@@ -53,6 +55,7 @@
       <h2>Route to another exit</h2>
       <div id="exits" class="exits"></div>
     </div>
+    <p id="credit" class="credit" hidden></p>
   </section>
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
     <h2 id="gallery-head">No plan nearby? Try a real one</h2>
