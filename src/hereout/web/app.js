@@ -25,7 +25,8 @@ const STORE_KEY = "hereout:last";
 const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
 const MAP_ALPHA = 110;
 const ROUTE = "#1b5fd1";
-const WALL = "#2b2f36";
+const WALL = "#7a818b";  // lighter than the ways out, so a way and a wall differ in more than hue
+const BLOCK = "#d3d6db";  // a filled area of the plan, in Routes only
 const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contrast over a photo
 
 // Two status lines: one by the photo button for loading, one under the plan
@@ -64,10 +65,13 @@ function findRoute() {
   view.steps = [];
   view.error = null;
   if (!state.start || !state.exits.length) return;
-  const field = state.exitChoice >= 0 ? view.toExit(state.exitChoice) : view.field;
+  const k = state.exitChoice;
   try {
-    const r = field.wayRoute(state.start);
-    const exitIndex = state.exitChoice >= 0 ? state.exitChoice : r.exitIndex;
+    // The ways out lead to a chosen exit too. Where they do not, the grid
+    // route of a field to that exit is the answer.
+    const r = k >= 0 ? view.field.wayRoute(state.start, k) || view.toExit(k).route(state.start)
+                     : view.field.wayRoute(state.start);
+    const exitIndex = k >= 0 ? k : r.exitIndex;
     view.route = { points: r.points, exitIndex };
     view.steps = R.directions(r.points, state.width, state.height);
   } catch (e) {
@@ -104,22 +108,16 @@ function mapLayer() {
   l.imageSmoothingEnabled = true;
   l.drawImage(tint, 0, 0, f.gw / f.scale, f.gh / f.scale);
 
-  // The ways out: straight lines along the middle of the open space, wider
-  // where more of the plan drains through them.
+  // The ways out: straight lines from door to door to the exits, wider where
+  // more doors and rooms drain through them.
   const { legs } = f.network();
-  const min = 8;
   const unit = Math.max(state.width, state.height) / 160;
   const widths = [[], [], [], [], [], []];
-  // Short ends with almost nothing behind them are left out: a tap there still
-  // finds its way to a line.
-  for (const leg of legs) {
-    if (leg.flow < min && !leg.exit) continue;
-    widths[leg.flow < min ? 0 : Math.min(5, 1 + Math.floor(Math.log2(leg.flow / min) / 1.5))].push(leg);
-  }
+  for (const leg of legs) widths[Math.min(5, Math.floor(Math.log2(leg.flow)))].push(leg);
   l.lineCap = l.lineJoin = "round";
   l.strokeStyle = WAY;
   widths.forEach((group, b) => {
-    l.lineWidth = unit * (0.4 + 0.16 * b);
+    l.lineWidth = unit * (0.7 + 0.16 * b);
     l.beginPath();
     for (const { a, b: z } of group) {
       l.moveTo(a[0], a[1]);
@@ -128,57 +126,39 @@ function mapLayer() {
     l.stroke();
   });
 
-  // Arrow heads on the main ways, at even steps of the way left, pointing to the exit.
-  const spacing = 0.09 * Math.max(f.gw, f.gh);
-  l.fillStyle = WAY;
-  for (const { a, b, da, db, flow } of legs) {
-    if (flow < min * 4 || da <= db) continue;
-    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    for (let m = Math.floor(da / spacing); m * spacing > db; m--) {
-      const t = (da - m * spacing) / (da - db);
-      const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
-      const r = unit * 1.3;
-      l.beginPath();
-      l.moveTo(x + Math.cos(ang) * r, y + Math.sin(ang) * r);
-      l.lineTo(x + Math.cos(ang + 2.5) * r, y + Math.sin(ang + 2.5) * r);
-      l.lineTo(x + Math.cos(ang - 2.5) * r, y + Math.sin(ang - 2.5) * r);
-      l.closePath();
-      l.fill();
-    }
-  }
   view.layer = layer;
   return layer;
 }
 
-// The walls as HereOut reads them: the edge cells of the ink that the ways
-// out keep away from. The area outside the plan box is wall too, so only its
-// edge shows.
+// The walls as HereOut reads them: the straight wall lines and the filled
+// areas that the server found. The routes keep inside these walls.
 function wallLayer() {
   if (view.walls) return view.walls;
-  const f = view.field;
-  const cells = document.createElement("canvas");
-  cells.width = f.gw;
-  cells.height = f.gh;
-  const cctx = cells.getContext("2d");
-  const data = cctx.createImageData(f.gw, f.gh);
-  const { ink } = f.network();
-  const open = (r, c) => r >= 0 && r < f.gh && c >= 0 && c < f.gw && !ink[r * f.gw + c];
-  for (let r = 0; r < f.gh; r++) {
-    for (let c = 0; c < f.gw; c++) {
-      if (!ink[r * f.gw + c] || !(open(r - 1, c) || open(r + 1, c) || open(r, c - 1) || open(r, c + 1))) continue;
-      data.data[(r * f.gw + c) * 4 + 3] = 255;
-    }
-  }
-  cctx.putImageData(data, 0, 0);
   const layer = document.createElement("canvas");
   layer.width = state.width;
   layer.height = state.height;
   const l = layer.getContext("2d");
-  l.imageSmoothingEnabled = false;
-  l.drawImage(cells, 0, 0, f.gw / f.scale, f.gh / f.scale);
-  l.globalCompositeOperation = "source-in";
-  l.fillStyle = WALL;
-  l.fillRect(0, 0, layer.width, layer.height);
+  const unit = Math.max(state.width, state.height) / 160;
+  const { lines = [], blocks = [] } = state.walls || {};
+  // Filled areas (hatching, solid ink) in light grey with a wall edge.
+  l.fillStyle = BLOCK;
+  l.strokeStyle = WALL;
+  l.lineWidth = unit * 0.45;
+  for (const b of blocks) {
+    l.beginPath();
+    b.forEach(([x, y], i) => (i ? l.lineTo(x, y) : l.moveTo(x, y)));
+    l.closePath();
+    l.fill();
+    l.stroke();
+  }
+  l.lineCap = "round";
+  for (const [x0, y0, x1, y1, width] of lines) {
+    l.lineWidth = Math.max(width, unit * 0.45);
+    l.beginPath();
+    l.moveTo(x0, y0);
+    l.lineTo(x1, y1);
+    l.stroke();
+  }
   view.walls = layer;
   return layer;
 }
@@ -365,17 +345,12 @@ function showExits() {
     b.textContent = open[i] ? exitName(i) : `${exitName(i)} · no way found`;
     b.setAttribute("aria-pressed", String(i === current));
     b.addEventListener("click", () => {
-      // The ways to one exit take a moment on a phone: say so first, and let
-      // the page show it before the work starts.
-      sayPlan(`Finding the route to ${exitName(i)}…`);
-      requestAnimationFrame(() => setTimeout(() => {
-        state.exitChoice = i;
-        update();
-        remember();
-        sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
-                           : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
-        (view.route ? $("steps") : $("exits").children[i]).focus();
-      }, 0));
+      state.exitChoice = i;
+      update();
+      remember();
+      sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
+                         : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
+      (view.route ? $("steps") : $("exits").children[i]).focus();
     });
     box.append(b);
   });
@@ -454,6 +429,8 @@ function explain(how) {
     sayPlan((how === "mark" && MARK_ERRORS[view.error]) || ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
   } else if (how === "exit") {
     sayPlan("Route to the exit you marked. Check it against the plan.");
+  } else if (state.exitChoice >= 0) {
+    sayPlan(`Route to ${exitName(state.exitChoice)}. Check it against the plan.`);
   } else if (how === "tap") {
     sayPlan("Route from the spot you chose to the nearest exit. Check it against the plan.");
   } else {

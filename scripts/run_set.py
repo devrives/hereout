@@ -38,7 +38,6 @@ import numpy as np
 
 from hereout.pipeline import Plan, decode_photo, plan_route, prepare, read_marks
 from hereout.reader import ModelClient, Reading
-from hereout.walls import wall_mask
 
 THUMB_SIDE = 360
 RETRIES = 3
@@ -88,7 +87,7 @@ def route_result(image_path: Path, reading: Reading) -> dict:
     if not reading.exits:
         return {"route_found": False, "route_error": "no exits", "steps": 0}
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    plan = Plan(image, wall_mask(image, reading.plan_box))
+    plan = Plan.of(image, reading.plan_box)
     result = plan_route(plan, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits])
     return {"route_found": result["route"] is not None, "route_error": result["route_error"],
             "steps": len(result["steps"])}

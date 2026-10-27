@@ -57,3 +57,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/way-network.md`. Linked it from `index.md` and `decisions/browser-routing.md`.
 - Source: the owner request of 2026-10-27, the research of methods, and the network in `src/hereout/web/route.js`.
 - Recorded the review fixes: shortcut from the start, no legs with almost no flow, opaque lines, status before an exit route.
+
+## [2026-10-27] ingest | Wall lines and a door-to-door network
+
+- Added `decisions/wall-lines.md`. Rewrote `decisions/way-network.md` for the door-to-door network. Updated `index.md` and `decisions/browser-routing.md`.
+- Source: the owner request of 2026-10-27, `src/hereout/wall_lines.py` and the network in `src/hereout/web/route.js`.
+- Recorded the review fixes: a door at each opening, taps that look two rooms away, trunk lines, lighter walls and wider ways.

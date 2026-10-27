@@ -68,8 +68,8 @@ canvas { cursor: crosshair; }
 /* Swatches sit on white, as the marks sit on the paper of the plan. */
 .legend i { display: inline-block; width: 34px; height: 12px; border-radius: 3px; background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
 .sw-field { background-image: linear-gradient(90deg, rgb(10 125 59 / 0.55), rgb(245 190 20 / 0.55)); }
-.sw-way { height: 4px !important; background-image: linear-gradient(rgb(6 64 34), rgb(6 64 34)); }
-.sw-wall { height: 4px !important; background-image: linear-gradient(#2b2f36, #2b2f36); }
+.sw-way { height: 5px !important; background-image: linear-gradient(rgb(6 64 34), rgb(6 64 34)); }
+.sw-wall { height: 3px !important; background-image: linear-gradient(#7a818b, #7a818b); }
 .sw-exit { width: 14px !important; height: 14px !important; background-image: linear-gradient(#0a7d3b, #0a7d3b); }
 .plan-status { margin: 8px 0 0; font-weight: 600; min-height: 1.5em; }
 #show-map:disabled { cursor: not-allowed; }

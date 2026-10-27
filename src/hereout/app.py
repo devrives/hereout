@@ -66,10 +66,10 @@ def client_ip(request: Request) -> str:
 
 
 def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None) -> dict:
-    """The response for a new plan: the flat image, the marks and the wall grid."""
+    """The response for a new plan: the flat image, the marks, the wall grid and the wall lines."""
     h, w = plan.image.shape[:2]
     out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
-           "here": None, "exits": [], "grid": grid_payload(plan.walls), "model_error": err}
+           "here": None, "exits": [], "grid": grid_payload(plan.walls), "walls": plan.drawn, "model_error": err}
     if reading:
         out["here"] = list(map(round, reading.you_are_here)) if reading.you_are_here else None
         out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]

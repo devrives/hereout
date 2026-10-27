@@ -64,6 +64,41 @@ const HereOutRoute = (() => {
     }
   }
 
+  // A binary heap of cells by cost in typed arrays, for the network only:
+  // pop() gives the cell and leaves its cost in topCost.
+  class CellHeap {
+    constructor(size = 1024) { this.d = new Float64Array(size); this.i = new Int32Array(size); this.size = 0; this.topCost = 0; }
+    push(d, i) {
+      if (this.size === this.d.length) {
+        const d2 = new Float64Array(this.size * 2), i2 = new Int32Array(this.size * 2);
+        d2.set(this.d); i2.set(this.i); this.d = d2; this.i = i2;
+      }
+      let k = this.size++;
+      while (k > 0) {
+        const p = (k - 1) >> 1;
+        if (this.d[p] <= d) break;
+        this.d[k] = this.d[p]; this.i[k] = this.i[p]; k = p;
+      }
+      this.d[k] = d; this.i[k] = i;
+    }
+    pop() {
+      const top = this.i[0];
+      this.topCost = this.d[0];
+      const n = --this.size;
+      const d = this.d[n], i = this.i[n];
+      let k = 0;
+      for (;;) {
+        let c = 2 * k + 1;
+        if (c >= n) break;
+        if (c + 1 < n && this.d[c + 1] < this.d[c]) c++;
+        if (this.d[c] >= d) break;
+        this.d[k] = this.d[c]; this.i[k] = this.i[c]; k = c;
+      }
+      this.d[k] = d; this.i[k] = i;
+      return top;
+    }
+  }
+
   function wallDistance(blocked, gw, gh) {
     const d = new Float64Array(gw * gh);
     for (let i = 0; i < d.length; i++) d[i] = blocked[i] ? 0 : FAR;
@@ -218,240 +253,269 @@ const HereOutRoute = (() => {
       return area[s] === area[g];
     }
 
-    // For each open cell, how many cells have their way out through it.
-    // Large values are the main ways to the exits.
-    flow() {
-      const n = this.gw * this.gh;
-      const order = [];
-      for (let i = 0; i < n; i++) if (this.owner[i] >= 0) order.push(i);
-      order.sort((a, b) => this.dist[b] - this.dist[a]);
-      const acc = new Float64Array(n);
-      for (const i of order) {
-        acc[i] += 1;
-        if (this.next[i] >= 0) acc[this.next[i]] += acc[i];
-      }
-      return { acc, order };
-    }
-
     // The ways out as straight lines. Browser only.
     network() {
       if (!this._network) this._network = new Network(this);
       return this._network;
     }
 
-    // A route that goes straight to the nearest way out and then along it.
-    // Where no way out is in sight, the grid route. Browser only.
-    wayRoute(start) {
+    // A route along the ways out to the nearest exit, or to exit only when
+    // only is 0 or more. Null when the network has no way to that exit (then
+    // the grid route of a field to that exit is the answer). Browser only.
+    wayRoute(start, only = -1) {
       if (!this.exits.length) throw new NoRoute("no exits");
       if (!this.owner.some((o) => o >= 0)) throw new NoRoute("every exit is inside a wall");
       const s = this.snap(start);
       if (s === null) throw new NoRoute("start is inside a wall");
       if (this.owner[s] < 0) throw new NoRoute("no open way to an exit");
-      return this.network().route(start, s) || this.route(start);
+      const r = this.network().route(start, s, only);
+      return r || (only < 0 ? this.route(start) : null);
     }
   }
 
-  // The network of the ways out (browser only). Its lines are the medial axis
-  // of the open space: the cells that are as far from the walls on two sides.
-  // Every open point has a line in sight, and each line is as far from the
-  // walls as the space lets it be. The steps:
-  // 1. Thin the open cells that have a way to an exit to lines one cell wide
-  //    (Zhang and Suen 1984). Small islands of ink in the open space are text
-  //    or symbols, so the lines go through them.
-  // 2. Find the shortest way along the lines from each line cell to an exit.
-  //    The ways make a tree from the exits, so a loop around an obstacle
-  //    breaks where the ways to two sides meet.
-  // 3. Cut the short branches that go into corners, as the medial axis has
-  //    one for each corner.
-  // 4. Make each branch straight with Douglas-Peucker, but never through a wall.
-  const ISLAND_SHARE = 0.0004;  // ink islands up to this share of the cells are not walls here
-  const SPUR_CLEARANCE = 2.0;   // a branch to a corner is shorter than this times the room at its root
-  const SPUR_MIN = 4;           // cells
-  const LINE_EPS = 1.2;         // cells off the straight line that a branch can be
-  const ATTACH_SHARE = 0.1;     // how far, as a share of the grid, a start or an exit looks for a line
-
-  // Zhang-Suen thinning of the cells where open is 1, in place.
-  function thin(open, gw, gh) {
-    const nb = new Uint8Array(8);
-    const del = [];
-    for (let changed = true; changed;) {
-      changed = false;
-      for (let pass = 0; pass < 2; pass++) {
-        del.length = 0;
-        for (let r = 1; r < gh - 1; r++) {
-          for (let c = 1; c < gw - 1; c++) {
-            const i = r * gw + c;
-            if (!open[i]) continue;
-            // P2..P9: north, then clockwise.
-            nb[0] = open[i - gw]; nb[1] = open[i - gw + 1]; nb[2] = open[i + 1]; nb[3] = open[i + gw + 1];
-            nb[4] = open[i + gw]; nb[5] = open[i + gw - 1]; nb[6] = open[i - 1]; nb[7] = open[i - gw - 1];
-            let b = 0, a = 0;
-            for (let k = 0; k < 8; k++) { b += nb[k]; if (!nb[k] && nb[(k + 1) & 7]) a++; }
-            if (b < 2 || b > 6 || a !== 1) continue;
-            if (pass === 0 ? (nb[0] && nb[2] && nb[4]) || (nb[2] && nb[4] && nb[6])
-                           : (nb[0] && nb[2] && nb[6]) || (nb[0] && nb[4] && nb[6])) continue;
-            del.push(i);
-          }
-        }
-        for (const i of del) open[i] = 0;
-        if (del.length) changed = true;
-      }
-    }
-  }
+  // The network of the ways out (browser only): a door-to-door network
+  // (Liu and Zlatanova 2011). The steps:
+  // 1. Split the open space into rooms where it narrows: a door. The rooms
+  //    grow from the places farthest from the walls, as water fills basins;
+  //    two rooms meet at a door when the way between them is much narrower
+  //    than the smaller room (a distance-transform room segmentation, as in
+  //    Bormann and others 2016). Rooms that meet at more than one opening
+  //    get a door at each one.
+  // 2. The nodes are the exits, the doors and the middle of each room. Doors
+  //    and exits close together are one node.
+  // 3. Two nodes of one room are joined by the way between them, made
+  //    straight where no wall is in the way. In a room that you can see
+  //    across, that is one straight line.
+  // 4. The lines on the map are the shortest ways from the doors to an exit:
+  //    a tree from the exits, so each line leads on to an exit. A route
+  //    follows the tree and is then pulled tight where the way is clear.
+  const DOOR_RATIO = 0.7;       // a way narrower than this share of the smaller room is a door
+  const MIN_ROOM = 2.5;         // cells from the wall; a smaller space is part of the room next to it
+  const DOOR_GAP = 0.08;        // share of the grid between two doors of the same two rooms
+  const NODE_GAP = 2.5;         // cells; doors and exits closer than this are one node
+  const TRUNK = 1.2;            // a way costs its length to this power, so near ways join into one line
+  const LINE_EPS = 1.2;         // cells off the straight line that a way can be
 
   class Network {
     constructor(field) {
       const { gw, gh } = field;
       const n = gw * gh;
       this.field = field;
-      // Open: the cells with a way to an exit, and the small islands among
-      // them. An island is ink and the closed space in it, as in a symbol.
+      // Open: the cells with a way to an exit. The walls are lines already,
+      // with no text or symbols, so every blocked cell is a wall.
       const open = new Uint8Array(n);
       for (let i = 0; i < n; i++) open[i] = field.owner[i] >= 0 ? 1 : 0;
-      const ink = Uint8Array.from(field.blocked);
-      const seen = new Uint8Array(n);
-      const limit = ISLAND_SHARE * n;
-      for (let s = 0; s < n; s++) {
-        if (open[s] || seen[s]) continue;
-        const cells = [s], todo = [s];
-        seen[s] = 1;
-        let inside = true;
-        while (todo.length) {
-          const i = todo.pop();
-          const r = Math.floor(i / gw), c = i - r * gw;
-          if (r === 0 || c === 0 || r === gh - 1 || c === gw - 1) inside = false;
-          for (const [dr, dc] of NEIGHBOURS) {
-            const nr = r + dr, nc = c + dc;
-            if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
-            const j = nr * gw + nc;
-            if (open[j] || seen[j]) continue;
-            seen[j] = 1;
-            if (cells.length <= limit) cells.push(j);
-            else inside = false;
-            todo.push(j);
-          }
-        }
-        if (inside && cells.length <= limit) for (const i of cells) { open[i] = 1; ink[i] = 0; }
-      }
+      const ink = field.blocked;
+      this.open = open;
       this.ink = ink;
-      this.open = Uint8Array.from(open);
-      thin(open, gw, gh);
-      const line = open;
+      this.wd = wallDistance(ink, gw, gh);
+      this.cost = new Float64Array(n);
+      for (let i = 0; i < n; i++) this.cost[i] = 1.0 + WALL_COST / (1.0 + this.wd[i]);
+      this.findRooms();
 
-      // The shortest way along the lines to an exit.
-      const dist = new Float64Array(n).fill(Infinity);
-      const next = new Int32Array(n).fill(-1);
-      const owner = new Int32Array(n).fill(-1);
-      const heap = new Heap();
-      this.links = [];  // from each exit to its first line cell
+      // Nodes: exits, doors, the middle of each room.
+      const nodes = [];
+      this.nodeAt = new Int32Array(n).fill(-1);
+      const add = (node) => {
+        const r = Math.floor(node.cell / gw), c = node.cell - r * gw;
+        const near = node.middle ? -1 : nodes.findIndex((o) => !o.middle &&
+          Math.hypot(Math.floor(o.cell / gw) - r, (o.cell % gw) - c) < NODE_GAP);
+        if (near >= 0) {
+          for (const room of node.rooms) if (!nodes[near].rooms.includes(room)) nodes[near].rooms.push(room);
+          return;
+        }
+        if (this.nodeAt[node.cell] >= 0) return;
+        this.nodeAt[node.cell] = nodes.length;
+        nodes.push(node);
+      };
       field.exits.forEach((e, k) => {
         const g = field.snap(e);
-        if (g === null || field.owner[g] < 0) return;
-        const p = this.attach(g, (j) => line[j], () => 0);
-        if (!p) return;
-        const d = p.cost;
-        if (d < dist[p.cell]) { dist[p.cell] = d; owner[p.cell] = k; next[p.cell] = -1; heap.push(d, p.cell); }
-        this.links.push({ exit: k, cell: p.cell });
+        if (g !== null && open[g]) add({ cell: g, px: [...e], rooms: [this.room[g]], exit: k });
       });
-      this.links = this.links.filter((l) => owner[l.cell] === l.exit);
+      for (const d of this.doors) add({ cell: d.cell, px: field.toPx(d.cell), rooms: d.rooms });
+      for (const [room, cell] of this.middles) add({ cell, px: field.toPx(cell), rooms: [room], middle: true });
+      this.nodes = nodes;
+      this.byRoom = new Map();
+      nodes.forEach((nd, i) => nd.rooms.forEach((r) => {
+        if (!this.byRoom.has(r)) this.byRoom.set(r, []);
+        this.byRoom.get(r).push(i);
+      }));
+
+      // Ways between the nodes of each room.
+      this.edges = nodes.map(() => new Map());  // j -> {pts, len}, pts from i to j
+      nodes.forEach((nd, i) => {
+        const others = new Set();
+        for (const r of nd.rooms) for (const j of this.byRoom.get(r)) if (j > i) others.add(j);
+        const join = (j, pts) => {
+          pts[0] = [...nd.px];
+          pts[pts.length - 1] = [...nodes[j].px];
+          const len = polyLength(pts);
+          this.edges[i].set(j, { pts, len });
+          this.edges[j].set(i, { pts: pts.slice().reverse(), len });
+        };
+        // Nodes in sight get a straight line; the others the way around.
+        const around = new Set();
+        for (const j of others) {
+          if (this.sees(nd.cell, nodes[j].cell)) join(j, [null, null]);
+          else around.add(j);
+        }
+        if (!around.size) return;
+        for (const [j, chain] of this.walk(nd.cell, nd.rooms, around)) {
+          join(j, this.straighten(chain).map((t) => field.toPx(chain[t])));
+        }
+      });
+
+      this.trees = new Map();
+      Object.assign(this, this.tree(-1));
+    }
+
+    // The shortest way from each node to an exit, or to exit only when only
+    // is 0 or more, and the lines of the map: each node's way to the next
+    // node, wider where more nodes drain through it.
+    tree(only) {
+      if (this.trees.has(only)) return this.trees.get(only);
+      const nodes = this.nodes;
+      const dist = new Float64Array(nodes.length).fill(Infinity);
+      const next = new Int32Array(nodes.length).fill(-1);
+      const owner = new Int32Array(nodes.length).fill(-1);
+      const heap = new Heap();
+      nodes.forEach((nd, i) => {
+        if (nd.exit !== undefined && (only < 0 || nd.exit === only)) { dist[i] = 0; owner[i] = nd.exit; heap.push(0, i); }
+      });
       while (heap.size) {
         const [d, i] = heap.pop();
         if (d > dist[i]) continue;
-        const r = Math.floor(i / gw), c = i - r * gw;
-        for (const [dr, dc, step] of NEIGHBOURS) {
-          const nr = r + dr, nc = c + dc;
-          if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
-          const j = nr * gw + nc;
-          if (!line[j]) continue;
-          const nd = d + step;
+        for (const [j, e] of this.edges[i]) {
+          const nd = d + e.len ** TRUNK;
           if (nd < dist[j]) { dist[j] = nd; next[j] = i; owner[j] = owner[i]; heap.push(nd, j); }
         }
       }
-      for (let i = 0; i < n; i++) if (line[i] && owner[i] < 0) line[i] = 0;
-      let onLine = [];
-      for (let i = 0; i < n; i++) if (line[i]) onLine.push(i);
-
-      // Cut the short branches into corners, until none is left. A branch
-      // into a corner ends where the line ends. A branch that ends next to
-      // other line cells is half of a loop, where the ways to two sides meet:
-      // keep it.
-      const lineEnd = (i) => {
-        const r = Math.floor(i / gw), c = i - r * gw;
-        let k = 0;
-        for (const [dr, dc] of NEIGHBOURS) {
-          const nr = r + dr, nc = c + dc;
-          if (nr >= 0 && nr < gh && nc >= 0 && nc < gw && line[nr * gw + nc]) k++;
-        }
-        return k <= 1 || (k === 2 && next[i] >= 0 && this.adjacentPair(i, line));
-      };
-      const kids = new Int32Array(n);
-      const countKids = () => {
-        kids.fill(0);
-        onLine = onLine.filter((i) => line[i]);
-        for (const i of onLine) if (next[i] >= 0) kids[next[i]]++;
-      };
-      for (let cut = true; cut;) {
-        cut = false;
-        countKids();
-        for (const i of onLine) {
-          if (!line[i] || kids[i] !== 0) continue;
-          const branch = [i];
-          let j = next[i];
-          while (j >= 0 && kids[j] === 1 && next[j] >= 0) { branch.push(j); j = next[j]; }
-          // j is where the branch joins the others, or the cell at the exit.
-          if (j < 0 || kids[j] < 2) continue;
-          if (branch.length <= 2 || (lineEnd(i) && branch.length < Math.max(SPUR_MIN, SPUR_CLEARANCE * field.wd[j]))) {
-            for (const b of branch) line[b] = 0;
-            cut = true;
-          }
-        }
-      }
-      countKids();
-
-      // Branches: from a cell where branches join (or a leaf) to the next one
-      // toward the exit, made straight.
-      const isJoin = (i) => next[i] < 0 || kids[i] !== 1;
-      this.segA = new Int32Array(n).fill(-1);  // for each line cell: its straight leg, away from the exit
-      this.segB = new Int32Array(n).fill(-1);  // and toward the exit
-      this.key = new Uint8Array(n);
-      this.legs = [];
-      const below = new Float64Array(n);  // line cells that drain through this one
-      const order = onLine.slice();
-      order.sort((a, b) => dist[b] - dist[a]);
+      const below = new Float64Array(nodes.length);
+      const order = nodes.map((_, i) => i).filter((i) => Number.isFinite(dist[i])).sort((a, b) => dist[b] - dist[a]);
       for (const i of order) { below[i] += 1; if (next[i] >= 0) below[next[i]] += below[i]; }
-      for (const s of order) {
-        if (!isJoin(s) || next[s] < 0) continue;
-        const chain = [s];
-        let j = next[s];
-        while (!isJoin(j)) { chain.push(j); j = next[j]; }
-        chain.push(j);
-        const keep = this.straighten(chain);
-        for (let a = 0; a < keep.length - 1; a++) {
-          for (let t = keep[a]; t < keep[a + 1]; t++) { this.segA[chain[t]] = chain[keep[a]]; this.segB[chain[t]] = chain[keep[a + 1]]; }
-          this.legs.push({ a: field.toPx(chain[keep[a]]), b: field.toPx(chain[keep[a + 1]]),
-                           da: dist[chain[keep[a]]], db: dist[chain[keep[a + 1]]], flow: below[chain[keep[a + 1]]] });
-        }
-        for (const t of keep) this.key[chain[t]] = 1;
+      const legs = [];
+      for (const i of order) {
+        // The map shows the ways between doors and exits. A room middle or a
+        // door with nothing behind it draws no line, unless the door leads
+        // straight to an exit: such ends stop in the open.
+        if (next[i] < 0 || (below[i] === 1 && (nodes[i].middle || nodes[next[i]].exit === undefined))) continue;
+        const pts = this.edges[i].get(next[i]).pts;
+        for (let k = 0; k < pts.length - 1; k++) legs.push({ a: pts[k], b: pts[k + 1], flow: below[i] });
       }
-      for (const l of this.links) {
-        this.key[l.cell] = 1;
-        this.segA[l.cell] = this.segB[l.cell] = l.cell;
-        this.legs.push({ a: field.toPx(l.cell), b: [...field.exits[l.exit]], da: dist[l.cell], db: 0, flow: below[l.cell], exit: true });
-      }
-      Object.assign(this, { line, dist, next, owner });
+      const t = { dist, next, owner, legs };
+      this.trees.set(only, t);
+      return t;
     }
 
-    // Are the two line cells next to cell i next to each other too? Then i
-    // is the tip of a line, at a step of a diagonal.
-    adjacentPair(i, line) {
+    // Rooms: grow from the cells farthest from the walls. Where two rooms
+    // meet, they are one room unless the cell where they meet is much
+    // narrower than the smaller room: then it is a door.
+    findRooms() {
       const { gw, gh } = this.field;
-      const r = Math.floor(i / gw), c = i - r * gw;
-      const two = [];
-      for (const [dr, dc] of NEIGHBOURS) {
-        const nr = r + dr, nc = c + dc;
-        if (nr >= 0 && nr < gh && nc >= 0 && nc < gw && line[nr * gw + nc]) two.push([nr, nc]);
+      const n = gw * gh, wd = this.wd, open = this.open;
+      // Farthest from the walls first, then by cell: one number for each cell.
+      const keys = [];
+      for (let i = 0; i < n; i++) if (open[i]) keys.push((1e6 - Math.round(wd[i] * 1000)) * 2 ** 20 + i);
+      const order = Float64Array.from(keys).sort().map((k) => k % 2 ** 20);
+      const parent = new Int32Array(n).fill(-1);
+      const peak = new Float64Array(n), peakCell = new Int32Array(n);
+      const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+      const meets = [];  // [cell, room, room]
+      for (const c of order) {
+        const r = Math.floor(c / gw), col = c - r * gw;
+        const roots = [];
+        for (const [dr, dc] of NEIGHBOURS) {
+          const nr = r + dr, nc = col + dc;
+          if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
+          const j = nr * gw + nc;
+          if (parent[j] < 0) continue;
+          const root = find(j);
+          if (!roots.includes(root)) roots.push(root);
+        }
+        if (!roots.length) { parent[c] = c; peak[c] = wd[c]; peakCell[c] = c; continue; }
+        roots.sort((a, b) => peak[b] - peak[a] || a - b);
+        const main = roots[0];
+        for (const other of roots.slice(1)) {
+          if (peak[other] < MIN_ROOM || wd[c] >= DOOR_RATIO * peak[other]) parent[other] = main;
+          else meets.push([c, main, other]);
+        }
+        parent[c] = main;
       }
-      return Math.max(Math.abs(two[0][0] - two[1][0]), Math.abs(two[0][1] - two[1][1])) === 1;
+      this.room = new Int32Array(n).fill(-1);
+      for (const i of order) this.room[i] = find(i);
+      // A door for each opening between two rooms: the widest place where
+      // they meet, and another one only farther than DOOR_GAP from it.
+      const gap = DOOR_GAP * Math.max(gw, gh);
+      const byPair = new Map();
+      this.doors = [];
+      for (const [c, a0, b0] of meets) {
+        const a = find(a0), b = find(b0);
+        if (a === b) continue;
+        const key = Math.min(a, b) * n + Math.max(a, b);
+        if (!byPair.has(key)) byPair.set(key, []);
+        const kept = byPair.get(key);
+        const cr = Math.floor(c / gw), cc = c - cr * gw;
+        if (kept.some((d) => Math.hypot(Math.floor(d / gw) - cr, (d % gw) - cc) < gap)) continue;
+        kept.push(c);
+        this.doors.push({ cell: c, rooms: [a, b] });
+      }
+      this.nextRooms = new Map();
+      for (const d of this.doors) {
+        for (const [a, b] of [d.rooms, [...d.rooms].reverse()]) {
+          if (!this.nextRooms.has(a)) this.nextRooms.set(a, []);
+          if (!this.nextRooms.get(a).includes(b)) this.nextRooms.get(a).push(b);
+        }
+      }
+      this.middles = new Map();
+      for (const i of order) if (find(i) === i) this.middles.set(i, peakCell[i]);
+    }
+
+    // The cheapest ways from cell s, inside the given rooms, to the cells of
+    // the wanted nodes. A map from node to its chain of cells, s first.
+    walk(s, rooms, wanted) {
+      const { gw, gh } = this.field;
+      if (!this.mark) {
+        const n = gw * gh;
+        Object.assign(this, { mark: new Int32Array(n), inRooms: new Int32Array(n), markId: 0,
+                              wdist: new Float64Array(n), wprev: new Int32Array(n) });
+      }
+      const id = ++this.markId, mark = this.mark, wdist = this.wdist, wprev = this.wprev;
+      const inRooms = this.inRooms;
+      for (const r of rooms) inRooms[r] = id;
+      const ways = new Map();
+      let left = wanted.size;
+      mark[s] = id; wdist[s] = 0; wprev[s] = -1;
+      const heap = this.heap || (this.heap = new CellHeap());
+      heap.size = 0;
+      heap.push(0, s);
+      const room = this.room, nodeAt = this.nodeAt, open = this.open, cost = this.cost;
+      while (heap.size && left) {
+        const i = heap.pop(), d = heap.topCost;
+        if (d > wdist[i]) continue;
+        const k = this.nodeAt[i];
+        if (k >= 0 && i !== s && wanted.has(k) && !ways.has(k)) {
+          const chain = [];
+          for (let t = i; t >= 0; t = wprev[t]) chain.push(t);
+          ways.set(k, chain.reverse());
+          left--;
+        }
+        // A way goes on only through the rooms; it can end on the cell of a
+        // door that belongs to the room next to them.
+        if (i !== s && inRooms[room[i]] !== id) continue;
+        const r = Math.floor(i / gw), c = i - r * gw;
+        for (let q = 0; q < 8; q++) {
+          const dr = NEIGHBOURS[q][0], dc = NEIGHBOURS[q][1];
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
+          const j = nr * gw + nc;
+          if (!open[j]) continue;
+          if (dr && dc && (!open[r * gw + nc] || !open[nr * gw + c])) continue;
+          if (inRooms[room[j]] !== id && nodeAt[j] < 0) continue;
+          const nd = d + NEIGHBOURS[q][2] * cost[j];
+          if (mark[j] !== id || nd < wdist[j]) { mark[j] = id; wdist[j] = nd; wprev[j] = i; heap.push(nd, j); }
+        }
+      }
+      return ways;
     }
 
     // Is the straight line between two cells clear of ink?
@@ -471,6 +535,7 @@ const HereOutRoute = (() => {
     // more than LINE_EPS off a leg, and no leg through ink.
     straighten(chain) {
       const { gw } = this.field;
+      if (chain.length < 2) return [0];
       const xy = (i) => [chain[i] % gw, Math.floor(chain[i] / gw)];
       const keep = new Array(chain.length).fill(false);
       keep[0] = keep[chain.length - 1] = true;
@@ -478,104 +543,78 @@ const HereOutRoute = (() => {
       while (todo.length) {
         const [lo, hi] = todo.pop();
         if (hi - lo < 2) continue;
+        if (this.sees(chain[lo], chain[hi])) continue;
         let far = -1, farI = -1;
         for (let i = lo + 1; i < hi; i++) {
           const g = lineGap(xy(i), xy(lo), xy(hi));
           if (g > far) { far = g; farI = i; }
         }
-        if (far > LINE_EPS || !this.sees(chain[lo], chain[hi])) {
-          keep[farI] = true;
-          todo.push([lo, farI], [farI, hi]);
-        }
+        keep[farI] = true;
+        todo.push([lo, farI], [farI, hi]);
       }
-      return keep.flatMap((k, i) => (k ? [i] : []));
+      // A corner closer than LINE_EPS to the line from the last corner kept
+      // to the next one goes, when that line is clear.
+      const idx = keep.flatMap((k, i) => (k ? [i] : []));
+      const out = [idx[0]];
+      for (let k = 1; k < idx.length - 1; k++) {
+        const prev = out[out.length - 1], t = idx[k], nxt = idx[k + 1];
+        if (lineGap(xy(t), xy(prev), xy(nxt)) > LINE_EPS || !this.sees(chain[prev], chain[nxt])) out.push(t);
+      }
+      out.push(idx[idx.length - 1]);
+      return out;
     }
 
-    // The best line cell in sight of cell s: the one with the smallest walk
-    // to it plus the way from it. use(j) says if j is a line cell, way(j) is
-    // the cost from it. It looks near first, then twice as far each time.
-    // Null when no line is in sight.
-    attach(s, use, way) {
-      const size = Math.max(this.field.gw, this.field.gh);
-      for (let reach = ATTACH_SHARE * size; reach < 2 * size; reach *= 2) {
-        const p = this.attachWithin(s, use, way, reach);
-        if (p) return p;
-      }
-      return null;
-    }
-
-    attachWithin(s, use, way, reach) {
-      const { gw, gh } = this.field;
-      const sr = Math.floor(s / gw), sc = s - sr * gw;
-      const cands = [];
-      // A mark for each cell seen in this call, so no set is made for each call.
-      if (!this.mark) { this.mark = new Int32Array(gw * gh); this.markId = 0; }
-      const mark = this.mark, id = ++this.markId;
-      mark[s] = id;
-      const todo = [s];
-      while (todo.length) {
-        const i = todo.pop();
-        const r = Math.floor(i / gw), c = i - r * gw;
-        if (use(i)) cands.push([Math.hypot(r - sr, c - sc) + way(i), i]);
-        for (const [dr, dc] of NEIGHBOURS) {
-          const nr = r + dr, nc = c + dc;
-          if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
-          const j = nr * gw + nc;
-          if (mark[j] === id || !this.open[j] || Math.hypot(nr - sr, nc - sc) > reach) continue;
-          mark[j] = id;
-          todo.push(j);
-        }
-      }
-      cands.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-      for (const [cost, i] of cands) if (this.sees(s, i)) return { cost, cell: i };
-      return null;
-    }
-
-    // The route from start (cell s) to an exit along the lines, or null.
-    route(start, s) {
+    // The route from start (cell s) to an exit along the network, or to exit
+    // only when only is 0 or more. Null when the network has no way.
+    route(start, s, only = -1) {
       const f = this.field;
-      const p = this.attach(s, (j) => this.line[j], (j) => this.dist[j]);
-      if (!p) return null;
-      const pts = [[start[0], start[1]]];
-      // Join the leg of p at the foot of the start on it. When the start or
-      // the end of the leg does not see that point, join at the end of the
-      // leg, or at p and then along the line.
-      const b = this.segB[p.cell];
-      const foot = footOn([start[0], start[1]], f.toPx(this.segA[p.cell]), f.toPx(b));
-      const footCell = f.snap(foot);
-      if (footCell !== null && !this.ink[footCell] && this.sees(s, footCell) && this.sees(footCell, b)) pts.push(foot);
-      else if (!this.sees(s, b)) {
-        const chain = [p.cell];
-        while (chain[chain.length - 1] !== b) chain.push(this.next[chain[chain.length - 1]]);
-        for (const t of this.straighten(chain).slice(0, -1)) pts.push(f.toPx(chain[t]));
+      const { dist: ndist, next, owner } = this.tree(only);
+      // The start looks in its room and the rooms up to two doors away,
+      // through any opening, as a door of the network is only one of the
+      // openings between two rooms.
+      const rooms = [this.room[s]];
+      for (let hop = 0; hop < 2; hop++) {
+        for (const r of rooms.slice()) for (const o of this.nextRooms.get(r) || []) if (!rooms.includes(o)) rooms.push(o);
       }
-      let i = b;
-      for (; i >= 0; i = this.next[i]) if (this.key[i]) pts.push(f.toPx(i));
-      const k = this.owner[p.cell];
-      pts.push([...f.exits[k]]);
-      // Go straight to the last point of the way that the start sees, so the
-      // route does not walk to a line and back when a later point or the
-      // exit is in plain sight.
-      for (let j = pts.length - 1; j > 1; j--) {
-        // The cell of the point. Line points can be on an ink island; an
-        // exit can be in a wall, and then its open cell counts.
-        const [r, col] = f.toCell(pts[j]);
-        let c = r * f.gw + col;
-        if (this.ink[c]) c = f.snap(pts[j]);
-        if (c !== null && !this.ink[c] && this.sees(s, c)) { pts.splice(1, j - 1); break; }
+      const wanted = new Set();
+      for (const r of rooms) for (const j of this.byRoom.get(r) || []) if (Number.isFinite(ndist[j])) wanted.add(j);
+      if (!wanted.size) return null;
+      const ways = this.walk(s, rooms, wanted);
+      let best = null;
+      for (const [j, chain] of ways) {
+        const pts = this.straighten(chain).map((t) => f.toPx(chain[t]));
+        pts[0] = [start[0], start[1]];
+        pts[pts.length - 1] = [...this.nodes[j].px];
+        const cost = polyLength(pts) ** TRUNK + ndist[j];
+        if (!best || cost < best.cost) best = { cost, pts, j };
       }
+      if (!best) return null;
+      const pts = best.pts;
+      for (let i = best.j; next[i] >= 0; i = next[i]) pts.push(...this.edges[i].get(next[i]).pts.slice(1));
+      const k = owner[best.j];
+      // Pull the route tight: from each point, go straight to the last later
+      // point in sight, so the route does not hook back at a door.
+      const cellOf = (q) => {
+        const [r, col] = f.toCell(q);
+        const c = r * f.gw + col;
+        return this.ink[c] ? f.snap(q) : c;
+      };
+      const cells = pts.map((q, j) => (j === 0 ? s : cellOf(q)));
+      const tight = [0];
+      while (tight[tight.length - 1] < pts.length - 1) {
+        const i = tight[tight.length - 1];
+        let j = pts.length - 1;
+        while (j > i + 1 && (cells[j] === null || cells[i] === null || this.ink[cells[j]] || !this.sees(cells[i], cells[j]))) j--;
+        tight.push(j);
+      }
+      pts.splice(0, pts.length, ...tight.map((j) => pts[j]));
       const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6);
+      if (out.length === 1) out.push([...f.exits[k]]);
       return { points: out, exitIndex: k, onNetwork: true };
     }
   }
 
-  // The point on segment ab nearest to p.
-  function footOn(p, a, b) {
-    const dx = b[0] - a[0], dy = b[1] - a[1];
-    const n2 = dx * dx + dy * dy;
-    const t = n2 ? Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / n2)) : 0;
-    return [a[0] + dx * t, a[1] + dy * t];
-  }
+  const polyLength = (pts) => pts.slice(1).reduce((a, q, i) => a + dist(q, pts[i]), 0);
 
   // Steps, as in steps.py.
   function lineGap(p, a, b) {

@@ -12,7 +12,7 @@ from .plan import rectify
 from .reader import ModelClient, ModelError, Reading, SpendCapReached
 from .route import NoRoute, find_route
 from .steps import directions
-from .walls import wall_mask
+from .wall_lines import plan_walls
 
 WORK_SIDE = 1600  # every coordinate the client sees is in this image
 
@@ -24,13 +24,19 @@ class BadPhoto(Exception):
 @dataclass
 class Plan:
     image: np.ndarray
-    walls: np.ndarray
+    walls: np.ndarray                  # the walls to route in
     changes: list[str] = field(default_factory=list)  # what was done to the photo
+    drawn: dict = field(default_factory=dict)  # the walls to draw: straight lines and filled blocks
+
+    @classmethod
+    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None) -> "Plan":
+        walls, drawn = plan_walls(image, plan_box)
+        return cls(image, walls, changes or [], drawn)
 
     def use_reading(self, reading: Reading) -> None:
         """Find the walls again inside the box the model saw."""
         if reading.plan_box is not None:
-            self.walls = wall_mask(self.image, reading.plan_box)
+            self.walls, self.drawn = plan_walls(self.image, reading.plan_box)
 
 
 def decode_photo(data: bytes) -> np.ndarray:
@@ -51,7 +57,7 @@ def prepare(photo: np.ndarray) -> Plan:
         changes.append("resized")
     elif f < 1.0:
         changes.append("resized")
-    return Plan(flat, wall_mask(flat), changes)
+    return Plan.of(flat, changes=changes)
 
 
 def image_data_url(img: np.ndarray) -> str:

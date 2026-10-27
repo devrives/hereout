@@ -142,12 +142,18 @@ def wall_mask(img: np.ndarray, plan_box: tuple[float, float, float, float] | Non
     walls = keep[labels]
     walls = _drop_thin(walls, plan_box)
 
+    return walls | outside_box(walls.shape, plan_box)
+
+
+def outside_box(shape, plan_box=None) -> np.ndarray:
+    """True outside the plan box with its margin. All False without a box."""
+    h, w = shape[:2]
+    out = np.zeros((h, w), dtype=bool)
     if plan_box is not None:
         m = BOX_MARGIN * max(h, w)
         x0, y0 = max(0, int(plan_box[0] - m)), max(0, int(plan_box[1] - m))
         x1, y1 = min(w, int(plan_box[2] + m)), min(h, int(plan_box[3] + m))
         if x1 > x0 and y1 > y0:
-            inside = np.zeros_like(walls)
-            inside[y0:y1, x0:x1] = True
-            walls |= ~inside
-    return walls
+            out[:] = True
+            out[y0:y1, x0:x1] = False
+    return out
