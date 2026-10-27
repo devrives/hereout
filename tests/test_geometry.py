@@ -67,6 +67,7 @@ def test_directions_turns(plan):
     assert 2 <= len(walks) <= 6
     # Start is low on the left, the door is high in the middle: first leg goes up.
     assert walks[0]["turn"] in ("straight", "slight right", "right")
+    assert walks[0]["text"].startswith("Start toward the top")
 
 
 def test_directions_simple_l_shape():
@@ -74,7 +75,9 @@ def test_directions_simple_l_shape():
     steps = directions(pts, 500, 500)
     assert steps[0]["turn"] == "straight"
     assert steps[1]["turn"] == "right"
-    assert steps[1]["text"].startswith("Turn right")
+    assert steps[0]["text"] == "Start toward the top of the plan and walk a long way."
+    assert steps[1]["text"] == "Turn right and walk a long way."
+    assert steps[2]["text"] == "Then you reach the exit."
 
 
 def camera_view(sheet_w, sheet_h, yaw_deg, pitch_deg, f=1000.0, size=(1200, 900), dist=1000.0):

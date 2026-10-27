@@ -13,6 +13,7 @@ from collections import OrderedDict, defaultdict, deque
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -107,7 +108,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
         if len(data) > MAX_UPLOAD:
             raise HTTPException(413, "photo is too large")
         try:
-            plan = prepare(decode_photo(data))
+            plan = await run_in_threadpool(lambda: prepare(decode_photo(data)))
         except BadPhoto as e:
             raise HTTPException(400, str(e))
         pid = store.put(plan)
@@ -116,7 +117,8 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
                "here": None, "exits": [], "route": None, "steps": [], "model_error": None}
 
         if reads.allow(client_ip(request)):
-            reading, err = read_marks(plan, client)
+            # The model call takes 15 to 60 seconds; keep the event loop free.
+            reading, err = await run_in_threadpool(read_marks, plan, client)
         else:
             reading, err = None, "too many photos; mark the plan by hand"
         out["model_error"] = err
@@ -124,7 +126,8 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
             out["here"] = list(map(round, reading.you_are_here)) if reading.you_are_here else None
             out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
             if reading.you_are_here and reading.exits:
-                out.update(plan_route(plan, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits]))
+                exits = [(e["x"], e["y"]) for e in reading.exits]
+                out.update(await run_in_threadpool(plan_route, plan, reading.you_are_here, exits))
         return out
 
     @app.post("/api/route")

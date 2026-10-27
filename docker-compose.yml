@@ -1,0 +1,41 @@
+name: hereout
+
+services:
+  hereout:
+    build: .
+    image: hereout-web:local
+    container_name: hereout
+    env_file: .env
+    environment:
+      HEREOUT_SPEND_CAP_USD: "5"
+    volumes:
+      - hereout-spend:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - devrives-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=devrives-network"
+      - "traefik.http.routers.hereout.rule=Host(`hereout.devrives.com`)"
+      - "traefik.http.routers.hereout.entrypoints=websecure"
+      - "traefik.http.routers.hereout.tls=true"
+      - "traefik.http.routers.hereout.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.hereout.middlewares=security-headers@file"
+      - "traefik.http.services.hereout.loadbalancer.server.port=8000"
+      - "traefik.http.routers.hereout-http.rule=Host(`hereout.devrives.com`)"
+      - "traefik.http.routers.hereout-http.entrypoints=web"
+      - "traefik.http.routers.hereout-http.middlewares=redirect-websecure@file"
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: "1.0"
+
+volumes:
+  hereout-spend:
+
+networks:
+  devrives-network:
+    external: true

@@ -1,8 +1,9 @@
 """Turn a route into short spoken steps.
 
-Posted plans are drawn so that "up" on the plan is the way the reader faces
-when they stand in front of it. So the first step is given relative to "up",
-and each later step relative to the step before it.
+Many posted plans are drawn so that "up" on the plan is the way the reader
+faces, but not all of them. So the first step names a side of the plan
+("toward the top of the plan"), not a side of the body. Each later step is a
+turn relative to the step before it, which holds however the plan is turned.
 
 The plan has no reliable scale, so lengths are relative: a short, medium or
 long walk compared with the size of the plan.
@@ -52,6 +53,12 @@ def _turn(delta: float) -> str:
     return "back"
 
 
+def _plan_side(heading: float) -> str:
+    h = heading % 360
+    sides = ["top", "top right", "right", "bottom right", "bottom", "bottom left", "left", "top left"]
+    return sides[int(((h + 22.5) % 360) // 45)]
+
+
 def _length(d: float, plan_size: float) -> str:
     share = d / plan_size
     if share < 0.12:
@@ -72,19 +79,15 @@ def directions(points: list[tuple[float, float]], plan_w: float, plan_h: float) 
         turn = _turn(head - prev)
         length = _length(math.dist(a, b), plan_size)
         if i == 0:
-            if turn == "back":
-                text = f"With the plan in front of you, turn around: a {length} walk."
-            else:
-                way = "ahead" if turn == "straight" else f"to your {turn.replace('slight ', '')}"
-                text = f"With the plan in front of you, go {way}: a {length} walk."
+            text = f"Start toward the {_plan_side(head)} of the plan and walk a {length} way."
         elif turn == "straight":
-            text = f"Keep going straight: a {length} walk."
+            text = f"Keep going straight for a {length} way."
         elif turn == "back":
-            text = f"Turn around and walk back: a {length} walk."
+            text = f"Turn around and go back a {length} way."
         else:
-            text = f"Turn {turn}, then a {length} walk."
+            text = f"Turn {turn.replace('slight', 'slightly')} and walk a {length} way."
         steps.append({"kind": "walk", "turn": turn, "length": length, "text": text,
                       "from": a, "to": b})
         prev = head
-    steps.append({"kind": "arrive", "text": "The exit is here.", "at": pts[-1]})
+    steps.append({"kind": "arrive", "text": "Then you reach the exit.", "at": pts[-1]})
     return steps

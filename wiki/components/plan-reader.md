@@ -29,7 +29,7 @@ The plan reader changes a photo of a posted evacuation plan into a route and spo
 | Web | `app.py`, `web/` | The user uploads a photo and sees the route on the flat plan. When the reading is wrong, the user taps the start and the exit, and the server finds a new route. |
 
 - Walls can be black or one color. When most of the ink in the floor box has one hue, that hue is the wall color. The model does not give the wall color: in the first tests it gave black for red walls.
-- The first step is relative to "up" on the plan. Posted plans are drawn so that "up" is the direction that the reader faces.
+- The first step names a side of the plan, for example "toward the top of the plan". It does not name a side of the body, because some posted plans do not show "up" as the direction that the reader faces. Each later step is a turn from the step before it.
 - The steps give no distance in meters. The photo has no reliable scale. A walk is "short", "medium" or "long" in comparison with the size of the plan.
 - When the sheet is at an angle, the aspect ratio of the sheet comes from a pinhole camera model. When the focal length cannot be solved, the code uses the focal length of a typical phone camera.
 - Photos stay in memory for 15 minutes so that the user can correct the marks. The server writes no photo to disk.
