@@ -46,24 +46,70 @@ function remember() {
 
 const exitPoints = () => state.exits.map((e) => [e.x, e.y]);
 
-// The escape field for the current exits. The ink of the plan's own marks
-// is not a wall.
+// The escape field for the current exits. The ink of the "you are here"
+// mark is not a wall.
 function buildField() {
   const g = state.grid;
   const blocked = R.decodeGrid(g);
   const clear = state.here ? [state.here] : [];
-  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, [...clear, ...exitPoints()]);
+  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, clear);
   const field = make(exitPoints());
   const single = new Map();  // a field to one exit, made when the user picks that exit
   view = { field, layer: null, walls: null, route: null, steps: [], error: null,
            toExit: (i) => { if (!single.has(i)) single.set(i, make([exitPoints()[i]])); return single.get(i); } };
   view.reachable = field.owner.some((o) => o >= 0);
+  if (view.reachable) makeNetwork(field, clear);
 }
 
+// The ways out take about a second to make on a phone, so a worker makes
+// them. Until they come, routes follow the grid field and the map has no
+// lines. Without a worker, the page makes them itself.
+let worker = null;
+let networkJob = 0;
+let networkReady = null;  // the callback of the newest job
+const scriptUrl = (sel) => { const el = document.querySelector(sel); return el && (el.src || el.href); };
+
+function makeNetwork(field, clear) {
+  const job = ++networkJob;
+  field.waitForNetwork = true;
+  const ready = (data) => {
+    if (job !== networkJob || view.field !== field) return;
+    if (data) field.adoptNetwork(data);
+    else field.waitForNetwork = false;
+    view.layer = null;
+    const exitAt = [...$("exits").children].indexOf(document.activeElement);
+    update();
+    if (exitAt >= 0) $("exits").children[exitAt]?.focus();
+    // The status said "Finding the route…": now it names the route.
+    explain(view.pendingHow || startKind());
+    view.pendingHow = null;
+  };
+  networkReady = ready;
+  try {
+    if (!worker) {
+      worker = new Worker(scriptUrl("#network-worker"));
+      worker.onmessage = (ev) => { if (ev.data.id === networkJob && networkReady) networkReady(ev.data.data); };
+      worker.onerror = (ev) => { ev.preventDefault(); worker = null; if (networkReady) networkReady(null); };
+    }
+    const g = state.grid;
+    worker.postMessage({ id: job, routeUrl: scriptUrl('script[src*="/static/route.js"]'),
+                         grid: { w: g.w, h: g.h, scale: g.scale, bits: g.bits }, exits: exitPoints(), clear });
+  } catch (e) {
+    worker = null;
+    setTimeout(() => ready(null), 0);
+  }
+}
+
+const FINDING = "Finding the route…";
+
+// While the worker makes the ways out, the page shows no route: a grid route
+// first and a different route a second later would confuse. A spot with no
+// way out gets its message at once.
 function findRoute() {
   view.route = null;
   view.steps = [];
   view.error = null;
+  view.pending = false;
   if (!state.start || !state.exits.length) return;
   const k = state.exitChoice;
   try {
@@ -71,6 +117,7 @@ function findRoute() {
     // route of a field to that exit is the answer.
     const r = k >= 0 ? view.field.wayRoute(state.start, k) || view.toExit(k).route(state.start)
                      : view.field.wayRoute(state.start);
+    if (view.field.waitForNetwork && !view.field._network) { view.pending = true; return; }
     const exitIndex = k >= 0 ? k : r.exitIndex;
     view.route = { points: r.points, exitIndex };
     view.steps = R.directions(r.points, state.width, state.height);
@@ -110,7 +157,9 @@ function mapLayer() {
 
   // The ways out: straight lines from door to door to the exits, wider where
   // more doors and rooms drain through them.
-  const { legs } = f.network();
+  // No lines while the worker makes them.
+  const net = f._network || (f.waitForNetwork ? null : f.network());
+  const legs = net ? net.legs : [];
   const unit = Math.max(state.width, state.height) / 160;
   const widths = [[], [], [], [], [], []];
   for (const leg of legs) widths[Math.min(5, Math.floor(Math.log2(leg.flow)))].push(leg);
@@ -209,6 +258,9 @@ function drawMarks(unit) {
     }
   }
 
+  // The exit in use goes over the route again, so its number shows.
+  if (used >= 0) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
+
   const step = view.steps[selected];
   if (step && step.kind === "walk") {
     ctx.lineCap = "round";
@@ -224,9 +276,8 @@ function drawMarks(unit) {
   if (here) {
     const r = unit * 2.4;
     hereMark(here[0], here[1], r);
-    // Near the top edge the label goes below the mark, so it is not cut off.
-    const above = here[1] - r * 1.8 - r * 1.6 > 0;
-    label("YOU", here[0], above ? here[1] - r * 1.8 : here[1] + r * 1.8, r, above ? "bottom" : "top");
+    const at = youLabelAt(here, r, unit * 2.2);
+    label("YOU", at.x, at.y, r, at.baseline, at.align);
   }
   if (step && step.kind === "walk") {
     label(String(selected + 1), (step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2 - unit * 2.5, unit * 2.4, "bottom");
@@ -259,9 +310,29 @@ function exitMark(x, y, r, n, used) {
   ctx.fillText(String(n), x, y + r * 0.08);
 }
 
-function label(text, x, y, r, baseline) {
+// The place of the YOU label: above the mark, else below, right or left,
+// whichever first stays on the plan and covers no exit mark (its number).
+function youLabelAt(here, r, exitR) {
   ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
-  ctx.textAlign = "center";
+  const w = ctx.measureText("YOU").width, h = r * 1.6, gap = r * 1.8;
+  const [x, y] = here;
+  const places = [
+    { x, y: y - gap, baseline: "bottom", align: "center", box: [x - w / 2, y - gap - h, x + w / 2, y - gap] },
+    { x, y: y + gap, baseline: "top", align: "center", box: [x - w / 2, y + gap, x + w / 2, y + gap + h] },
+    { x: x + gap, y, baseline: "middle", align: "left", box: [x + gap, y - h / 2, x + gap + w, y + h / 2] },
+    { x: x - gap, y, baseline: "middle", align: "right", box: [x - gap - w, y - h / 2, x - gap, y + h / 2] },
+  ];
+  // The white halo of the text and the frame of an exit take some room too.
+  const pad = r / 3 + exitR * 4 / 3;
+  const onPlan = ([x0, y0, x1, y1]) => x0 >= 0 && y0 >= 0 && x1 <= state.width && y1 <= state.height;
+  const free = ([x0, y0, x1, y1]) => state.exits.every((e) =>
+    e.x + pad < x0 || e.x - pad > x1 || e.y + pad < y0 || e.y - pad > y1);
+  return places.find((p) => onPlan(p.box) && free(p.box)) || places.find((p) => onPlan(p.box)) || places[0];
+}
+
+function label(text, x, y, r, baseline, align = "center") {
+  ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
+  ctx.textAlign = align;
   ctx.textBaseline = baseline;
   ctx.lineWidth = r / 1.5;
   ctx.strokeStyle = "#ffffff";
@@ -300,8 +371,15 @@ function showSteps() {
     }
     list.append(li);
   });
+  if (view.pending) {
+    const li = document.createElement("li");
+    li.textContent = FINDING;
+    list.append(li);
+  }
   const none = view.steps.length === 0;
-  $("steps-head").hidden = $("steps-hint").hidden = none;
+  $("steps-head").hidden = $("steps-hint").hidden = none && !view.pending;
+  // The hint keeps its space while the route is found, so the list does not move.
+  $("steps-hint").style.visibility = view.pending ? "hidden" : "";
   $("speak").hidden = none || !canSpeak;
   stopSpeaking();
 }
@@ -348,6 +426,12 @@ function showExits() {
       state.exitChoice = i;
       update();
       remember();
+      if (view.pending) {
+        view.pendingHow = "exit-button";
+        sayPlan(FINDING);
+        $("exits").children[i].focus();
+        return;
+      }
       sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
                          : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
       (view.route ? $("steps") : $("exits").children[i]).focus();
@@ -395,6 +479,9 @@ function showLegend() {
   $("legend").hidden = false;
   $("legend").style.visibility = photoOnly ? "hidden" : "";
   $("legend-field").hidden = $("legend-way").hidden = !map;
+  // The ways out show once the worker has made them. The item keeps its
+  // space, so the text under the plan does not move when they come.
+  $("legend-way").style.visibility = view.field.waitForNetwork && !view.field._network ? "hidden" : "";
   $("legend-wall").hidden = !routesOnly;
 }
 
@@ -422,6 +509,9 @@ function explain(how) {
       : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
   } else if (!state.start) {
     sayPlan('No "you are here" mark found. Tap where you are on the plan.');
+  } else if (view.pending) {
+    view.pendingHow = how;
+    sayPlan(FINDING);
   } else if (view.error && state.exitChoice >= 0) {
     sayPlan(`HereOut found no way to ${exitName(state.exitChoice)} in this photo. Try another exit.`);
   } else if (view.error && how === "exit") {

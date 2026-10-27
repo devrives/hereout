@@ -26,6 +26,7 @@ sources:
   - Find diagonal walls with a Hough transform in the ink that is left.
   - Join the pieces on one line when the gap is smaller than a door and the photo has ink in the gap. Blank paper in the gap is a door.
   - Remove a line or a block much fainter than the usual wall line.
+  - Remove a line much more coloured than the usual wall line, as a printed route or arrow. The colour is the Lab chroma of the darkest ink across the line. The line must also be at least about as coloured as the paper or paint on both sides.
   - Make one straight line for a wavy wall. It is long, dark ink of one thin stroke that no line covers and no line runs beside. The line stops where the ink stops.
   - Remove the treads of stairs: four or more short parallel lines, close together and evenly spaced. A tread that spans two flights can be up to three times longer. Stairs are a way out.
   - Make each line longer at its ends only over ink, so a corner has no leak and a door stays open.
@@ -39,6 +40,15 @@ sources:
 - Symbols, columns, text and door swings are no longer walls. Routes can pass through small symbols now.
 - Gallery route check with no model call: 188 of 203 plans had a route with the first version, against 185 before. Two small-scale plans lost their route (TW-commons_000049, US-openverse_000109). In US, the longer line ends closed a narrow door. In TW, the treads of the stairs closed the exits. The ink check and the stair rule give both plans a route again (owner request, 2026-10-27).
 - With these rules, 191 of 203 gallery plans have a route. No plan lost its route.
+
+## Colour rule
+
+- On 2026-10-27 the owner asked to fix the known problems that need no model call. One problem was the outline of the printed red arrow of US-openverse_000109 as a wall line.
+- HSV saturation did not work: dark ink gives noisy saturation. The first test removed real black walls on 151 of 203 gallery plans.
+- Lab chroma above the usual wall chroma removed printed routes on RU-commons_000346, RU-commons_000165 and JP-commons_000219. But on MY-commons_000226 it also removed thin black walls beside green and yellow paint. In the photo, the paint colours the wall pixels.
+- The side check keeps these walls: their colour is stronger in the paint than on the line. A printed line on paper is more coloured than the paper beside it.
+- Gallery route check with no model call: 191 of 203 plans have a route, as before. 48 plans lose some lines.
+- The rule keeps dark green route lines on green paper (RU-commons_000228). A missing wall is worse than an extra line there.
 
 ## Related
 

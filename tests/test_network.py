@@ -17,6 +17,7 @@ def test_network_lines_and_routes():
     out = json.loads(subprocess.run([NODE, str(RUNNER)], input=json.dumps(cs), capture_output=True,
                                     text=True, check=True).stdout)
     assert out[0]["legs"] > 0
+    assert all(a["waits"] and a["adopted"] for a in out)
     n_routes = 0
     for c, a in zip(cs, out):
         assert a["legsClear"]

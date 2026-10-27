@@ -6,6 +6,7 @@ updated: 2026-10-27
 sources:
   - owner:2026-10-27
   - src/hereout/web/route.js
+  - src/hereout/web/network-worker.js
   - src/hereout/web/app.js
   - tests/test_network.py
   - https://www.mdpi.com/2220-9964/8/2/60
@@ -50,6 +51,7 @@ We looked at these methods:
 - A route to a chosen exit uses the same network with a tree from that exit only.
 - The wall lines are lighter than the ways out, and the ways out are wider. A way and a wall differ in more than hue (a11y review, 2026-10-27).
 - The network and its routes are in the browser only. `route.py` keeps the grid field for the gallery route check and the scripts.
+- A Web Worker makes the network (`web/network-worker.js`), so the page does not stop while the network is made (owner request, 2026-10-27). The worker sends back the rooms, the nodes and the ways as data. The page makes the trees again from them. Until the data comes, the page shows no route. Why: [Plan reader](../components/plan-reader.md).
 
 ## Consequences
 

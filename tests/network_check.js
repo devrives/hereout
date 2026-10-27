@@ -12,7 +12,17 @@ process.stdin.on("end", () => {
     // A leg is clear when the line between its ends has no ink. Ends in ink
     // (a start or an exit that snaps to the open space) are not checked.
     const clear = (a, b) => { const i = cell(a), j = cell(b); return net.ink[i] || net.ink[j] || net.sees(i, j); };
+    // A field that waits for the network routes on the grid, and with the
+    // network data that a worker sends, it routes as the field that made it.
+    const copy = new R.Field(R.decodeGrid(c.grid), c.grid.w, c.grid.h, c.grid.scale, c.exits, c.clear);
+    copy.waitForNetwork = true;
+    const ask = (g, s) => { try { return JSON.stringify(g.wayRoute(s)); } catch (e) { return e.message; } };
+    const waits = c.starts.every((s) => ask(copy, s) === (() => { try { return JSON.stringify(f.route(s)); } catch (e) { return e.message; } })());
+    copy.adoptNetwork(structuredClone(net.toData()));
+    const adopted = copy.network().legs.length === net.legs.length && c.starts.every((s) => ask(copy, s) === ask(f, s));
     return {
+      waits,
+      adopted,
       legs: net.legs.length,
       legsClear: net.legs.filter((l) => !l.exit).every((l) => clear(l.a, l.b)),
       routes: c.starts.map((s) => {

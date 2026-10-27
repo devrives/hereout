@@ -73,3 +73,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `components/plan-reader.md`: Known limits lists the open problems after the wall-line and door-to-door changes. The old item about exit signs in the doorways is gone, because symbols are no longer walls.
 - Source: the owner request of 2026-10-27 (record only, no fix now) and the ux reviews of 2026-10-27.
+
+## [2026-10-27] ingest | Fixes with no model call
+
+- Updated `components/plan-reader.md`: no clear disc for exit marks, a free place for the "YOU" label, the network worker, and the known limits after the fixes.
+- Updated `decisions/wall-lines.md`: the colour rule for printed routes, and why HSV saturation did not work.
+- Updated `decisions/way-network.md`: the network comes from a Web Worker.
+- Source: the owner request of 2026-10-27 (fix what needs no model call), `src/hereout/wall_lines.py`, `src/hereout/web/route.js`, `src/hereout/web/network-worker.js`, `src/hereout/web/app.js` and the gallery route check.

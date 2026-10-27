@@ -126,10 +126,12 @@ const HereOutRoute = (() => {
     constructor(blocked, gw, gh, scale, exits, clear = []) {
       Object.assign(this, { gw, gh, scale, exits });
       blocked = Uint8Array.from(blocked);
-      // A mark is ink too: clear a small disc so it does not wall in its own point.
+      // A "you are here" dot is ink too: clear a small disc so it does not
+      // wall in its own point. An exit gets no disc, as in route.py: a disc
+      // would cut a door into the wall that the exit is on.
       const radius = MARK_CLEAR_SHARE * Math.max(gw, gh);
       const span = Math.trunc(radius) + 1;
-      for (const [x, y] of [...clear, ...exits]) {
+      for (const [x, y] of clear) {
         const [r0, c0] = this.toCell([x, y]);
         for (let r = Math.max(0, r0 - span); r < Math.min(gh, r0 + span + 1); r++) {
           for (let c = Math.max(0, c0 - span); c < Math.min(gw, c0 + span + 1); c++) {
@@ -259,6 +261,11 @@ const HereOutRoute = (() => {
       return this._network;
     }
 
+    // Use a network that a worker made for the same grid, exits and marks.
+    adoptNetwork(data) {
+      this._network = Network.fromData(this, data);
+    }
+
     // A route along the ways out to the nearest exit, or to exit only when
     // only is 0 or more. Null when the network has no way to that exit (then
     // the grid route of a field to that exit is the answer). Browser only.
@@ -268,7 +275,10 @@ const HereOutRoute = (() => {
       const s = this.snap(start);
       if (s === null) throw new NoRoute("start is inside a wall");
       if (this.owner[s] < 0) throw new NoRoute("no open way to an exit");
-      const r = this.network().route(start, s, only);
+      // While a worker makes the network (waitForNetwork), the grid route
+      // is the answer.
+      const net = this._network || (this.waitForNetwork ? null : this.network());
+      const r = net ? net.route(start, s, only) : null;
       return r || (only < 0 ? this.route(start) : null);
     }
   }
@@ -367,6 +377,22 @@ const HereOutRoute = (() => {
 
       this.trees = new Map();
       Object.assign(this, this.tree(-1));
+    }
+
+    // The parts that take long to make, as plain data for postMessage. The
+    // field and the trees are made again from them.
+    toData() {
+      return { room: this.room, nodeAt: this.nodeAt, open: this.open, wd: this.wd, cost: this.cost,
+               nodes: this.nodes, doors: this.doors, nextRooms: [...this.nextRooms],
+               middles: [...this.middles], byRoom: [...this.byRoom], edges: this.edges.map((m) => [...m]) };
+    }
+
+    static fromData(field, d) {
+      const net = Object.create(Network.prototype);
+      Object.assign(net, d, { field, ink: field.blocked, nextRooms: new Map(d.nextRooms), middles: new Map(d.middles),
+                              byRoom: new Map(d.byRoom), edges: d.edges.map((e) => new Map(e)), trees: new Map() });
+      Object.assign(net, net.tree(-1));
+      return net;
     }
 
     // The shortest way from each node to an exit, or to exit only when only

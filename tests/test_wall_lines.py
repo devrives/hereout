@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from hereout.route import Field, blocked_grid
-from hereout.wall_lines import plan_walls
+from hereout.wall_lines import _contrast, _drop_coloured, plan_walls
 
 from conftest import draw_plan
 
@@ -78,3 +78,30 @@ def test_a_wavy_wall_gives_one_line_and_keeps_its_door():
     wavy = [l for l in drawn["lines"] if abs((l[0] + l[2]) / 2 - 300) < 20 and abs(l[1] - l[3]) > 60]
     assert wavy
     assert not [l for l in wavy if min(l[1], l[3]) < 215 and max(l[1], l[3]) > 245]
+
+
+def test_a_printed_route_line_is_not_a_wall():
+    # A dull red route line across a room: walls.py keeps its ink (not
+    # saturated enough for a sign), but it is much more coloured than the
+    # black walls, so it is no wall line.
+    img, here, exit_ = draw_plan()
+    cv2.line(img, (100, 300), (360, 300), (80, 80, 150), 4)
+    _, drawn = plan_walls(img)
+    assert not [l for l in drawn["lines"] if 290 <= l[1] <= 310 and 290 <= l[3] <= 310]
+
+
+
+def test_a_black_wall_beside_a_painted_area_stays():
+    # In a photo a thin black wall beside a green painted area takes on some
+    # of the green. The colour peaks in the paint, not on the wall line, so
+    # the wall stays. A red line on paper peaks on the line and goes.
+    img = np.full((400, 600, 3), 245, np.uint8)
+    for y in (50, 350):
+        cv2.line(img, (50, y), (550, y), (30, 30, 30), 3)               # usual walls
+    img[60:340, 200:203] = (70, 110, 70)                               # wall tinted by the paint
+    img[60:340, 203:300] = (60, 175, 60)                               # the paint
+    cv2.line(img, (400, 60), (400, 340), (70, 70, 170), 3)             # printed route line
+    segs = [[50, 50, 550, 50, 3], [50, 350, 550, 350, 3], [201, 60, 201, 340, 3], [400, 60, 400, 340, 3]]
+    kept = _drop_coloured(img, _contrast(img), [list(map(float, s)) for s in segs])
+    xs = sorted(round(s[0]) for s in kept)
+    assert 201 in xs and 400 not in xs

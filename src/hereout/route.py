@@ -93,11 +93,13 @@ class Field:
         self.exits = list(exits)
         gh, gw = blocked.shape
         self.gw, self.gh = gw, gh
-        # A "you are here" dot or an exit sign is ink too. Clear a small disc
-        # so the mark does not wall in its own point.
+        # A "you are here" dot is ink too. Clear a small disc so the mark
+        # does not wall in its own point. An exit gets no disc: it is often on
+        # a wall line, and a disc would cut a door into the wall. It snaps to
+        # the nearest open cell instead.
         blocked = blocked.copy()
         radius = MARK_CLEAR_SHARE * max(gw, gh)
-        for x, y in [*clear, *exits]:
+        for x, y in clear:
             r0, c0 = self.to_cell((x, y))
             span = int(radius) + 1
             for r in range(max(0, r0 - span), min(gh, r0 + span + 1)):

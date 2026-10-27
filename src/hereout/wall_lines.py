@@ -14,7 +14,8 @@ simpler and cleaner with straight lines:
 4. Pieces on one line with a gap smaller than a door are one line, when
    the photo has ink in the gap. Blank paper there is a door.
 5. A line or block much fainter than the usual wall line is the edge of a
-   painted band or a light detail, not a wall.
+   painted band or a light detail, not a wall. A line much more coloured
+   than the usual wall line is a printed route or arrow, not a wall.
 6. Four or more short parallel lines, evenly spaced and close together, are
    the treads of stairs. Stairs are a way out, so they are not walls.
 7. Long, dark ink of one thin stroke that no line covers and no line runs
@@ -60,6 +61,9 @@ BESIDE_ANGLE = math.radians(12)  # and at most this far from parallel
 ANGLE_TOL = math.radians(4)
 FAINT_LINE = 0.6       # a line with less contrast than this share of the usual wall is not a wall
 FAINT_BLOCK = 0.67     # the same for a block, with the darkest quarter of its pixels
+COLOURED = 18.0        # a line this much more coloured than the usual wall (Lab chroma) is a printed route
+PEAK_SIDE = 6          # px to each side of a line where its colour is compared
+PEAK_MARGIN = 6.0      # a printed line is at most this much less coloured than its sides
 SIDE_PX = 3            # look this far to each side of a line for its darkest ink
 END_SHARE = 0.003      # each line grows at most this much at each end, over ink only
 PAPER_SHARE = 1 / 40   # the closing that finds the paper colour, as in walls.py
@@ -138,6 +142,7 @@ def find_lines(img: np.ndarray, walls: np.ndarray, plan_box=None) -> tuple[list[
     segs = [s for s in segs if _length(s) >= min_len]
     contrast = _contrast(img)
     segs, blocks, usual = _drop_faint(contrast, segs, blocks)
+    segs = _drop_coloured(img, contrast, segs)
     sat = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)[:, :, 1]
     segs += _bent_walls(ink, contrast, sat, segs, blocks, usual, stroke, min_len, side)
 
@@ -485,3 +490,44 @@ def _drop_faint(contrast: np.ndarray, segs: list[list[float]], blocks: list) -> 
         if np.percentile(contrast[m > 0], 75) >= FAINT_BLOCK * usual:
             kept.append(b)
     return [s for s, d in zip(segs, darkness) if d >= FAINT_LINE * usual], kept, usual
+
+
+def _drop_coloured(img: np.ndarray, contrast: np.ndarray, segs: list[list[float]]) -> list[list[float]]:
+    """Keep the lines whose ink has about the colour of the usual wall line.
+    The colour is the Lab chroma of the darkest pixel across the line. Chroma,
+    not HSV saturation: the saturation of near-black pixels is noise.
+    A black wall beside a painted area takes on some of its colour in a
+    photo. So a coloured line goes only when it is at least about as
+    coloured as the paper or paint on both sides of it."""
+    if not segs:
+        return segs
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    chroma = np.hypot(lab[:, :, 1] - 128, lab[:, :, 2] - 128)
+    h, w = contrast.shape
+    colour, peak = [], []
+    for s in segs:
+        n = int(_length(s)) + 1
+        xs, ys = np.linspace(s[0], s[2], n), np.linspace(s[1], s[3], n)
+        nx, ny = -(s[3] - s[1]) / max(1.0, _length(s)), (s[2] - s[0]) / max(1.0, _length(s))
+        best = np.full(n, -255, np.int16)
+        at = np.zeros(n, np.float32)
+        for o in range(-SIDE_PX, SIDE_PX + 1):
+            cx = np.clip(np.round(xs + nx * o).astype(int), 0, w - 1)
+            cy = np.clip(np.round(ys + ny * o).astype(int), 0, h - 1)
+            c = contrast[cy, cx]
+            darker = c > best
+            best = np.where(darker, c, best)
+            at = np.where(darker, chroma[cy, cx], at)
+        sides = []
+        for o in (-PEAK_SIDE, PEAK_SIDE):
+            cx = np.clip(np.round(xs + nx * o).astype(int), 0, w - 1)
+            cy = np.clip(np.round(ys + ny * o).astype(int), 0, h - 1)
+            sides.append(chroma[cy, cx])
+        colour.append(float(np.median(at)))
+        peak.append(float(np.median(at - np.maximum(*sides))))
+    # The usual wall: the colour that half of the total line length stays under.
+    order = np.argsort(colour)
+    lengths = np.array([_length(segs[i]) for i in order])
+    usual = colour[order[np.searchsorted(np.cumsum(lengths), lengths.sum() / 2)]]
+    return [s for s, c, p in zip(segs, colour, peak) if c <= usual + COLOURED or p < -PEAK_MARGIN]
+
