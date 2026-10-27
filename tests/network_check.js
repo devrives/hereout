@@ -1,0 +1,31 @@
+// Reads cases as JSON on stdin, prints what the way network of web/route.js
+// gives for each. Used by test_network.py.
+const R = require("../src/hereout/web/route.js");
+
+let input = "";
+process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const out = JSON.parse(input).map((c) => {
+    const f = new R.Field(R.decodeGrid(c.grid), c.grid.w, c.grid.h, c.grid.scale, c.exits, c.clear);
+    const net = f.network();
+    const cell = (p) => { const [r, col] = f.toCell(p); return r * f.gw + col; };
+    // A leg is clear when the line between its ends has no ink. Ends in ink
+    // (a start or an exit that snaps to the open space) are not checked.
+    const clear = (a, b) => { const i = cell(a), j = cell(b); return net.ink[i] || net.ink[j] || net.sees(i, j); };
+    return {
+      legs: net.legs.length,
+      legsClear: net.legs.filter((l) => !l.exit).every((l) => clear(l.a, l.b)),
+      routes: c.starts.map((s) => {
+        let grid, way;
+        try { grid = f.route(s); } catch (e) { grid = { error: e.message }; }
+        try { way = f.wayRoute(s); } catch (e) { return { error: e.message, gridError: grid.error || null }; }
+        const p = way.points;
+        return { gridError: grid.error || null, onNetwork: !!way.onNetwork, exitIndex: way.exitIndex,
+                 end: p[p.length - 1], exit: c.exits[way.exitIndex],
+                 clear: p.slice(1, -1).every((q, i) => clear(p[i], q)),
+                 bad: p.slice(1, -1).flatMap((q, i) => (clear(p[i], q) ? [] : [i])), n: p.length };
+      }),
+    };
+  });
+  process.stdout.write(JSON.stringify(out));
+});

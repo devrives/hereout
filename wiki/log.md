@@ -51,3 +51,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/browser-routing.md`: the "Routes only" view, with the walls of the routing grid in grey.
 - Source: the owner request to see the routes without the photo.
+
+## [2026-10-27] ingest | Ways out as straight centre lines
+
+- Added `decisions/way-network.md`. Linked it from `index.md` and `decisions/browser-routing.md`.
+- Source: the owner request of 2026-10-27, the research of methods, and the network in `src/hereout/web/route.js`.
+- Recorded the review fixes: shortcut from the start, no legs with almost no flow, opaque lines, status before an exit route.

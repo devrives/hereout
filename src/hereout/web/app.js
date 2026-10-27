@@ -26,6 +26,7 @@ const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
 const MAP_ALPHA = 110;
 const ROUTE = "#1b5fd1";
 const WALL = "#2b2f36";
+const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contrast over a photo
 
 // Two status lines: one by the photo button for loading, one under the plan
 // for what happens on the plan, so the answer to a tap is in view.
@@ -65,7 +66,7 @@ function findRoute() {
   if (!state.start || !state.exits.length) return;
   const field = state.exitChoice >= 0 ? view.toExit(state.exitChoice) : view.field;
   try {
-    const r = field.route(state.start);
+    const r = field.wayRoute(state.start);
     const exitIndex = state.exitChoice >= 0 ? state.exitChoice : r.exitIndex;
     view.route = { points: r.points, exitIndex };
     view.steps = R.directions(r.points, state.width, state.height);
@@ -75,8 +76,8 @@ function findRoute() {
   }
 }
 
-// The escape map: colour by the cost to the nearest exit, and lines along
-// the ways that many routes share. Made once for each field.
+// The escape map: colour by the cost to the nearest exit, and the ways out
+// as lines. Made once for each field.
 function mapLayer() {
   if (view.layer) return view.layer;
   const f = view.field;
@@ -103,51 +104,55 @@ function mapLayer() {
   l.imageSmoothingEnabled = true;
   l.drawImage(tint, 0, 0, f.gw / f.scale, f.gh / f.scale);
 
-  const { acc, order } = f.flow();
-  const min = Math.max(20, order.length * 0.004);
+  // The ways out: straight lines along the middle of the open space, wider
+  // where more of the plan drains through them.
+  const { legs } = f.network();
+  const min = 8;
   const unit = Math.max(state.width, state.height) / 160;
   const widths = [[], [], [], [], [], []];
-  for (const i of order) {
-    if (acc[i] < min || f.next[i] < 0) continue;
-    widths[Math.min(5, Math.floor(Math.log2(acc[i] / min)))].push(i);
+  // Short ends with almost nothing behind them are left out: a tap there still
+  // finds its way to a line.
+  for (const leg of legs) {
+    if (leg.flow < min && !leg.exit) continue;
+    widths[leg.flow < min ? 0 : Math.min(5, 1 + Math.floor(Math.log2(leg.flow / min) / 1.5))].push(leg);
   }
   l.lineCap = l.lineJoin = "round";
-  l.strokeStyle = "rgba(6, 64, 34, 0.75)";
-  widths.forEach((cells, b) => {
-    l.lineWidth = unit * (0.22 + 0.16 * b);
+  l.strokeStyle = WAY;
+  widths.forEach((group, b) => {
+    l.lineWidth = unit * (0.4 + 0.16 * b);
     l.beginPath();
-    for (const i of cells) {
-      const a = f.toPx(i), z = f.toPx(f.next[i]);
+    for (const { a, b: z } of group) {
       l.moveTo(a[0], a[1]);
       l.lineTo(z[0], z[1]);
     }
     l.stroke();
   });
 
-  // Arrow heads on the main ways, at even steps of cost, pointing to the exit.
+  // Arrow heads on the main ways, at even steps of the way left, pointing to the exit.
   const spacing = 0.09 * Math.max(f.gw, f.gh);
-  l.fillStyle = "rgba(6, 64, 34, 0.9)";
-  for (const i of order) {
-    const j = f.next[i];
-    if (acc[i] < min * 4 || j < 0 || Math.floor(f.dist[i] / spacing) === Math.floor(f.dist[j] / spacing)) continue;
-    let k = j;
-    for (let s = 0; s < 3 && f.next[k] >= 0; s++) k = f.next[k];
-    const a = f.toPx(i), z = f.toPx(k);
-    const ang = Math.atan2(z[1] - a[1], z[0] - a[0]);
-    const r = unit * 1.3;
-    l.beginPath();
-    l.moveTo(a[0] + Math.cos(ang) * r, a[1] + Math.sin(ang) * r);
-    l.lineTo(a[0] + Math.cos(ang + 2.5) * r, a[1] + Math.sin(ang + 2.5) * r);
-    l.lineTo(a[0] + Math.cos(ang - 2.5) * r, a[1] + Math.sin(ang - 2.5) * r);
-    l.closePath();
-    l.fill();
+  l.fillStyle = WAY;
+  for (const { a, b, da, db, flow } of legs) {
+    if (flow < min * 4 || da <= db) continue;
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    for (let m = Math.floor(da / spacing); m * spacing > db; m--) {
+      const t = (da - m * spacing) / (da - db);
+      const x = a[0] + (b[0] - a[0]) * t, y = a[1] + (b[1] - a[1]) * t;
+      const r = unit * 1.3;
+      l.beginPath();
+      l.moveTo(x + Math.cos(ang) * r, y + Math.sin(ang) * r);
+      l.lineTo(x + Math.cos(ang + 2.5) * r, y + Math.sin(ang + 2.5) * r);
+      l.lineTo(x + Math.cos(ang - 2.5) * r, y + Math.sin(ang - 2.5) * r);
+      l.closePath();
+      l.fill();
+    }
   }
   view.layer = layer;
   return layer;
 }
 
-// The walls as HereOut reads them: the edge cells of the blocked grid. The
-// area outside the plan box is wall too, so only its edge shows.
+// The walls as HereOut reads them: the edge cells of the ink that the ways
+// out keep away from. The area outside the plan box is wall too, so only its
+// edge shows.
 function wallLayer() {
   if (view.walls) return view.walls;
   const f = view.field;
@@ -156,10 +161,11 @@ function wallLayer() {
   cells.height = f.gh;
   const cctx = cells.getContext("2d");
   const data = cctx.createImageData(f.gw, f.gh);
-  const open = (r, c) => r >= 0 && r < f.gh && c >= 0 && c < f.gw && !f.blocked[r * f.gw + c];
+  const { ink } = f.network();
+  const open = (r, c) => r >= 0 && r < f.gh && c >= 0 && c < f.gw && !ink[r * f.gw + c];
   for (let r = 0; r < f.gh; r++) {
     for (let c = 0; c < f.gw; c++) {
-      if (!f.blocked[r * f.gw + c] || !(open(r - 1, c) || open(r + 1, c) || open(r, c - 1) || open(r, c + 1))) continue;
+      if (!ink[r * f.gw + c] || !(open(r - 1, c) || open(r + 1, c) || open(r, c - 1) || open(r, c + 1))) continue;
       data.data[(r * f.gw + c) * 4 + 3] = 255;
     }
   }
@@ -359,12 +365,17 @@ function showExits() {
     b.textContent = open[i] ? exitName(i) : `${exitName(i)} · no way found`;
     b.setAttribute("aria-pressed", String(i === current));
     b.addEventListener("click", () => {
-      state.exitChoice = i;
-      update();
-      remember();
-      sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
-                         : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
-      (view.route ? $("steps") : $("exits").children[i]).focus();
+      // The ways to one exit take a moment on a phone: say so first, and let
+      // the page show it before the work starts.
+      sayPlan(`Finding the route to ${exitName(i)}…`);
+      requestAnimationFrame(() => setTimeout(() => {
+        state.exitChoice = i;
+        update();
+        remember();
+        sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
+                           : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
+        (view.route ? $("steps") : $("exits").children[i]).focus();
+      }, 0));
     });
     box.append(b);
   });
