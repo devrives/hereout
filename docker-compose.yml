@@ -8,8 +8,12 @@ services:
     env_file: .env
     environment:
       HEREOUT_SPEND_CAP_USD: "60"
+      HEREOUT_GALLERY: /gallery
     volumes:
       - hereout-spend:/data
+      # Open-licensed plan photos with saved readings, made by scripts/run_set.py.
+      # They stay outside the repository.
+      - ../_workspace/hereout-gallery:/gallery:ro
     logging:
       driver: json-file
       options:

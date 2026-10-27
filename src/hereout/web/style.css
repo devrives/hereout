@@ -54,10 +54,22 @@ button { background: transparent; color: var(--fg); border: 2px solid var(--line
   /* On a phone the plan uses the full width of the screen. */
   .stage { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
 }
+.stage.big { max-height: 80vh; overflow: auto; }
+.stage.big canvas { width: 220%; max-width: none; }
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
 .fix { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
 #fix-hint { color: var(--muted); }
 .exits { display: flex; flex-wrap: wrap; gap: 8px; }
+.muted { color: var(--muted); margin: 0 0 12px; }
+.credit { color: var(--muted); font-size: 0.85rem; margin: 6px 0 0; }
+.credit a { color: inherit; }
+.gallery-wrap { margin: 28px 0 8px; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+button.sample { padding: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; text-align: left; font-weight: 500; }
+button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--line); }
+button.sample span { padding: 6px 10px; font-size: 0.9rem; }
+button.step { display: block; width: 100%; text-align: left; font-weight: 500; padding: 10px 12px; min-height: 44px; }
+button.step[aria-pressed="true"] { border-color: #d9480f; }
 ol { padding-left: 1.4em; }
 ol:focus { outline: none; }
 li { margin: 6px 0; }

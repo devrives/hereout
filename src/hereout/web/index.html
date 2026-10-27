@@ -21,12 +21,15 @@
   </label>
   <p id="status" role="status" aria-live="polite"></p>
 
+
   <section id="result" hidden>
-    <div class="stage">
+    <div class="stage" id="stage">
       <canvas id="plan" role="img" aria-label="The plan, no route yet"></canvas>
     </div>
+    <p id="credit" class="credit" hidden></p>
     <div class="fix">
       <button id="fix" type="button">Fix the marks</button>
+      <button id="enlarge" type="button" aria-pressed="false">Larger plan</button>
       <span id="fix-hint" hidden>Tap where you are, then tap the exit.<span id="kbd-hint" hidden> With a keyboard: arrow keys to move, Enter to place, Escape to stop.</span></span>
     </div>
     <h2 id="steps-head">Steps</h2>
@@ -36,6 +39,12 @@
       <h2>Route to another exit</h2>
       <div id="exits" class="exits"></div>
     </div>
+  </section>
+  <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
+    <h2 id="gallery-head">No plan nearby? Try a real one</h2>
+    <p class="muted"><span id="gallery-count"></span> open-licensed photos of posted plans from <span id="gallery-countries"></span> countries. HereOut read each one with Muse Spark.</p>
+    <div id="gallery" class="gallery"></div>
+    <button id="gallery-more" type="button" hidden></button>
   </section>
 </main>
 <script src="/static/app.js"></script>

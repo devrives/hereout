@@ -25,3 +25,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `components/plan-reader.md`: keyboard marks, buttons for other exits, session storage, time limit that starts again.
 - Source: the UX, accessibility and copy reviews of the web demo.
+
+## [2026-10-27] ingest | Sample gallery
+
+- Added `components/gallery.md`.
+- Source: `scripts/run_set.py`, `src/hereout/gallery.py` and the first batch run on the open-licensed photo set.

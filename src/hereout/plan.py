@@ -15,6 +15,8 @@ WORK_SIZE = 900          # longest side used for the edge search
 MIN_QUAD_AREA = 0.20     # the quad must cover this share of the photo
 MAX_QUAD_AREA = 0.97     # bigger than this is the photo frame itself
 SQUARE_ENOUGH_DEG = 2.5  # skip the warp when every corner is this close to 90
+MIN_CORNER_DEG = 50      # a sheet seen at an angle still has corners near 90
+MIN_SIDE_RATIO = 0.45    # opposite sides of a sheet keep a similar length
 MAX_OUTPUT_SIDE = 2400
 TYPICAL_FOCAL = 0.75     # phone main camera focal length, in units of the long side
 
@@ -49,8 +51,27 @@ def find_plan_quad(img: np.ndarray) -> np.ndarray | None:
             continue
         share = cv2.contourArea(approx) / area_total
         if MIN_QUAD_AREA <= share <= MAX_QUAD_AREA:
-            return order_corners(approx.reshape(4, 2) / scale)
+            quad = order_corners(approx.reshape(4, 2) / scale)
+            if plausible_sheet(quad):
+                return quad
     return None
+
+
+def plausible_sheet(quad: np.ndarray) -> bool:
+    """False for a quad that cannot be a flat sheet seen by a phone.
+
+    Long edges of other things (a header band and a sheet edge) can make a
+    large four-sided shape that is not the sheet. Its corners are far from 90
+    degrees or its opposite sides differ much in length.
+    """
+    if any(not (MIN_CORNER_DEG <= a <= 180 - MIN_CORNER_DEG) for a in _corner_angles(quad)):
+        return False
+    tl, tr, br, bl = quad
+    sides = [np.linalg.norm(tr - tl), np.linalg.norm(br - tr), np.linalg.norm(bl - br), np.linalg.norm(tl - bl)]
+    for a, b in ((sides[0], sides[2]), (sides[1], sides[3])):
+        if min(a, b) / max(a, b) < MIN_SIDE_RATIO:
+            return False
+    return True
 
 
 def _corner_angles(quad: np.ndarray) -> list[float]:

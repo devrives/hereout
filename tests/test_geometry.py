@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from hereout.plan import find_plan_quad, order_corners, plan_aspect, rectify
+from hereout.plan import find_plan_quad, order_corners, plan_aspect, plausible_sheet, rectify
 from hereout.route import NoRoute, find_route
 from hereout.steps import directions
 from hereout.walls import wall_hue, wall_mask
@@ -127,6 +127,13 @@ def test_aspect_from_camera_view(yaw, pitch):
     # The test camera uses f = 1000 on a 1200 px wide photo, near the phone default.
     ratio = plan_aspect(camera_view(600, 400, yaw, pitch), (1200, 900))
     assert ratio is not None and abs(ratio - 1.5) < 0.12
+
+
+def test_implausible_quad_is_rejected():
+    # The shape of a header band joined to one sheet edge: one side is short.
+    quad = order_corners(np.float32([[57, 147], [1821, 140], [1819, 288], [98, 1363]]))
+    assert not plausible_sheet(quad)
+    assert plausible_sheet(camera_view(600, 400, 35, -15))
 
 
 def test_rectify_leaves_a_straight_photo_alone(plan):

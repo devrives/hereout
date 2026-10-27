@@ -10,6 +10,7 @@ let cursor = null;  // [x, y] keyboard cursor while the user fixes the marks
 let saved = null;   // the marks and route before "Fix the marks", to restore on cancel or failure
 let planSeq = 0;    // only the newest upload may change the page
 let routeSeq = 0;   // only the newest route request may change the page
+let selected = -1;  // the step shown on the plan, or -1
 const canSpeak = "speechSynthesis" in window;
 const STORE_KEY = "hereout:last";
 
@@ -49,6 +50,20 @@ function draw() {
       for (const p of pts.slice(1)) ctx.lineTo(p[0], p[1]);
       ctx.stroke();
     }
+  }
+
+  const step = state.steps[selected];
+  if (step && step.kind === "walk") {
+    ctx.lineCap = "round";
+    for (const [color, width] of [["#ffffff", unit * 3.2], ["#d9480f", unit * 2]]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(step.from[0], step.from[1]);
+      ctx.lineTo(step.to[0], step.to[1]);
+      ctx.stroke();
+    }
+    label(String(selected + 1), (step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2 - unit * 2.5, unit * 2.4, "bottom");
   }
 
   // Labels last. An exit label close to YOU goes below its mark.
@@ -105,14 +120,32 @@ function cross(x, y, r) {
 function showSteps() {
   const list = $("steps");
   list.replaceChildren();
-  for (const s of state.steps) {
+  selected = -1;
+  state.steps.forEach((s, i) => {
     const li = document.createElement("li");
-    li.textContent = s.text;
+    if (s.kind === "walk") {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "step";
+      b.textContent = s.text;
+      b.setAttribute("aria-pressed", "false");
+      b.addEventListener("click", () => select(selected === i ? -1 : i));
+      li.append(b);
+    } else {
+      li.textContent = s.text;
+    }
     list.append(li);
-  }
+  });
   $("steps-head").hidden = state.steps.length === 0;
   $("speak").hidden = state.steps.length === 0 || !canSpeak;
   stopSpeaking();
+}
+
+// Show one step on the plan. -1 shows none.
+function select(i) {
+  selected = i;
+  $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
+  draw();
 }
 
 // One button for each other exit the model found, so the route can go to
@@ -132,7 +165,26 @@ function showExits() {
   }
 }
 
+function showCredit() {
+  const box = $("credit");
+  box.replaceChildren();
+  const c = state.credit;
+  box.hidden = !c;
+  if (!c) return;
+  const link = (text, href) => {
+    if (!href) return document.createTextNode(text);
+    const a = document.createElement("a");
+    a.href = href;
+    a.textContent = text;
+    a.rel = "noopener";
+    return a;
+  };
+  box.append(`Sample plan. Photo: "${c.title}" by ${c.author}, `, link(c.licence, c.licence_url), ", ",
+             link("source", c.source_url), ". Changes: resized, flattened where the photo was tilted, route drawn on top. This sample uses a saved model reading.");
+}
+
 function showAll() {
+  showCredit();
   draw();
   showSteps();
   showExits();
@@ -191,24 +243,20 @@ function showPlan(answer) {
   img.src = state.image;
 }
 
-$("photo").addEventListener("change", async (ev) => {
-  const file = ev.target.files[0];
-  ev.target.value = "";  // so the same file can be picked again
-  if (!file) return;
+// Load a plan from an upload or the gallery. Only the newest request wins.
+async function loadPlan(request, waitText) {
   const n = ++planSeq;
   stopSpeaking();
   if (taps) restore();
   $("photo").disabled = true;
-  say("Reading the plan. This can take a minute or two. The button works again when it is done.");
-  const body = new FormData();
-  body.append("photo", file);
+  say(waitText);
   let answer;
   try {
-    const r = await fetch("/api/plan", { method: "POST", body });
-    if (!r.ok) { if (n === planSeq) say(`Upload failed: ${await errorText(r, "try again")}.`); return; }
+    const r = await request();
+    if (!r.ok) { if (n === planSeq) say(`Could not open the plan: ${await errorText(r, "try again")}.`); return; }
     answer = await r.json();
   } catch (e) {
-    if (n === planSeq) say("Upload failed. Check the connection and try again.");
+    if (n === planSeq) say("Could not open the plan. Check the connection and try again.");
     return;
   } finally {
     if (n === planSeq) $("photo").disabled = false;
@@ -216,7 +264,67 @@ $("photo").addEventListener("change", async (ev) => {
   if (n !== planSeq) return;
   showPlan(answer);
   remember();
+  $("result").scrollIntoView({ block: "start" });
+}
+
+$("photo").addEventListener("change", (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = "";  // so the same file can be picked again
+  if (!file) return;
+  const body = new FormData();
+  body.append("photo", file);
+  loadPlan(() => fetch("/api/plan", { method: "POST", body }),
+           "Reading the plan. This can take a minute or two. The button works again when it is done.");
 });
+
+// Gallery of open-licensed plan photos with saved readings.
+const GALLERY_FIRST = 8;
+const countryName = (() => {
+  try {
+    const names = new Intl.DisplayNames(["en"], { type: "region" });
+    return (code) => { try { return names.of(code); } catch (e) { return code; } };
+  } catch (e) { return (code) => code; }
+})();
+
+async function showGallery() {
+  let plans = [];
+  try {
+    const r = await fetch("/api/gallery");
+    if (r.ok) plans = (await r.json()).plans;
+  } catch (e) { return; }
+  if (!plans.length) return;
+  const grid = $("gallery");
+  const render = (all) => {
+    grid.replaceChildren();
+    for (const p of all ? plans : plans.slice(0, GALLERY_FIRST)) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "sample";
+      const im = document.createElement("img");
+      im.src = p.thumb;
+      im.alt = "";
+      im.loading = "lazy";
+      const cap = document.createElement("span");
+      cap.textContent = countryName(p.country);
+      b.append(im, cap);
+      b.setAttribute("aria-label", `Sample plan from ${countryName(p.country)}${p.route_found ? "" : ", no route found"}`);
+      b.addEventListener("click", () => loadPlan(
+        () => fetch(`/api/gallery/${encodeURIComponent(p.id)}`, { method: "POST" }), "Opening the sample plan…"));
+      grid.append(b);
+    }
+    $("gallery-more").hidden = all || plans.length <= GALLERY_FIRST;
+  };
+  $("gallery-count").textContent = String(plans.length);
+  $("gallery-countries").textContent = String(new Set(plans.map((p) => p.country)).size);
+  $("gallery-more").textContent = `Show all ${plans.length} plans`;
+  $("gallery-more").addEventListener("click", () => {
+    render(true);
+    grid.children[GALLERY_FIRST]?.focus();
+  });
+  render(false);
+  $("gallery-wrap").hidden = false;
+}
+showGallery();
 
 $("fix").addEventListener("click", (ev) => {
   if (taps) { restore(); $("fix").focus(); return; }
@@ -312,6 +420,23 @@ canvas.addEventListener("keydown", (ev) => {
 canvas.addEventListener("focus", () => { if (taps) $("kbd-hint").hidden = false; draw(); });
 canvas.addEventListener("blur", draw);
 
+$("enlarge").addEventListener("click", () => {
+  const big = $("stage").classList.toggle("big");
+  $("enlarge").setAttribute("aria-pressed", String(big));
+  if (big) {
+    $("stage").tabIndex = 0;
+    // Scroll to "you are here", so the start of the route is in view.
+    const here = state && state.here;
+    if (here) {
+      const st = $("stage");
+      st.scrollLeft = here[0] / state.width * canvas.clientWidth - st.clientWidth / 2;
+      st.scrollTop = here[1] / state.height * canvas.clientHeight - st.clientHeight / 2;
+    }
+  } else {
+    $("stage").removeAttribute("tabindex");
+  }
+});
+
 let speaking = false;
 
 function stopSpeaking() {
@@ -327,6 +452,7 @@ $("speak").addEventListener("click", () => {
   const lines = ["Check this route against the plan.", ...state.steps.map((s) => s.text)];
   lines.forEach((text, i) => {
     const u = new SpeechSynthesisUtterance(text);
+    if (i > 0) u.onstart = () => select(i - 1);
     if (i === lines.length - 1) u.onend = stopSpeaking;
     speechSynthesis.speak(u);
   });

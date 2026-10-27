@@ -6,6 +6,7 @@ two taps. Nothing is written to disk.
 
 from __future__ import annotations
 
+import os
 import secrets
 import threading
 import time
@@ -18,8 +19,9 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .gallery import Gallery
 from .pipeline import BadPhoto, Plan, decode_photo, image_data_url, plan_route, prepare, read_marks
-from .reader import ModelClient
+from .reader import ModelClient, Reading
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
@@ -88,9 +90,25 @@ def client_ip(request: Request) -> str:
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
 
 
-def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastAPI:
+def answer(pid: str, plan: Plan, reading: Reading | None, err: str | None) -> dict:
+    """The response for a new plan: the flat image, the marks, the route and the steps."""
+    h, w = plan.image.shape[:2]
+    out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
+           "here": None, "exits": [], "route": None, "steps": [], "model_error": err}
+    if reading:
+        out["here"] = list(map(round, reading.you_are_here)) if reading.you_are_here else None
+        out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
+        if reading.you_are_here and reading.exits:
+            out.update(plan_route(plan, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits]))
+    return out
+
+
+def create_app(client: ModelClient | None = None, use_env: bool = True,
+               gallery: Gallery | None = None) -> FastAPI:
     if client is None and use_env:
         client = ModelClient.from_env()
+    if gallery is None and use_env and os.environ.get("HEREOUT_GALLERY"):
+        gallery = Gallery(Path(os.environ["HEREOUT_GALLERY"]))
     app = FastAPI(title="HereOut", docs_url=None, redoc_url=None, openapi_url=None)
     store = PlanStore()
     reads = RateLimit(READS_PER_WINDOW, READ_WINDOW)
@@ -117,22 +135,25 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
         except BadPhoto as e:
             raise HTTPException(400, str(e))
         pid = store.put(plan)
-        h, w = plan.image.shape[:2]
-        out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
-               "here": None, "exits": [], "route": None, "steps": [], "model_error": None}
-
         if reads.allow(client_ip(request)):
             # The model call takes 15 to 60 seconds; keep the event loop free.
             reading, err = await run_in_threadpool(read_marks, plan, client)
         else:
             reading, err = None, "too many photos; mark the plan by hand"
-        out["model_error"] = err
-        if reading:
-            out["here"] = list(map(round, reading.you_are_here)) if reading.you_are_here else None
-            out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
-            if reading.you_are_here and reading.exits:
-                exits = [(e["x"], e["y"]) for e in reading.exits]
-                out.update(await run_in_threadpool(plan_route, plan, reading.you_are_here, exits))
+        return await run_in_threadpool(answer, pid, plan, reading, err)
+
+    @app.get("/api/gallery")
+    def gallery_list():
+        return {"plans": gallery.listing() if gallery else []}
+
+    @app.post("/api/gallery/{gid}")
+    def gallery_open(gid: str):
+        found = gallery.open(gid) if gallery else None
+        if found is None:
+            raise HTTPException(404, "This sample plan is not available.")
+        plan, reading, item = found
+        out = answer(store.put(plan), plan, reading, None)
+        out["credit"] = item["credit"]
         return out
 
     @app.post("/api/route")
@@ -143,6 +164,8 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
         return plan_route(plan, req.here, list(req.exits))
 
     app.mount("/static", StaticFiles(directory=WEB), name="static")
+    if gallery:
+        app.mount("/gallery/thumbs", StaticFiles(directory=gallery.folder / "thumbs"), name="thumbs")
     return app
 
 
