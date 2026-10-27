@@ -422,6 +422,8 @@ function explain(how) {
       : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
   } else if (!state.start) {
     sayPlan('No "you are here" mark found. Tap where you are on the plan.');
+  } else if (view.error && state.exitChoice >= 0) {
+    sayPlan(`HereOut found no way to ${exitName(state.exitChoice)} in this photo. Try another exit.`);
   } else if (view.error && how === "exit") {
     sayPlan(`HereOut found no way to the exit you marked. Mark it at a doorway${
       state.foundExits.length ? ", or use the exits HereOut found" : ""}.`);

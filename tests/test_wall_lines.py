@@ -43,3 +43,38 @@ def test_a_closed_door_has_no_way():
         assert str(e) == "no open way to an exit"
         return
     raise AssertionError("expected no route")
+
+
+def test_stairs_are_not_walls():
+    img, here, exit_ = draw_plan()
+    for y in range(300, 361, 10):  # the treads of a flight of stairs
+        cv2.line(img, (560, y), (620, y), (20, 20, 20), 2)
+    _, drawn = plan_walls(img)
+    assert not [l for l in drawn["lines"] if 290 <= l[1] <= 370 and 550 <= min(l[0], l[2]) and max(l[0], l[2]) <= 630]
+
+
+def test_a_door_in_blank_paper_stays_open():
+    # Two wall pieces with a gap of blank paper, narrower than the join
+    # limit (0.6 % of 1600 px): a door. With ink in the gap it is one wall.
+    for ink, joined in ((245, False), (20, True)):
+        img = np.full((1000, 1600, 3), 245, np.uint8)
+        cv2.line(img, (200, 500), (790, 500), (20, 20, 20), 3)
+        cv2.line(img, (799, 500), (1400, 500), (20, 20, 20), 3)
+        cv2.line(img, (791, 500), (798, 500), (ink, ink, ink), 1)
+        _, drawn = plan_walls(img)
+        across = [l for l in drawn["lines"] if min(l[0], l[2]) < 780 and max(l[0], l[2]) > 810]
+        assert bool(across) == joined
+
+
+def test_a_wavy_wall_gives_one_line_and_keeps_its_door():
+    img = np.full((500, 800, 3), 245, np.uint8)
+    cv2.rectangle(img, (40, 40), (760, 460), (20, 20, 20), 6)
+    # A wavy wall at x = 300 with a door from y = 200 to 260.
+    for y0, y1 in ((46, 200), (260, 454)):
+        ys = np.arange(y0, y1)
+        pts = np.stack([300 + 12 * np.sin(ys / 40 * 2 * np.pi), ys], 1).astype(np.int32)
+        cv2.polylines(img, [pts], False, (20, 20, 20), 5)
+    _, drawn = plan_walls(img)
+    wavy = [l for l in drawn["lines"] if abs((l[0] + l[2]) / 2 - 300) < 20 and abs(l[1] - l[3]) > 60]
+    assert wavy
+    assert not [l for l in wavy if min(l[1], l[3]) < 215 and max(l[1], l[3]) > 245]

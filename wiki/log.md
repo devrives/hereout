@@ -63,3 +63,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/wall-lines.md`. Rewrote `decisions/way-network.md` for the door-to-door network. Updated `index.md` and `decisions/browser-routing.md`.
 - Source: the owner request of 2026-10-27, `src/hereout/wall_lines.py` and the network in `src/hereout/web/route.js`.
 - Recorded the review fixes: a door at each opening, taps that look two rooms away, trunk lines, lighter walls and wider ways.
+
+## [2026-10-27] ingest | Doors over blank paper, stairs, bent walls
+
+- Updated `decisions/wall-lines.md`: joins and line ends only over ink, stair treads are not walls, one line for a wavy wall of one thin stroke. The PT hall walls still give no line.
+- Source: the owner request of 2026-10-27 and `src/hereout/wall_lines.py`.
