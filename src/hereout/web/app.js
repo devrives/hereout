@@ -129,7 +129,7 @@ function showSteps() {
       b.className = "step";
       b.textContent = s.text;
       b.setAttribute("aria-pressed", "false");
-      b.addEventListener("click", () => select(selected === i ? -1 : i));
+      b.addEventListener("click", () => select(selected === i && !speaking ? -1 : i));
       li.append(b);
     } else {
       li.textContent = s.text;
@@ -146,6 +146,14 @@ function select(i) {
   selected = i;
   $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
   draw();
+  const step = state.steps[i];
+  if (!step || step.kind !== "walk") return;
+  const mid = [(step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2];
+  scrollToPoint(mid);
+  // On a phone the plan is above the steps: bring the leg into the window.
+  const box = canvas.getBoundingClientRect();
+  const y = box.top + mid[1] / state.height * box.height;
+  if (y < 0 || y > window.innerHeight) $("stage").scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 // One button for each other exit the model found, so the route can go to
@@ -179,8 +187,12 @@ function showCredit() {
     a.rel = "noopener";
     return a;
   };
-  box.append(`Sample plan. Photo: "${c.title}" by ${c.author}, `, link(c.licence, c.licence_url), ", ",
-             link("source", c.source_url), ". Changes: resized, flattened where the photo was tilted, route drawn on top. This sample uses a saved model reading.");
+  const changes = [...(c.changes || []), "marks and route drawn on top"].join(", ");
+  box.append(`Sample plan. Photo: “${c.title}” by ${c.author}, `,
+             link(c.licence, c.licence_url), ", ", link("source", c.source_url),
+             `. Changes: ${changes}.`,
+             c.share_alike ? " The changed image is shared under the same licence." : "",
+             " This sample uses a saved model reading.");
 }
 
 function showAll() {
@@ -193,7 +205,7 @@ function showAll() {
 
 function explain() {
   if (state.route) { say("Route found. Check it against the plan."); return; }
-  const next = 'Tap "Fix the marks" and mark it yourself, or take the photo again.';
+  const next = `Tap "Fix the marks" and mark it yourself, or ${state.credit ? "pick another sample" : "take the photo again"}.`;
   if (state.model_error) say(`Could not read the plan. ${next}`);
   else if (!state.here) say(`No "you are here" mark found. ${next}`);
   else if (!state.exits.length) say(`No exit found. ${next}`);
@@ -232,13 +244,19 @@ function restore() {
   showAll();
 }
 
-function showPlan(answer) {
+function showPlan(answer, focusResult) {
   state = answer;
   saved = null;
   stopFixing();
   img.onload = () => {
     $("result").hidden = false;
     showAll();
+    if ($("stage").classList.contains("big")) centreOnHere();
+    markOpenSample();
+    if (focusResult) {
+      $("result").scrollIntoView({ block: "start" });
+      $("result-head").focus({ preventScroll: true });
+    }
   };
   img.src = state.image;
 }
@@ -246,6 +264,7 @@ function showPlan(answer) {
 // Load a plan from an upload or the gallery. Only the newest request wins.
 async function loadPlan(request, waitText) {
   const n = ++planSeq;
+  routeSeq++;
   stopSpeaking();
   if (taps) restore();
   $("photo").disabled = true;
@@ -262,9 +281,8 @@ async function loadPlan(request, waitText) {
     if (n === planSeq) $("photo").disabled = false;
   }
   if (n !== planSeq) return;
-  showPlan(answer);
+  showPlan(answer, true);
   remember();
-  $("result").scrollIntoView({ block: "start" });
 }
 
 $("photo").addEventListener("change", (ev) => {
@@ -282,9 +300,44 @@ const GALLERY_FIRST = 8;
 const countryName = (() => {
   try {
     const names = new Intl.DisplayNames(["en"], { type: "region" });
-    return (code) => { try { return names.of(code); } catch (e) { return code; } };
+    return (code) => {
+      try { const n = names.of(code); return n && n !== code ? n : "Unknown country"; } catch (e) { return "Unknown country"; }
+    };
   } catch (e) { return (code) => code; }
 })();
+
+const sampleId = (id) => (id && id.startsWith("g-") ? id.slice(2) : null);
+
+function openSample(gid) {
+  return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}`, { method: "POST" }), "Opening the sample plan…");
+}
+
+// The open sample is marked in the gallery and named in the address, so it can be shared.
+function markOpenSample() {
+  const gid = sampleId(state && state.id);
+  document.querySelectorAll("#gallery button.sample").forEach((b) => {
+    if (b.dataset.id === gid) b.setAttribute("aria-current", "true"); else b.removeAttribute("aria-current");
+  });
+  $("back-to-samples").hidden = !gid;
+  if (!state) return;
+  const url = new URL(location.href);
+  if (gid) url.searchParams.set("sample", gid); else url.searchParams.delete("sample");
+  history.replaceState(null, "", url);
+}
+
+$("back-to-samples").addEventListener("click", () => {
+  const gid = sampleId(state && state.id);
+  const tile = document.querySelector(`#gallery button.sample[data-id="${CSS.escape(gid || "")}"]`) || document.querySelector("#gallery button.sample");
+  if (tile) { tile.scrollIntoView({ block: "center" }); tile.focus({ preventScroll: true }); }
+});
+
+function creditLine(c) {
+  const li = document.createElement("li");
+  const a = (text, href) => { const e = document.createElement("a"); e.href = href; e.textContent = text; e.rel = "noopener"; return e; };
+  li.append(`“${c.title}” by ${c.author}, `);
+  li.append(c.licence_url ? a(c.licence, c.licence_url) : c.licence, ", ", a("source", c.source_url));
+  return li;
+}
 
 async function showGallery() {
   let plans = [];
@@ -296,30 +349,37 @@ async function showGallery() {
   const grid = $("gallery");
   const render = (all) => {
     grid.replaceChildren();
-    for (const p of all ? plans : plans.slice(0, GALLERY_FIRST)) {
+    (all ? plans : plans.slice(0, GALLERY_FIRST)).forEach((p, i) => {
+      const li = document.createElement("li");
       const b = document.createElement("button");
       b.type = "button";
       b.className = "sample";
+      b.dataset.id = p.id;
       const im = document.createElement("img");
       im.src = p.thumb;
       im.alt = "";
       im.loading = "lazy";
       const cap = document.createElement("span");
-      cap.textContent = countryName(p.country);
+      const country = countryName(p.country);
+      cap.textContent = p.route_found ? country : `${country} · no route`;
       b.append(im, cap);
-      b.setAttribute("aria-label", `Sample plan from ${countryName(p.country)}${p.route_found ? "" : ", no route found"}`);
-      b.addEventListener("click", () => loadPlan(
-        () => fetch(`/api/gallery/${encodeURIComponent(p.id)}`, { method: "POST" }), "Opening the sample plan…"));
-      grid.append(b);
-    }
+      // The name starts with the visible text, and the number tells equal names apart.
+      b.setAttribute("aria-label", `${cap.textContent}, sample plan ${i + 1} of ${plans.length}`);
+      b.addEventListener("click", () => openSample(p.id));
+      li.append(b);
+      grid.append(li);
+    });
     $("gallery-more").hidden = all || plans.length <= GALLERY_FIRST;
+    markOpenSample();
   };
+  $("credits").replaceChildren(...plans.map((p) => creditLine(p.credit)));
   $("gallery-count").textContent = String(plans.length);
-  $("gallery-countries").textContent = String(new Set(plans.map((p) => p.country)).size);
+  // "XX" marks photos whose country is not known.
+  $("gallery-countries").textContent = String(new Set(plans.map((p) => p.country).filter((c) => c !== "XX")).size);
   $("gallery-more").textContent = `Show all ${plans.length} plans`;
   $("gallery-more").addEventListener("click", () => {
     render(true);
-    grid.children[GALLERY_FIRST]?.focus();
+    grid.children[GALLERY_FIRST]?.querySelector("button").focus();
   });
   render(false);
   $("gallery-wrap").hidden = false;
@@ -407,6 +467,7 @@ canvas.addEventListener("keydown", (ev) => {
     cursor = [Math.min(state.width, Math.max(0, cursor[0] + move[0])),
               Math.min(state.height, Math.max(0, cursor[1] + move[1]))];
     draw();
+    scrollToPoint(cursor);
   } else if (ev.key === "Enter" || ev.key === " ") {
     place(cursor[0], cursor[1]);
   } else if (ev.key === "Escape") {
@@ -420,18 +481,30 @@ canvas.addEventListener("keydown", (ev) => {
 canvas.addEventListener("focus", () => { if (taps) $("kbd-hint").hidden = false; draw(); });
 canvas.addEventListener("blur", draw);
 
+// In the larger plan, put "you are here" in the middle, so the start of the route is in view.
+function centreOnHere() {
+  if (!state || !state.here) return;
+  const st = $("stage");
+  st.scrollLeft = state.here[0] / state.width * canvas.clientWidth - st.clientWidth / 2;
+  st.scrollTop = state.here[1] / state.height * canvas.clientHeight - st.clientHeight / 2;
+}
+
+// In the larger plan, scroll so that a plan point is in the middle of the view.
+function scrollToPoint(p) {
+  const st = $("stage");
+  if (!st.classList.contains("big") || !p) return;
+  const x = p[0] / state.width * canvas.clientWidth, y = p[1] / state.height * canvas.clientHeight;
+  if (x < st.scrollLeft + 40 || x > st.scrollLeft + st.clientWidth - 40) st.scrollLeft = x - st.clientWidth / 2;
+  if (y < st.scrollTop + 40 || y > st.scrollTop + st.clientHeight - 40) st.scrollTop = y - st.clientHeight / 2;
+}
+
 $("enlarge").addEventListener("click", () => {
   const big = $("stage").classList.toggle("big");
   $("enlarge").setAttribute("aria-pressed", String(big));
   if (big) {
     $("stage").tabIndex = 0;
-    // Scroll to "you are here", so the start of the route is in view.
-    const here = state && state.here;
-    if (here) {
-      const st = $("stage");
-      st.scrollLeft = here[0] / state.width * canvas.clientWidth - st.clientWidth / 2;
-      st.scrollTop = here[1] / state.height * canvas.clientHeight - st.clientHeight / 2;
-    }
+    centreOnHere();
+    $("stage").scrollIntoView({ block: "nearest" });
   } else {
     $("stage").removeAttribute("tabindex");
   }
@@ -460,9 +533,14 @@ $("speak").addEventListener("click", () => {
   $("speak").textContent = "Stop reading";
 });
 
-// After a reload, show the last answer again. Rerouting works while the
-// server still keeps the photo.
-try {
-  const last = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
-  if (last && last.image) showPlan(last);
-} catch (e) { /* storage blocked */ }
+// A link with ?sample=<id> opens that sample. Otherwise, after a reload, show
+// the last answer again. Rerouting works while the server still keeps the photo.
+const startSample = new URL(location.href).searchParams.get("sample");
+if (startSample) {
+  openSample(startSample);
+} else {
+  try {
+    const last = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
+    if (last && last.image) showPlan(last);
+  } catch (e) { /* storage blocked */ }
+}

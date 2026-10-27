@@ -2,6 +2,11 @@
 
 Usage:
   uv run --env-file .env python scripts/run_set.py INDEX.csv OUT_DIR [--workers 4] [--limit N] [--retry-errors]
+  uv run python scripts/run_set.py INDEX.csv OUT_DIR --refresh
+
+--refresh makes no model call. It flattens each photo again with the current
+code. When the flat plan changed, it deletes the saved result, so the next run
+reads that photo again. Otherwise it only writes the credit again.
 
 INDEX.csv has one row per photo: zip_name (path relative to the CSV folder),
 country, licence, author, title, url, readable, security_sensitive. Only rows
@@ -27,6 +32,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from hereout.pipeline import decode_photo, plan_route, prepare, read_marks
 from hereout.reader import ModelClient
@@ -42,12 +48,15 @@ LICENCE_URLS = {
     "cc by-sa 2.0": "https://creativecommons.org/licenses/by-sa/2.0/",
     "cc by-sa 3.0": "https://creativecommons.org/licenses/by-sa/3.0/",
     "cc by-sa 4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "cc by-sa 3.0 de": "https://creativecommons.org/licenses/by-sa/3.0/de/",
 }
 LICENCE_NAMES = {"cc0": "CC0 1.0", "cc pdm 1.0": "Public Domain Mark 1.0"}
 
 
 def credit(row: dict) -> dict:
     key = row["licence"].strip().lower()
+    if key not in LICENCE_URLS:
+        raise ValueError(f"unknown licence {row['licence']!r}: add it to LICENCE_URLS")
     title = row["title"].strip().strip('"')
     if title.startswith("File:"):
         title = title[5:].rsplit(".", 1)[0]
@@ -57,6 +66,7 @@ def credit(row: dict) -> dict:
         "licence": LICENCE_NAMES.get(key, row["licence"].strip().upper()),
         "licence_url": LICENCE_URLS.get(key, ""),
         "source_url": row["url"].strip(),
+        "share_alike": "by-sa" in key,
     }
 
 
@@ -90,7 +100,7 @@ def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threadi
         break
     took = time.monotonic() - t
 
-    item = {"id": pid, "country": row["country"].strip(), "credit": credit(row),
+    item = {"id": pid, "country": row["country"].strip(), "credit": {**credit(row), "changes": plan.changes},
             "size": [w, h], "seconds": round(took, 1), "error": err,
             "reading": None, "route_found": False, "route_error": None, "steps": 0}
     if reading:
@@ -112,6 +122,29 @@ def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threadi
     return item
 
 
+def refresh(rows: list[dict], base: Path, out: Path) -> None:
+    stale = kept = 0
+    for row in rows:
+        pid = item_id(row)
+        path = out / "items" / f"{pid}.json"
+        if not path.exists():
+            continue
+        plan = prepare(decode_photo((base / row["zip_name"]).read_bytes()))
+        saved = cv2.imread(str(out / "plans" / f"{pid}.jpg"), cv2.IMREAD_COLOR)
+        same = saved is not None and saved.shape == plan.image.shape and \
+            float(np.abs(saved.astype(int) - plan.image.astype(int)).mean()) < 6
+        if not same:
+            path.unlink()
+            stale += 1
+            print(f"stale: {pid}", flush=True)
+            continue
+        item = json.loads(path.read_text())
+        item["credit"] = {**credit(row), "changes": plan.changes}
+        path.write_text(json.dumps(item, ensure_ascii=False))
+        kept += 1
+    print(f"refresh: {kept} kept, {stale} to read again", flush=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("index")
@@ -119,12 +152,16 @@ def main() -> int:
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--retry-errors", action="store_true")
+    ap.add_argument("--refresh", action="store_true")
     args = ap.parse_args()
 
     index, out = Path(args.index), Path(args.out)
     for sub in ("plans", "thumbs", "items"):
         (out / sub).mkdir(parents=True, exist_ok=True)
     rows = [r for r in csv.DictReader(open(index, encoding="utf-8-sig")) if usable(r)]
+    if args.refresh:
+        refresh(rows, index.parent, out)
+        return 0
 
     def done(r):
         p = out / "items" / f"{item_id(r)}.json"

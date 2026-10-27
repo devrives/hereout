@@ -100,7 +100,7 @@ def test_rectify_restores_a_tilted_plan():
     # Put the sheet on a dark wall and look at it from the side and below.
     canvas = np.full((900, 1200, 3), 70, np.uint8)
     src = np.float32([[0, 0], [600, 0], [600, 400], [0, 400]])
-    dst = camera_view(600, 400, yaw_deg=35, pitch_deg=-15)
+    dst = camera_view(600, 400, yaw_deg=25, pitch_deg=-10)
     H = cv2.getPerspectiveTransform(src, dst)
     photo = cv2.warpPerspective(sheet, H, (1200, 900), dst=canvas.copy(), borderMode=cv2.BORDER_TRANSPARENT)
 
@@ -133,7 +133,8 @@ def test_implausible_quad_is_rejected():
     # The shape of a header band joined to one sheet edge: one side is short.
     quad = order_corners(np.float32([[57, 147], [1821, 140], [1819, 288], [98, 1363]]))
     assert not plausible_sheet(quad)
-    assert plausible_sheet(camera_view(600, 400, 35, -15))
+    assert plausible_sheet(camera_view(600, 400, 25, -10))
+    assert not plausible_sheet(camera_view(600, 400, 40, -15))  # too strong a tilt to trust
 
 
 def test_rectify_leaves_a_straight_photo_alone(plan):

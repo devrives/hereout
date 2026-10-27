@@ -30,3 +30,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Added `components/gallery.md`.
 - Source: `scripts/run_set.py`, `src/hereout/gallery.py` and the first batch run on the open-licensed photo set.
+
+## [2026-10-27] ingest | Gallery after the first full run and the reviews
+
+- Updated `components/gallery.md`: credit details, gallery ids, sample address, the sheet check, the results of the first run.
+- Source: the run on 203 photos and the ux, a11y and copy reviews.

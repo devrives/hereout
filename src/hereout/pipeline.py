@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import cv2
 import numpy as np
@@ -25,6 +25,7 @@ class BadPhoto(Exception):
 class Plan:
     image: np.ndarray
     walls: np.ndarray
+    changes: list[str] = field(default_factory=list)  # what was done to the photo
 
     def use_reading(self, reading: Reading) -> None:
         """Find the walls again inside the box the model saw."""
@@ -40,12 +41,17 @@ def decode_photo(data: bytes) -> np.ndarray:
 
 
 def prepare(photo: np.ndarray) -> Plan:
-    flat, _ = rectify(photo)
+    flat, M = rectify(photo)
+    changes = [] if np.allclose(M, np.eye(3)) else ["perspective corrected"]
     h, w = flat.shape[:2]
     f = min(1.0, WORK_SIDE / max(h, w))
     if f < 1.0:
-        flat = cv2.resize(flat, (round(w * f), round(h * f)), interpolation=cv2.INTER_AREA)
-    return Plan(flat, wall_mask(flat))
+        flat = cv2.resize(flat, (max(1, round(w * f)), max(1, round(h * f))), interpolation=cv2.INTER_AREA)
+    if flat.shape[:2] != photo.shape[:2] and not changes:
+        changes.append("resized")
+    elif f < 1.0:
+        changes.append("resized")
+    return Plan(flat, wall_mask(flat), changes)
 
 
 def image_data_url(img: np.ndarray) -> str:

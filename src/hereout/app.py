@@ -81,7 +81,7 @@ class RateLimit:
 
 
 class RouteRequest(BaseModel):
-    id: str = Field(max_length=40)
+    id: str = Field(max_length=100)
     here: tuple[float, float]
     exits: list[tuple[float, float]] = Field(min_length=1, max_length=20)
 
@@ -150,15 +150,21 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
     def gallery_open(gid: str):
         found = gallery.open(gid) if gallery else None
         if found is None:
-            raise HTTPException(404, "This sample plan is not available.")
+            raise HTTPException(404, "this sample plan is not available")
         plan, reading, item = found
-        out = answer(store.put(plan), plan, reading, None)
+        # Gallery plans are not kept in the store: their id never expires and
+        # opening many samples does not push out a visitor's upload.
+        out = answer(f"g-{gid}", plan, reading, None)
         out["credit"] = item["credit"]
         return out
 
     @app.post("/api/route")
     def reroute(req: RouteRequest):
-        plan = store.get(req.id)
+        if req.id.startswith("g-"):
+            found = gallery.open(req.id[2:]) if gallery else None
+            plan = found[0] if found else None
+        else:
+            plan = store.get(req.id)
         if plan is None:
             raise HTTPException(404, "This photo is no longer on the server. Take it again.")
         return plan_route(plan, req.here, list(req.exits))

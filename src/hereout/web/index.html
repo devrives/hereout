@@ -22,8 +22,9 @@
   <p id="status" role="status" aria-live="polite"></p>
 
 
-  <section id="result" hidden>
-    <div class="stage" id="stage">
+  <section id="result" hidden aria-labelledby="result-head">
+    <h2 id="result-head" tabindex="-1">Your route</h2>
+    <div class="stage" id="stage" role="region" aria-label="Plan">
       <canvas id="plan" role="img" aria-label="The plan, no route yet"></canvas>
     </div>
     <p id="credit" class="credit" hidden></p>
@@ -33,8 +34,10 @@
       <span id="fix-hint" hidden>Tap where you are, then tap the exit.<span id="kbd-hint" hidden> With a keyboard: arrow keys to move, Enter to place, Escape to stop.</span></span>
     </div>
     <h2 id="steps-head">Steps</h2>
-    <ol id="steps" tabindex="-1"></ol>
+    <p class="muted">Tap a step to see it on the plan.</p>
+    <ol id="steps" tabindex="-1" aria-labelledby="steps-head"></ol>
     <button id="speak" type="button">Read the steps aloud</button>
+    <button id="back-to-samples" type="button" hidden>Back to the samples</button>
     <div id="exits-wrap" hidden>
       <h2>Route to another exit</h2>
       <div id="exits" class="exits"></div>
@@ -43,8 +46,13 @@
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
     <h2 id="gallery-head">No plan nearby? Try a real one</h2>
     <p class="muted"><span id="gallery-count"></span> open-licensed photos of posted plans from <span id="gallery-countries"></span> countries. HereOut read each one with Muse Spark.</p>
-    <div id="gallery" class="gallery"></div>
+    <ul id="gallery" class="gallery"></ul>
     <button id="gallery-more" type="button" hidden></button>
+    <details class="credits">
+      <summary>Photo credits</summary>
+      <p class="muted">Each preview is a resized copy of the photo, some with the perspective corrected. Photos under a ShareAlike licence are shared under the same licence.</p>
+      <ul id="credits"></ul>
+    </details>
   </section>
 </main>
 <script src="/static/app.js"></script>

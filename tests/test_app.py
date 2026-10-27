@@ -84,6 +84,7 @@ def test_gallery_list_and_open(tmp_path):
     assert client.get(plans[0]["thumb"]).status_code == 200
     data = client.post("/api/gallery/XX-test_1").json()
     assert data["route"] and data["credit"]["author"] == "A"
+    assert data["id"] == "g-XX-test_1"
     # The opened plan can be routed again with new marks.
     r = client.post("/api/route", json={"id": data["id"], "here": data["here"], "exits": [[data["exits"][0]["x"], data["exits"][0]["y"]]]})
     assert r.status_code == 200 and r.json()["route"]
