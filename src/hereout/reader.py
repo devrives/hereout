@@ -24,6 +24,10 @@ API_URL = "https://inference.baseten.co/v1/chat/completions"
 DEFAULT_MODEL = "meta-models/muse-spark-open-1026"
 MAX_IMAGE_SIDE = 1600
 MAX_TOKENS = 12000  # the model reasons first; the answer itself is short
+# Low reasoning effort: on 30 gallery plans it was 1.9 times faster and 2.5
+# times cheaper than the default, and 29 of 30 "you are here" points stayed
+# within 5 percent of the image side (with the zoomed second look).
+DEFAULT_EFFORT = "low"
 USER_AGENT = "HereOut/0.1 (+https://hereout.devrives.com/)"
 
 PROMPT = """You see a photo of a posted evacuation plan (fire escape plan).
@@ -178,10 +182,12 @@ def parse_answer(text: str, width: int, height: int) -> Reading:
 
 class ModelClient:
     def __init__(self, api_key: str, ledger: SpendLedger, model: str = DEFAULT_MODEL,
-                 prices: Prices | None = None, transport: httpx.BaseTransport | None = None):
+                 prices: Prices | None = None, transport: httpx.BaseTransport | None = None,
+                 effort: str | None = DEFAULT_EFFORT):
         if model.endswith("-contributor"):
             raise ValueError("contributor models send content to training; not allowed")
         self.model = model
+        self.effort = effort
         self.ledger = ledger
         self.prices = prices or Prices()
         self.http = httpx.Client(
@@ -199,7 +205,8 @@ class ModelClient:
                              float(os.environ.get("HEREOUT_SPEND_CAP_USD", "5")))
         prices = Prices(float(os.environ.get("HEREOUT_PRICE_IN", "1.25")),
                         float(os.environ.get("HEREOUT_PRICE_OUT", "4.25")))
-        return cls(key, ledger, os.environ.get("HEREOUT_MODEL", DEFAULT_MODEL), prices)
+        effort = os.environ.get("HEREOUT_EFFORT", DEFAULT_EFFORT) or None
+        return cls(key, ledger, os.environ.get("HEREOUT_MODEL", DEFAULT_MODEL), prices, effort=effort)
 
     def _ask(self, prompt: str, img: np.ndarray) -> tuple[str, float, dict]:
         """One call with one image. Returns the answer text, its cost and usage."""
@@ -213,6 +220,7 @@ class ModelClient:
                 "model": self.model,
                 "max_tokens": MAX_TOKENS,
                 "temperature": 0,
+                **({"reasoning_effort": self.effort} if self.effort else {}),
                 "messages": [{"role": "user", "content": [
                     {"type": "text", "text": prompt},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},

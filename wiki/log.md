@@ -35,3 +35,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `components/gallery.md`: credit details, gallery ids, sample address, the sheet check, the results of the first run.
 - Source: the run on 203 photos and the ux, a11y and copy reviews.
+
+## [2026-10-27] ingest | Low reasoning effort
+
+- Updated `decisions/model-provider.md`: both model calls use low reasoning effort, with the test on 30 plans.
+- Source: the owner request about time and cost, and the test.

@@ -59,6 +59,7 @@ def test_read_plan_records_cost(tmp_path):
     assert snap["spent_usd"] == pytest.approx(reading.cost_usd)
     for body, ua in seen:
         assert body["model"].startswith("meta-models/")
+        assert body["reasoning_effort"] == "low"
         assert "@" not in ua
 
 

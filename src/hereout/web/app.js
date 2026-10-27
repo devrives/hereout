@@ -292,7 +292,7 @@ $("photo").addEventListener("change", (ev) => {
   const body = new FormData();
   body.append("photo", file);
   loadPlan(() => fetch("/api/plan", { method: "POST", body }),
-           "Reading the plan. This can take a minute or two. The button works again when it is done.");
+           "Reading the plan. This takes about 15 seconds. The button works again when it is done.");
 });
 
 // Gallery of open-licensed plan photos with saved readings.
