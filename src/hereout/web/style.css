@@ -18,6 +18,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
@@ -44,12 +45,19 @@ h2 { font-size: 1.15rem; margin: 24px 0 8px; }
 }
 .shoot span { display: block; text-align: center; background: var(--accent); color: var(--accent-fg); }
 .shoot input:focus-visible + span, button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+button:disabled, .shoot input:disabled + span { opacity: 0.55; cursor: progress; }
 button { background: transparent; color: var(--fg); border: 2px solid var(--line); }
 
 #status { min-height: 1.5em; color: var(--muted); }
 .stage { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+@media (max-width: 600px) {
+  /* On a phone the plan uses the full width of the screen. */
+  .stage { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
+}
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
 .fix { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
 #fix-hint { color: var(--muted); }
+.exits { display: flex; flex-wrap: wrap; gap: 8px; }
 ol { padding-left: 1.4em; }
+ol:focus { outline: none; }
 li { margin: 6px 0; }

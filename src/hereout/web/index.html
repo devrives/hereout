@@ -5,32 +5,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>HereOut</title>
-<meta name="description" content="Take a photo of an evacuation plan and get the way out.">
+<meta name="description" content="Photograph a posted evacuation plan and see a route from where you stand to the nearest exit.">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
   <h1>HereOut</h1>
-  <p>Take a photo of the evacuation plan on the wall. Get the way out.</p>
+  <p>In front of an evacuation plan you don't know? Take a photo and see a route from "you are here" to the nearest exit, drawn on the plan.</p>
 </header>
 <main>
+  <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
   <label class="shoot">
-    <input id="photo" type="file" accept="image/*" capture="environment">
-    <span>Take a photo of the plan</span>
+    <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
+    <span id="shoot-text" aria-hidden="true">Take a photo of the plan</span>
   </label>
   <p id="status" role="status" aria-live="polite"></p>
 
   <section id="result" hidden>
     <div class="stage">
-      <canvas id="plan" aria-label="The plan with the route"></canvas>
+      <canvas id="plan" role="img" aria-label="The plan, no route yet"></canvas>
     </div>
     <div class="fix">
       <button id="fix" type="button">Fix the marks</button>
-      <span id="fix-hint" hidden>Tap where you are, then tap the exit.</span>
+      <span id="fix-hint" hidden>Tap where you are, then tap the exit.<span id="kbd-hint" hidden> With a keyboard: arrow keys to move, Enter to place, Escape to stop.</span></span>
     </div>
-    <h2>Steps</h2>
-    <ol id="steps"></ol>
+    <h2 id="steps-head">Steps</h2>
+    <ol id="steps" tabindex="-1"></ol>
     <button id="speak" type="button">Read the steps aloud</button>
+    <div id="exits-wrap" hidden>
+      <h2>Route to another exit</h2>
+      <div id="exits" class="exits"></div>
+    </div>
   </section>
 </main>
 <script src="/static/app.js"></script>

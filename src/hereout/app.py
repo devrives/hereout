@@ -44,10 +44,15 @@ class PlanStore:
         return pid
 
     def get(self, pid: str) -> Plan | None:
+        """Return the plan and restart its time limit, so the limit counts from the last use."""
         with self._lock:
             self._expire()
             item = self._plans.get(pid)
-            return item[1] if item else None
+            if item is None:
+                return None
+            self._plans[pid] = (time.monotonic(), item[1])
+            self._plans.move_to_end(pid)
+            return item[1]
 
     def _expire(self):
         now = time.monotonic()
@@ -134,7 +139,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True) -> FastA
     def reroute(req: RouteRequest):
         plan = store.get(req.id)
         if plan is None:
-            raise HTTPException(404, "this photo has expired; take it again")
+            raise HTTPException(404, "This photo is no longer on the server. Take it again.")
         return plan_route(plan, req.here, list(req.exits))
 
     app.mount("/static", StaticFiles(directory=WEB), name="static")

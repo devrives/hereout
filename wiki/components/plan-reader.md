@@ -34,6 +34,10 @@ The plan reader changes a photo of a posted evacuation plan into a route and spo
 - When the sheet is at an angle, the aspect ratio of the sheet comes from a pinhole camera model. When the focal length cannot be solved, the code uses the focal length of a typical phone camera.
 - Photos stay in memory for 15 minutes so that the user can correct the marks. The server writes no photo to disk.
 - Each address can send 12 photos to the model in 10 minutes. After that, the user marks the plan by hand.
+- The 15-minute limit starts again each time the user asks for a new route.
+- The user can place the marks with a pointer or with the keyboard (arrow keys, Enter, Escape). When the model finds more than one exit, a button for each other exit gives the route to that exit.
+- The page keeps the last answer in the session storage of the browser, so a reload shows it again.
+- Reviews before the first release: UX, accessibility (WCAG 2.2 AA) and copy. Their entries are in the hub `review-ledger/`.
 
 ## Related
 
