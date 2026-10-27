@@ -6,8 +6,16 @@ HereOut reads a photo of a posted evacuation plan and shows the way out. The use
 
 ## Stack
 
-- Python 3, FastAPI, OpenCV, numpy. No GPU: the models run through the Meta Model API.
+- Python 3, FastAPI, OpenCV, numpy. No GPU: the models run through the Baseten Model API.
 - Muse Spark reads the plan. SAM 3.1 segments marks when it helps.
+- Code: `src/hereout/`. How the parts fit: `wiki/components/plan-reader.md`.
+
+## Commands
+
+- Set up: `uv sync`
+- Test: `uv run pytest -q`
+- Run local: `uv run --env-file .env uvicorn hereout.app:app --port 8000`
+- Try photos with the model: `uv run --env-file .env python scripts/try_photos.py <photo>...`. It writes to `out/` (gitignored). `--cached` uses the last reading again and makes no model call.
 
 ## Rules
 

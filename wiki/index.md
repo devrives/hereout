@@ -1,7 +1,7 @@
 ---
 type: index
 title: HereOut wiki
-updated: 2026-10-26
+updated: 2026-10-27
 ---
 # HereOut wiki
 
@@ -13,9 +13,13 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 
 ## Decisions
 
+- [Read plans with Muse Spark through Baseten](decisions/model-provider.md): model, endpoint and spend cap.
+
 ## Timelines
 
 ## Components
+
+- [Plan reader](components/plan-reader.md): from a plan photo to a route and steps.
 
 ## Incidents
 

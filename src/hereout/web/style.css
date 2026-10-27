@@ -1,0 +1,55 @@
+:root {
+  --bg: #fbfbf8;
+  --fg: #16201a;
+  --muted: #56615a;
+  --accent: #0a7d3b;
+  --accent-fg: #ffffff;
+  --line: #d9ded9;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111613;
+    --fg: #eef2ee;
+    --muted: #a9b4ac;
+    --accent: #3fcf7b;
+    --accent-fg: #06210f;
+    --line: #2b342e;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header, main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 24px; }
+h1 { margin: 0; font-size: 1.8rem; color: var(--accent); }
+header p { margin: 4px 0 20px; color: var(--muted); }
+h2 { font-size: 1.15rem; margin: 24px 0 8px; }
+
+.shoot { display: block; }
+.shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.shoot span, button {
+  display: inline-block;
+  min-height: 48px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.shoot span { display: block; text-align: center; background: var(--accent); color: var(--accent-fg); }
+.shoot input:focus-visible + span, button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+button { background: transparent; color: var(--fg); border: 2px solid var(--line); }
+
+#status { min-height: 1.5em; color: var(--muted); }
+.stage { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
+.fix { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+#fix-hint { color: var(--muted); }
+ol { padding-left: 1.4em; }
+li { margin: 6px 0; }
