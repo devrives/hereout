@@ -59,14 +59,17 @@ button { background: transparent; color: var(--fg); border: 2px solid var(--line
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
 .view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .view button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
-canvas:focus-visible { outline: 3px solid var(--fg); outline-offset: -3px; }
+/* The ring goes around the plan, not over the photo, so it shows in both colour schemes. */
+canvas:focus-visible { outline: none; }
+.stage:has(> canvas:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
 canvas { cursor: crosshair; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 0; font-size: 0.9rem; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend i { display: inline-block; width: 34px; height: 12px; border-radius: 3px; }
-.sw-field { background: linear-gradient(90deg, rgb(10 125 59 / 0.55), rgb(245 190 20 / 0.55)); }
-.sw-way { height: 4px !important; background: rgb(6 64 34 / 0.8); }
-.sw-route { height: 6px !important; background: #1b5fd1; }
+/* Swatches sit on white, as the marks sit on the paper of the plan. */
+.legend i { display: inline-block; width: 34px; height: 12px; border-radius: 3px; background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
+.sw-field { background-image: linear-gradient(90deg, rgb(10 125 59 / 0.55), rgb(245 190 20 / 0.55)); }
+.sw-way { height: 4px !important; background-image: linear-gradient(rgb(6 64 34 / 0.8), rgb(6 64 34 / 0.8)); }
+.sw-route { height: 6px !important; background-image: linear-gradient(#1b5fd1, #1b5fd1); }
 .hint { margin: 8px 0 0; }
 #kbd-hint { color: var(--muted); }
 #kbd-hint::before { content: " "; }
@@ -84,9 +87,9 @@ button.sample span { padding: 6px 10px; font-size: 0.9rem; }
 button.step { display: block; width: 100%; text-align: left; font-weight: 500; padding: 10px 12px; min-height: 44px; }
 button.step[aria-pressed="true"] { border-color: #d9480f; box-shadow: inset 6px 0 0 #d9480f; padding-left: 18px; }
 ol { padding-left: 1.4em; }
-ol:focus-visible, h2:focus-visible { outline: 2px solid var(--line); outline-offset: 4px; }
+ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
 ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
-.stage:focus-visible { outline: 3px solid var(--fg); outline-offset: -3px; }
+.stage:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 .gallery { list-style: none; padding: 0; margin-top: 0; }
 .gallery li { display: flex; }
 .gallery li > button { width: 100%; }

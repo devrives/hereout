@@ -294,8 +294,9 @@ function exitName(i) {
 function showExits() {
   const box = $("exits");
   box.replaceChildren();
-  const used = view.route ? view.route.exitIndex : -1;
-  const others = view.route ? state.exits.map((e, i) => i).filter((i) => i !== used) : [];
+  // After a failed exit choice, the other exits stay on offer.
+  const used = view.route ? view.route.exitIndex : state.exitChoice;
+  const others = view.route || state.exitChoice >= 0 ? state.exits.map((e, i) => i).filter((i) => i !== used) : [];
   $("exits-wrap").hidden = others.length === 0;
   for (const i of others) {
     const b = document.createElement("button");
@@ -305,8 +306,10 @@ function showExits() {
       state.exitChoice = i;
       update();
       remember();
-      if (view.route) say(`Route to ${exitName(i)}. Check it against the plan.`);
-      $("steps").focus();
+      say(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
+                     : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
+      const next = view.route ? $("steps") : $("exits").querySelector("button");
+      (next || $("fix")).focus();
     });
     box.append(b);
   }
@@ -340,20 +343,30 @@ function update() {
   draw();
   showSteps();
   showExits();
-  $("to-mark").hidden = !state.here || !state.start ||
-    (state.start[0] === state.here[0] && state.start[1] === state.here[1]);
+  $("to-mark").hidden = !state.here || !state.start || startKind() === "mark";
   showLegend();
 }
 
 const showLegend = () => { $("legend").hidden = !showMap || photoOnly || !view.reachable; };
 
+// The walls come from the photo, so the messages say what HereOut read,
+// not what the building is.
 const ROUTE_ERRORS = {
-  "start is inside a wall": "That spot is inside a wall. Tap an open spot in a corridor or a room.",
-  "no open way to an exit": "No open way from that spot to an exit on this plan. Try a spot in a corridor.",
-  "every exit is inside a wall": 'The exits on this plan are inside walls. Tap "Mark the exit" and mark one in a doorway.',
+  "start is inside a wall": "HereOut reads that spot as wall. Tap a spot in a corridor or a room.",
+  "no open way to an exit": "HereOut found no way from that spot to an exit in this photo. Try a spot in a corridor.",
+  "every exit is inside a wall": 'HereOut reads every exit as part of a wall. Tap "Mark the exit" and mark one in a doorway.',
+};
+const MARK_ERRORS = {
+  "start is inside a wall": 'HereOut reads "you are here" as wall. Tap where you are.',
+  "no open way to an exit": 'HereOut found no way from "you are here" to an exit in this photo. Tap a spot in a corridor near it.',
 };
 
-function explain(fromTap) {
+// Is the start the plan's own "you are here" mark, or a spot the user chose?
+const startKind = () => (state.here && state.start && state.start[0] === state.here[0] &&
+  state.start[1] === state.here[1] ? "mark" : "tap");
+
+// how: "mark" (the plan's "you are here"), "tap" (a start the user chose) or "exit" (an exit the user marked).
+function explain(how) {
   if (!state.exits.length) {
     say(state.model_error
       ? 'Could not read the plan. Tap "Mark the exit" and mark it, then tap where you are.'
@@ -361,12 +374,13 @@ function explain(fromTap) {
   } else if (!state.start) {
     say('No "you are here" mark found. Tap where you are on the plan.');
   } else if (view.error) {
-    say(!fromTap && view.error === "no open way to an exit"
-      ? 'No open way from "you are here" to an exit. Tap an open spot near it.'
-      : ROUTE_ERRORS[view.error] || "No route from that spot.");
+    say((how === "mark" && MARK_ERRORS[view.error]) || ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
+  } else if (how === "exit") {
+    say("Route to the exit you marked. Check it against the plan.");
+  } else if (how === "tap") {
+    say("Route from the spot you chose to the nearest exit. Check it against the plan.");
   } else {
-    say(fromTap ? "Route from the spot you marked. Check it against the plan."
-                : 'Route from "you are here" to the nearest exit. Check it against the plan.');
+    say('Route from "you are here" to the nearest exit. Check it against the plan.');
   }
 }
 
@@ -374,6 +388,7 @@ function setPhotoOnly(on) {
   photoOnly = on;
   $("show-photo").setAttribute("aria-pressed", String(on));
   $("show-map").disabled = on;
+  $("show-map").setAttribute("aria-pressed", String(showMap && !on));
   showLegend();
   draw();
 }
@@ -403,7 +418,7 @@ function stopMarking() {
 }
 
 $("fix").addEventListener("click", (ev) => {
-  if (marking) { stopMarking(); explain(false); return; }
+  if (marking) { stopMarking(); explain(startKind()); return; }
   startMarking();
   // A click from Enter or Space has detail 0: go on with the keyboard.
   if (ev.detail === 0) canvas.focus();
@@ -417,7 +432,7 @@ function setExit(x, y) {
   buildField();
   update();
   remember();
-  explain(true);
+  explain("exit");
 }
 
 function setStart(x, y) {
@@ -426,7 +441,7 @@ function setStart(x, y) {
   if (photoOnly) setPhotoOnly(false);
   update();
   remember();
-  explain(true);
+  explain("tap");
 }
 
 function place(x, y) {
@@ -440,12 +455,13 @@ $("to-mark").addEventListener("click", () => {
   state.exitChoice = -1;
   update();
   remember();
-  explain(false);
+  explain("mark");
+  $("steps").focus();  // this button is hidden now
 });
 
 function hints() {
   $("kbd-hint").textContent = marking
-    ? "Arrow keys move the marker. Enter places the exit. Escape stops."
+    ? "Arrow keys move the marker. Enter places the exit. Escape cancels."
     : "Arrow keys move the marker. Enter starts the route there.";
   canvas.setAttribute("aria-label", marking
     ? "Plan. Mark the exit: tap it, or move the marker with the arrow keys and press Enter."
@@ -464,7 +480,7 @@ function showPlan(answer, focusResult) {
     buildField();
     showCredit();
     update();
-    explain(false);
+    explain(startKind());
     if ($("stage").classList.contains("big")) centreOnStart();
     markOpenSample();
     if (focusResult) {
@@ -491,7 +507,11 @@ async function loadPlan(request, waitText) {
     if (n === planSeq) say("Could not open the plan. Check the connection and try again.");
     return;
   } finally {
-    if (n === planSeq) $("photo").disabled = false;
+    if (n === planSeq) {
+      $("photo").disabled = false;
+      // Disabling the input took its focus away.
+      if (document.activeElement === document.body) $("photo").focus();
+    }
   }
   if (n !== planSeq) return;
   showPlan(answer, true);
@@ -624,7 +644,7 @@ canvas.addEventListener("keydown", (ev) => {
     place(cursor[0], cursor[1]);
   } else if (ev.key === "Escape" && marking) {
     stopMarking();
-    explain(false);
+    explain(startKind());
   } else {
     return;
   }
