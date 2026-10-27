@@ -17,6 +17,12 @@ HereOut reads a photo of a posted evacuation plan and shows the way out. The use
 - Run local: `uv run --env-file .env uvicorn hereout.app:app --port 8000`
 - Try photos with the model: `uv run --env-file .env python scripts/try_photos.py <photo>...`. It writes to `out/` (gitignored). `--cached` uses the last reading again and makes no model call.
 
+## Deployment
+
+- `docker compose build hereout && docker compose up -d hereout`, then `curl -sI https://hereout.devrives.com/`.
+- The container reads `.env` for the key. The spend ledger is on the volume `hereout-spend` (`/data/spend.json`). Read it with `docker exec hereout cat /data/spend.json`.
+- The cap is `HEREOUT_SPEND_CAP_USD` in `docker-compose.yml`.
+
 ## Rules
 
 - All code in this repository is written during the hackathon. Never copy code from another repository.
