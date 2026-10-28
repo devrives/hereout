@@ -155,3 +155,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/wall-method-tests.md`: method 2 does not go on; a look at the ways out of the best set.
 - Source: the test scripts of the session.
+
+## [2026-10-28] ingest | Best wall set and blind A/B page
+
+- Updated `decisions/wall-method-tests.md`: the best set on the branch, the gallery numbers and the A/B page.
+- Source: branch `ink-walls`, the gallery check, the A/B page.

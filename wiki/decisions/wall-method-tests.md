@@ -43,3 +43,20 @@ Scores on 2026-10-28 (floor, leak, walls):
 - JP-commons_000365 still has a leak of 1.0: the frame of the sign joins the two levels into one footprint.
 - Method 2 made FR-web_more_000045 worse (one floor point lost) and helped no plan. It does not go on.
 - A look at the ways out of the best set, against main: RU-commons_000169 and FR-web_more_000045 are better, with ways inside the building and the floors. JP-commons_000369 lost almost all ways. PT-commons_000107 has more short lines in the wings and lines above the building. Exits 3 to 5 of RU-commons_000169 have no line now.
+
+## Best set on the branch
+
+- The branch `ink-walls` holds the best set in `ink_walls.py` and the legend check in `legend.py`. More rules came from the gallery check:
+  - Bridges close a wall gap when the two wall ends face each other.
+  - The paper around each exit stays open, and each exit gets a narrow cut to the nearest large open area.
+  - A door arc needs its hinge on a wall and a drawn leaf.
+  - A wall drawn as two thin lines is closed.
+- On the ground truth: floor 0.918, leak 0.319, walls 0.861 (main: 0.852, 0.628, 0.806).
+- On the 203 gallery plans:
+  - Crossed drawn lines went from 11.8 to 7.4 for each 1000 px (median).
+  - Plans with no line went from 7 to 3.
+  - Plans with less than half of the open space linked to an exit went from 5 to 17.
+- The legend check found a legend box on 78 plans. It dropped 6 exits, and all 6 were in a legend or a text panel (look by eye).
+- A look by eye found mixed results: DE-commons_000155 and US-openverse_000109 are better, RU-commons_000346 lost lines, and PT-commons_000107 is not clean.
+- The owner gets a blind A/B page of 14 plans at `/review/` (2026-10-28). The key is `ab-key-2026-10-28.json` in the experiments folder of the hub workspace. A method that the owner does not choose does not go to main.
+- The branch `route-marks` was deleted on 2026-10-28. Its commit 3d6310b stays in this page.
