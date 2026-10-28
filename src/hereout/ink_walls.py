@@ -32,6 +32,7 @@ import threading
 import cv2
 import numpy as np
 
+from .route import GRID_SIDE
 from .walls import _drop_faint, _ink, outside_box, stroke_width, wall_hue
 
 CHROMA = 14.0          # Lab chroma above the paper: coloured ink, not a wall
@@ -55,6 +56,8 @@ EXIT_ROOM = 0.03            # share of the image: the paper around an exit that 
 HINGE_NEAR = 3              # px: the hinge of a door arc is this close to a wall
 WALL_STRIP = 0.007          # share of the image: the paper strip inside a double-line wall
 LEAF_INK = 0.6              # share of a chord on ink that makes it a door leaf
+EXIT_DOOR = 0.06            # share of the image: an exit gets a cut to a large open area this close
+BIG_AREA = 0.05             # share of the open area: a large open area
 
 _ocr = None
 _ocr_lock = threading.Lock()
@@ -343,4 +346,39 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     for (cx, cy), e in door_openings(thin, core, ink):
         cv2.line(cut, (round(cx), round(cy)), (round(e[0]), round(e[1])), 1, width)
     opened = (cut > 0) & ~box_out
-    return hard & ~opened, soft & ~opened & ~hard
+    hard, soft = hard & ~opened, soft & ~opened & ~hard
+    door = exit_doors(hard, exits)
+    return hard & ~door, soft & ~door
+
+
+def exit_doors(hard: np.ndarray, exits) -> np.ndarray:
+    """A narrow cut from each exit to the nearest large open area. An exit is a
+    door in the outer wall, and its mark often sits on the wall ink or just
+    outside it; without the cut it reaches only a pocket of paper."""
+    side = max(hard.shape)
+    out = np.zeros(hard.shape, np.uint8)
+    if not len(exits):
+        return out > 0
+    # Open space as the route grid sees it: a gap narrower than a grid cell is closed.
+    k = max(3, int(np.ceil(side / GRID_SIDE)) * 2 + 1)
+    free = cv2.erode((~hard).astype(np.uint8), np.ones((k, k), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(free, connectivity=4)
+    big = np.zeros(n, bool)
+    big[1:] = st[1:, cv2.CC_STAT_AREA] >= BIG_AREA * free.sum()
+    if not big.any():
+        return out > 0
+    reach = int(EXIT_DOOR * side)
+    width = max(3, int(DOOR_CUT * side))
+    h, w = hard.shape
+    for x, y in exits:
+        cx, cy = int(round(x)), int(round(y))
+        x0, y0, x1, y1 = max(0, cx - reach), max(0, cy - reach), min(w, cx + reach + 1), min(h, cy + reach + 1)
+        win = big[lab[y0:y1, x0:x1]]
+        if not win.any():
+            continue
+        if 0 <= cy < h and 0 <= cx < w and big[lab[cy, cx]]:
+            continue  # the exit is already on a large open area
+        ys, xs = np.nonzero(win)
+        i = int(np.argmin((xs + x0 - cx) ** 2 + (ys + y0 - cy) ** 2))
+        cv2.line(out, (cx, cy), (int(xs[i] + x0), int(ys[i] + y0)), 1, max(width, k + 2))
+    return out > 0
