@@ -106,3 +106,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/exit-mark-check.md`: the first call uses the Meta-style prompt with the floor rule.
 - Source: the owner approval of 2026-10-28, `src/hereout/reader.py`.
+
+## [2026-10-28] ingest | Zoom on suspect exits
+
+- Updated `decisions/exit-mark-check.md`: ideas from similar work, the Baseten image limit, and the 6-plan test of a gated zoom.
+- Source: the owner request of 2026-10-28, the Sensors 2023 paper, the DiMo-GUI paper, the test outputs.

@@ -12,6 +12,8 @@ sources:
   - https://simonw.substack.com/p/metas-new-model-is-muse-spark-and
   - https://dev.meta.ai/docs/image-understanding
   - https://dev.meta.ai/docs/muse-spark-open/settings
+  - https://pmc.ncbi.nlm.nih.gov/articles/PMC10575354/
+  - https://arxiv.org/abs/2507.00008
 ---
 # Check the exits with numbered marks
 
@@ -97,3 +99,22 @@ So country hints do not go into the product now. The errors that stay are positi
 - `reader.py` sends this prompt in the first call. The answer has `floor_drawing`, `you_are_here` and `final_exits` in the Meta point and box format.
 - The zoomed second call for "you are here" did not change.
 - The mark check is not in the product. The owner did not want a third call.
+
+## Zoom on suspect exits
+
+The owner asked for ideas from similar work (2026-10-28):
+
+- A study of German emergency plans trained a symbol detector on 403 labelled photos. Its data is not public. So a detector for the symbols of many countries is too large for this project.
+- GUI grounding work zooms into a crop around a first point. Later work zooms only when the point is uncertain. A zoom on an easy case can remove the context.
+
+The test sent, in one call, the whole plan and crops around some first-pass exits:
+
+- Baseten accepts at most 8 images in one request. The Meta page gives 50. So the test put four crops on each sheet.
+- On PT-commons_000107, a zoom on all 16 exits moved the 10 bottom exits near the signs. It also moved 3 correct top exits to wrong places.
+- A model-free signal separated the two groups. It is the distance from the exit to the nearest green or red pixel. The correct exits were at 0.5 percent of the long side or less. The wrong exits were at 2.6 percent or more.
+- With a gate of 1.5 percent, the test read 6 plans. 4 were better, 2 had no clear change, and none was worse.
+- The model answered "no exit" for crops on the legend and outside the plan. So the zoom removed the legend exits that the prompt did not stop.
+- One exit on JP-commons_000369 moved 8.5 percent of the long side to an empty area. A cap on the move can stop such a move.
+- When no exit passes the gate, the zoom costs nothing.
+
+The zoom is not in the product. The owner decides on it.
