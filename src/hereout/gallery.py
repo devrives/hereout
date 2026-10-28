@@ -20,8 +20,9 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 
 
 class Gallery:
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, thumbs_url: str = "/gallery/thumbs"):
         self.folder = folder
+        self.thumbs_url = thumbs_url
         self.items: dict[str, dict] = {}
         for p in sorted((folder / "items").glob("*.json")):
             item = json.loads(p.read_text())
@@ -36,7 +37,7 @@ class Gallery:
             "country": i["country"],
             "credit": i["credit"],
             "route_found": i["route_found"],
-            "thumb": f"/gallery/thumbs/{i['id']}.jpg",
+            "thumb": f"{self.thumbs_url}/{i['id']}.jpg",
         } for i in self.items.values()]
         rows.sort(key=lambda r: (not r["route_found"], r["country"], r["id"]))
         out = []

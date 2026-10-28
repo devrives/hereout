@@ -708,10 +708,12 @@ const countryName = (() => {
 })();
 
 const sampleId = (id) => (id && id.startsWith("g-") ? id.slice(2) : null);
+// "?set=review" opens the review set: plans read with code under test.
+const SET = new URLSearchParams(location.search).get("set") === "review" ? "?set=review" : "";
 
 // push: add a history entry, so Back returns to the plan before.
 function openSample(gid, push) {
-  return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}`, { method: "POST" }), "Opening the sample plan…", push);
+  return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}${SET}`, { method: "POST" }), "Opening the sample plan…", push);
 }
 
 // The open sample is marked in the gallery and named in the address, so it can be shared.
@@ -745,7 +747,7 @@ function creditLine(c) {
 async function showGallery() {
   let plans = [];
   try {
-    const r = await fetch("/api/gallery");
+    const r = await fetch(`/api/gallery${SET}`);
     if (r.ok) plans = (await r.json()).plans;
   } catch (e) { return; }
   if (!plans.length) return;

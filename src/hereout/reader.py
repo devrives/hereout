@@ -13,6 +13,7 @@ import json
 import os
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -63,6 +64,63 @@ def on_grid(v) -> float:
     if not (-GRID_SLACK <= v <= 1000 + GRID_SLACK):
         raise ValueError
     return min(1000.0, max(0.0, v))
+
+
+# A second look at exits that sit far from any route colour. On gallery plans these were
+# the misplaced ones; exits on a sign or an arrow end were right, and a zoom on them made
+# some worse (wiki/decisions/exit-mark-check.md).
+ZOOM_GATE = 0.015      # suspect: the nearest green or red is farther than this share of the long side
+ZOOM_CROP = 0.18       # side of each crop, as a share of the long side
+ZOOM_SIDE = 448        # crops are sent at this side
+ZOOM_GUTTER = 24
+ZOOM_MAX_MOVE = 0.07   # a larger move is not used
+MAX_IMAGES = 8         # Baseten refuses a request with more images
+ZOOM_PER_SHEET = 4
+ZOOM_MAX = (MAX_IMAGES - 1) * ZOOM_PER_SHEET
+
+ZOOM_PROMPT = """Image 1 is a photo of a posted evacuation plan (fire escape plan). The other images are sheets of zoomed parts of image 1, up to four on each sheet, each with its number in a black box. Each zoomed part is centred on a proposed final exit, marked with a small magenta cross.
+A final exit is the end of an escape route on this floor: a door in the outer wall of the building, or the door of a protected staircase. Escape arrows end there. When an exit sign stands at that door, the sign marks it. A final exit is never on the street, the pavement, the paper outside the building or the legend, and never in the middle of an arrow or a corridor.
+For each zoomed part, point to the final exit nearest to the cross: just inside the door, or the exit sign at that door. Use image 1 to see where the building and the legend are. If no final exit is in that zoomed part, give null.
+Stay inside the zoomed part: never point to another part of the sheet.
+The coordinates should be integers in the 0-1000 range of the whole sheet: x from its left edge, y from its top edge.
+Answer with JSON only: {"exits": [{"n": 1, "sheet": 2, "x": <int>, "y": <int>}, {"n": 2, "sheet": 2, "point": null}]}, with one entry for each numbered part. "sheet" is the image number of its sheet."""
+
+
+def suspect_exits(img: np.ndarray, exits: list[dict]) -> list[int]:
+    """The exits far from any green or red mark (route band, arrow or exit sign), farthest first."""
+    if not exits:
+        return []
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    a = lab[..., 1] - 128
+    a0 = float(np.median(a))  # the tint of the paper
+    mark = ((a < a0 - 6) | (a > a0 + 14)).astype(np.uint8)
+    mark = cv2.morphologyEx(mark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    dist = cv2.distanceTransform(1 - mark, cv2.DIST_L2, 5)
+    h, w = img.shape[:2]
+    far = ZOOM_GATE * max(h, w)
+    d = [float(dist[min(h - 1, max(0, int(e["y"]))), min(w - 1, max(0, int(e["x"])))]) for e in exits]
+    return sorted((i for i, v in enumerate(d) if v > far), key=lambda i: -d[i])[:ZOOM_MAX]
+
+
+def zoom_sheets(crops: list[np.ndarray]) -> tuple[list[np.ndarray], list[tuple[int, int, int, int, int]]]:
+    """Put up to four crops on each sheet, numbered from 1. For each crop: sheet, x, y, width, height."""
+    sheets, where = [], []
+    for k in range(0, len(crops), ZOOM_PER_SHEET):
+        group = crops[k:k + ZOOM_PER_SHEET]
+        cols, rows = (2 if len(group) > 1 else 1), (len(group) + 1) // 2
+        cell = ZOOM_SIDE + ZOOM_GUTTER
+        sheet = np.full((rows * cell + ZOOM_GUTTER, cols * cell + ZOOM_GUTTER, 3), 255, np.uint8)
+        for j, c in enumerate(group):
+            f = ZOOM_SIDE / max(c.shape[:2])
+            c = cv2.resize(c, None, fx=f, fy=f, interpolation=cv2.INTER_AREA)
+            tx, ty = ZOOM_GUTTER + (j % 2) * cell, ZOOM_GUTTER + (j // 2) * cell
+            sheet[ty:ty + c.shape[0], tx:tx + c.shape[1]] = c
+            label = str(k + j + 1)
+            cv2.rectangle(sheet, (tx, ty), (tx + 22 + 12 * len(label), ty + 30), (0, 0, 0), -1)
+            cv2.putText(sheet, label, (tx + 6, ty + 23), 0, 0.8, (255, 255, 255), 2)
+            where.append((len(sheets), tx, ty, c.shape[1], c.shape[0]))
+        sheets.append(sheet)
+    return sheets, where
 
 
 class SpendCapReached(Exception):
@@ -216,11 +274,11 @@ class ModelClient:
         effort = os.environ.get("HEREOUT_EFFORT", DEFAULT_EFFORT) or None
         return cls(key, ledger, os.environ.get("HEREOUT_MODEL", DEFAULT_MODEL), prices, effort=effort)
 
-    def _ask(self, prompt: str, img: np.ndarray) -> tuple[str, float, dict]:
-        """One call with one image. Returns the answer text, its cost and usage."""
-        image_b64 = encode_image(img)
-        # Worst case: a large image prompt plus every output token.
-        reserve = self.prices.cost(6000, MAX_TOKENS)
+    def _ask(self, prompt: str, *imgs: np.ndarray) -> tuple[str, float, dict]:
+        """One call with one or more images. Returns the answer text, its cost and usage."""
+        images = [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image(i)}"}} for i in imgs]
+        # Worst case: a large prompt for each image plus every output token.
+        reserve = self.prices.cost(6000 * len(imgs), MAX_TOKENS)
         self.ledger.reserve(reserve)
         actual = 0.0
         try:
@@ -229,10 +287,7 @@ class ModelClient:
                 "max_tokens": MAX_TOKENS,
                 "temperature": 0,
                 **({"reasoning_effort": self.effort} if self.effort else {}),
-                "messages": [{"role": "user", "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
-                ]}],
+                "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, *images]}],
             }
             try:
                 r = self.http.post(API_URL, json=body)
@@ -260,14 +315,28 @@ class ModelClient:
         text, cost, usage = self._ask(PROMPT, img)
         reading = parse_answer(text, w, h)
         reading.cost_usd, reading.usage = cost, usage
-        if refine and reading.you_are_here is not None:
-            try:
-                point, extra = self.refine_here(img, reading.you_are_here)
-            except (ModelError, SpendCapReached):
-                point, extra = None, 0.0
-            reading.cost_usd += extra
-            if point is not None:
-                reading.you_are_here = point
+        if not refine:
+            return reading
+        suspects = suspect_exits(img, reading.exits)
+        # The two second looks are separate calls at the same time, so the zoom adds no wait.
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            here_job = pool.submit(self.refine_here, img, reading.you_are_here) if reading.you_are_here else None
+            zoom_job = pool.submit(self.zoom_exits, img, reading.exits, suspects) if suspects else None
+            if here_job:
+                try:
+                    point, extra = here_job.result()
+                except (ModelError, SpendCapReached):
+                    point, extra = None, 0.0
+                reading.cost_usd += extra
+                if point is not None:
+                    reading.you_are_here = point
+            if zoom_job:
+                try:
+                    exits, extra = zoom_job.result()
+                except (ModelError, SpendCapReached):
+                    exits, extra = reading.exits, 0.0
+                reading.cost_usd += extra
+                reading.exits = exits
         return reading
 
     def refine_here(self, img: np.ndarray, guess: tuple[float, float]) -> tuple[tuple[float, float] | None, float]:
@@ -286,3 +355,49 @@ class ModelClient:
         except (TypeError, ValueError, IndexError, json.JSONDecodeError):
             return None, cost
         return (x0 + x / 1000 * cw, y0 + y / 1000 * ch), cost
+
+    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]) -> tuple[list[dict], float]:
+        """Look again at crops around the suspect exits. Returns the exits after the look and its cost."""
+        h, w = img.shape[:2]
+        side = max(160, round(ZOOM_CROP * max(h, w)))
+        crops = []
+        for i in suspects:
+            e = exits[i]
+            x0 = int(min(max(0, e["x"] - side / 2), max(0, w - side)))
+            y0 = int(min(max(0, e["y"] - side / 2), max(0, h - side)))
+            c = img[y0:y0 + side, x0:x0 + side].copy()
+            cv2.drawMarker(c, (int(e["x"] - x0), int(e["y"] - y0)), (255, 0, 255), cv2.MARKER_CROSS,
+                           max(8, side // 14), max(1, side // 120))
+            crops.append((c, x0, y0))
+        sheets, where = zoom_sheets([c for c, _, _ in crops])
+        text, cost, _ = self._ask(ZOOM_PROMPT, img, *sheets)
+        m = re.search(r"\{.*\}", text or "", re.S)
+        try:
+            answers = {int(a["n"]): a for a in json.loads(m.group(0)).get("exits", [])} if m else {}
+        except (json.JSONDecodeError, TypeError, ValueError, KeyError, AttributeError):
+            answers = {}
+        out = [dict(e) for e in exits]
+        drop = set()
+        for n, (i, (c, x0, y0), (sheet, tx, ty, tw, th)) in enumerate(zip(suspects, crops, where), 1):
+            a = answers.get(n)
+            if not isinstance(a, dict):
+                continue
+            if "x" not in a:
+                if a.get("point", "") is None:
+                    drop.add(i)  # the model sees no exit in this crop
+                continue
+            try:
+                if int(a.get("sheet", sheet + 2)) != sheet + 2:
+                    continue
+                H, W = sheets[sheet].shape[:2]
+                sx, sy = on_grid(a["x"]) / 1000 * W - tx, on_grid(a["y"]) / 1000 * H - ty
+            except (TypeError, ValueError):
+                continue
+            if not (-5 <= sx <= tw + 5 and -5 <= sy <= th + 5):
+                continue
+            ch, cw = c.shape[:2]
+            x, y = x0 + sx / tw * cw, y0 + sy / th * ch
+            if np.hypot(x - exits[i]["x"], y - exits[i]["y"]) <= ZOOM_MAX_MOVE * max(h, w):
+                out[i]["x"], out[i]["y"] = x, y
+        kept = [e for i, e in enumerate(out) if i not in drop]
+        return (kept or out), cost

@@ -4,7 +4,8 @@ import httpx
 import numpy as np
 import pytest
 
-from hereout.reader import ModelClient, ModelError, Prices, SpendCapReached, SpendLedger, parse_answer
+from hereout.reader import (ModelClient, ModelError, Prices, SpendCapReached, SpendLedger, parse_answer,
+                            suspect_exits)
 
 
 def answer(content, usage=None):
@@ -106,3 +107,55 @@ def test_timeout_counts_worst_case(tmp_path):
 def test_contributor_model_refused(tmp_path):
     with pytest.raises(ValueError):
         ModelClient("k", SpendLedger(tmp_path / "s.json", 1), model="meta-models/x-contributor")
+
+
+def plan_with_sign():
+    """A white plan, 400 x 300, with one green exit sign at (100, 100)."""
+    img = np.full((300, 400, 3), 245, np.uint8)
+    img[92:108, 88:112] = (40, 140, 40)
+    return img
+
+
+def test_suspects_are_far_from_route_colour():
+    exits = [{"x": 100, "y": 100}, {"x": 300, "y": 200}, {"x": 104, "y": 98}, {"x": 300, "y": 60}]
+    assert sorted(suspect_exits(plan_with_sign(), exits)) == [1, 3]
+    assert suspect_exits(plan_with_sign(), []) == []
+
+
+def test_zoom_moves_and_drops_suspect_exits(tmp_path):
+    first = ('{"you_are_here": {"x": 500, "y": 500}, "final_exits": [{"x": 250, "y": 333},'
+             ' {"x": 750, "y": 667}, {"x": 750, "y": 200}]}')
+    # Exit 2 (300, 200) is suspect 1: crop x0 220, y0 120, 160 px, sent at 448 px on a 968 x 496 sheet.
+    # Sheet point (314, 500) is crop point (100, 80): image point (320, 200), a move of 20 px.
+    zoom = '{"exits": [{"n": 1, "sheet": 2, "x": 314, "y": 500}, {"n": 2, "sheet": 2, "point": null}]}'
+    asked = []
+
+    def handler(request):
+        content = json.loads(request.content)["messages"][0]["content"]
+        text, images = content[0]["text"], len(content) - 1
+        asked.append(images)
+        if images > 1:
+            return httpx.Response(200, json=answer(zoom))
+        if text.startswith("This is a zoomed part"):
+            return httpx.Response(200, json=answer('{"you_are_here": null}'))
+        return httpx.Response(200, json=answer(first))
+
+    client, ledger = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert sorted(asked) == [1, 1, 2]
+    assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(100, 100), (320, 200)]
+    assert ledger.snapshot()["calls"] == 3
+
+
+def test_zoom_ignores_a_large_move(tmp_path):
+    first = '{"you_are_here": null, "final_exits": [{"x": 750, "y": 667}]}'
+    zoom = '{"exits": [{"n": 1, "sheet": 2, "x": 900, "y": 900}]}'
+
+    def handler(request):
+        content = json.loads(request.content)["messages"][0]["content"]
+        return httpx.Response(200, json=answer(zoom if len(content) > 2 else first))
+
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(300, 200)]
+

@@ -115,6 +115,18 @@ def test_review_pages(tmp_path):
     assert client.get("/review/x/").text == "<p>ok</p>"
 
 
+def test_review_set(tmp_path):
+    main = make_gallery(tmp_path)
+    (tmp_path / "review" / "gallery").mkdir(parents=True)
+    make_gallery(tmp_path / "review" / "gallery")
+    client = TestClient(create_app(None, use_env=False, gallery=main))
+    plans = client.get("/api/gallery?set=review").json()["plans"]
+    assert plans[0]["thumb"] == "/review/gallery/thumbs/XX-test_1.jpg"
+    assert client.get(plans[0]["thumb"]).status_code == 200
+    assert client.post("/api/gallery/XX-test_1?set=review").json()["id"] == "g-XX-test_1"
+    assert client.get("/api/gallery").json()["plans"][0]["thumb"] == "/gallery/thumbs/XX-test_1.jpg"
+
+
 def test_gallery_unknown_and_absent(tmp_path):
     client = TestClient(create_app(None, use_env=False, gallery=make_gallery(tmp_path)))
     assert client.post("/api/gallery/../../etc").status_code == 404

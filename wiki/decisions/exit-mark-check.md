@@ -117,4 +117,12 @@ The test sent, in one call, the whole plan and crops around some first-pass exit
 - One exit on JP-commons_000369 moved 8.5 percent of the long side to an empty area. A cap on the move can stop such a move.
 - When no exit passes the gate, the zoom costs nothing.
 
-The zoom is not in the product. The owner decides on it.
+The owner put the zoom into the product on 2026-10-28. The next section gives the details.
+
+## Zoom in the product
+
+- The owner chose a separate call for the zoom. It runs at the same time as the zoomed "you are here" call, so the wait does not grow (2026-10-28).
+- `reader.py` finds the suspect exits with `suspect_exits`. The zoom call goes only when there is a suspect exit. It takes at most 28 crops, on 7 sheets.
+- A move of more than 7 percent of the long side is not used. An exit with the answer "no exit" goes away, but at least one exit stays.
+- On the 203 saved gallery readings, 142 plans have a suspect exit. On a plan with no green or red marks, all exits are suspect.
+- The review set read 8 plans with the product code: 16 to 27 seconds and 0.010 to 0.026 USD for each plan. Against the gallery readings, 4 were better, 1 had no change and 3 had better and worse changes. NO-openverse_000112 had 7 suspect exits that were correct, and they stayed correct.

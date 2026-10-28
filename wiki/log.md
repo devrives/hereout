@@ -111,3 +111,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/exit-mark-check.md`: ideas from similar work, the Baseten image limit, and the 6-plan test of a gated zoom.
 - Source: the owner request of 2026-10-28, the Sensors 2023 paper, the DiMo-GUI paper, the test outputs.
+
+## [2026-10-28] ingest | Exit zoom in the product, review set
+
+- Updated `decisions/exit-mark-check.md`: the zoom is a separate call at the same time as the "you are here" zoom, with its numbers.
+- Updated `components/plan-reader.md`: the two second looks and the review set.
+- Source: the owner request of 2026-10-28, `src/hereout/reader.py`, `src/hereout/app.py`, `src/hereout/web/app.js`.

@@ -114,13 +114,24 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
             reading, err = None, "too many photos; mark the plan by hand"
         return await run_in_threadpool(answer, None, plan, reading, err)
 
+    # A review set read with code under test, opened with "?set=review". It is a gallery
+    # folder inside review/, so its thumbnails come from the /review/ mount.
+    review_set = None
+    if gallery and (gallery.folder / "review" / "gallery" / "items").is_dir():
+        review_set = Gallery(gallery.folder / "review" / "gallery", "/review/gallery/thumbs")
+
+    def pick(set: str | None) -> Gallery | None:
+        return review_set if set == "review" else gallery
+
     @app.get("/api/gallery")
-    def gallery_list():
-        return {"plans": gallery.listing() if gallery else []}
+    def gallery_list(set: str | None = None):
+        g = pick(set)
+        return {"plans": g.listing() if g else []}
 
     @app.post("/api/gallery/{gid}")
-    def gallery_open(gid: str):
-        found = gallery.open(gid) if gallery else None
+    def gallery_open(gid: str, set: str | None = None):
+        g = pick(set)
+        found = g.open(gid) if g else None
         if found is None:
             raise HTTPException(404, "this sample plan is not available")
         plan, reading, item = found
