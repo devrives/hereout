@@ -16,8 +16,8 @@ What is left is split in two (wiki/decisions/wall-method-tests.md):
   line of the map never does.
 
 Door arcs become openings: a skeleton branch of the thin ink that fits a
-quarter circle is a door swing, and the two chords from its hinge are cut out
-of the walls. A plan with only thin strokes keeps the long straight lines as
+quarter circle, with its hinge on a wall and a drawn leaf along one chord, is
+a door swing; the other chord, the doorway, is cut out of the walls. A plan with only thin strokes keeps the long straight lines as
 walls instead.
 
 Each drawing on the sheet gets a footprint: the walls closed along each axis
@@ -52,6 +52,9 @@ ARC_SWEEP = (55, 125)       # degrees
 ARC_FIT = 0.12              # mean distance from the circle, as a share of the radius
 DOOR_CUT = 0.006            # share of the image: the width of the cut through a door
 EXIT_ROOM = 0.03            # share of the image: the paper around an exit that stays open
+HINGE_NEAR = 3              # px: the hinge of a door arc is this close to a wall
+WALL_STRIP = 0.007          # share of the image: the paper strip inside a double-line wall
+LEAF_INK = 0.6              # share of a chord on ink that makes it a door leaf
 
 _ocr = None
 _ocr_lock = threading.Lock()
@@ -220,6 +223,35 @@ def door_arcs(thin: np.ndarray, seed: int = 0) -> list[tuple]:
     return out
 
 
+def _share(mask: np.ndarray, a, b) -> float:
+    """The share of the middle of segment a-b that lies on the mask."""
+    t = np.linspace(0.15, 0.85, 24)
+    xs = np.clip(np.round(a[0] + (b[0] - a[0]) * t).astype(int), 0, mask.shape[1] - 1)
+    ys = np.clip(np.round(a[1] + (b[1] - a[1]) * t).astype(int), 0, mask.shape[0] - 1)
+    return float(mask[ys, xs].mean())
+
+
+def door_openings(thin: np.ndarray, hard: np.ndarray, ink: np.ndarray) -> list[tuple]:
+    """The doorways of the door arcs: (hinge, end) segments. An arc is a door
+    only when its hinge is on a wall and one of its two chords is a door leaf
+    (drawn ink); the other chord is the doorway. Circles of symbols fail this,
+    so they cut no hole in a wall."""
+    side = max(thin.shape)
+    near = cv2.dilate(hard.astype(np.uint8), np.ones((2 * HINGE_NEAR + 1, 2 * HINGE_NEAR + 1), np.uint8)) > 0
+    grown = cv2.dilate(ink.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
+    out = []
+    for (cx, cy), r, e1, e2 in door_arcs(thin):
+        hx, hy = int(round(cx)), int(round(cy))
+        if not (0 <= hx < hard.shape[1] and 0 <= hy < hard.shape[0]) or not near[hy, hx]:
+            continue
+        c1, c2 = _share(grown, (cx, cy), e1), _share(grown, (cx, cy), e2)
+        leaf, gap = (e1, e2) if c1 >= c2 else (e2, e1)
+        if max(c1, c2) < LEAF_INK:
+            continue
+        out.append(((cx, cy), gap))
+    return out
+
+
 def gap_bridges(walls: np.ndarray) -> np.ndarray:
     """Lines across the gaps in walls: two wall ends that face each other along
     one line (a door or an entrance). Two parallel walls are not joined, so the
@@ -290,6 +322,10 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     side = max(img.shape[:2])
     ink = drawn_ink(img, plan_box, boxes)
     core, thin = split_strokes(ink, plan_box)
+    # A wall drawn as two thin lines has a strip of paper inside it: close it.
+    k = max(3, int(WALL_STRIP * side)) | 1
+    core = cv2.morphologyEx(core.astype(np.uint8), cv2.MORPH_CLOSE,
+                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0
     grow = lambda m: cv2.dilate(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     box_out = outside_box(ink.shape, plan_box)
     hard = grow(core) | box_out
@@ -304,8 +340,7 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
         soft &= fp
     cut = np.zeros(ink.shape, np.uint8)
     width = max(3, int(DOOR_CUT * side))
-    for (cx, cy), _, e1, e2 in door_arcs(thin):
-        for e in (e1, e2):
-            cv2.line(cut, (round(cx), round(cy)), (round(e[0]), round(e[1])), 1, width)
+    for (cx, cy), e in door_openings(thin, core, ink):
+        cv2.line(cut, (round(cx), round(cy)), (round(e[0]), round(e[1])), 1, width)
     opened = (cut > 0) & ~box_out
     return hard & ~opened, soft & ~opened & ~hard
