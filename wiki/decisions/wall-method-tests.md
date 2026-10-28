@@ -35,8 +35,11 @@ Scores on 2026-10-28 (floor, leak, walls):
 | Method 1 and a filled footprint for each drawing (methods 3 and 4) | 0.878 | 0.273 | 0.861 |
 | The same, and door arcs cut into openings (method 5) | 0.918 | 0.273 | 0.861 |
 | Footprints without ink that touches the box edge | 0.427 | 0.000 | 0.917 |
+| Best set, and dashed lines made open (method 2) | 0.901 | 0.273 | 0.861 |
 
 - The best set is methods 1, 3, 4 and 5. It is on no branch yet: the test code is in the session scratchpad.
 - The footprint test without edge ink failed: the outer wall of many plans touches the box of the model, so the floor went away.
 - NO-openverse_000112 still has 4 of 7 rooms with no way out. Many false circles come from symbols, and the outside fill closes part of the balcony.
 - JP-commons_000365 still has a leak of 1.0: the frame of the sign joins the two levels into one footprint.
+- Method 2 made FR-web_more_000045 worse (one floor point lost) and helped no plan. It does not go on.
+- A look at the ways out of the best set, against main: RU-commons_000169 and FR-web_more_000045 are better, with ways inside the building and the floors. JP-commons_000369 lost almost all ways. PT-commons_000107 has more short lines in the wings and lines above the building. Exits 3 to 5 of RU-commons_000169 have no line now.

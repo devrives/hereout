@@ -150,3 +150,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Created `decisions/wall-method-tests.md`: the ground truth, the scores and the result of each method.
 - Source: the owner request of 2026-10-28, the test scripts of the session.
+
+## [2026-10-28] ingest | Wall method tests: dashes, look at the best set
+
+- Updated `decisions/wall-method-tests.md`: method 2 does not go on; a look at the ways out of the best set.
+- Source: the test scripts of the session.
