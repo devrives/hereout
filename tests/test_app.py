@@ -106,6 +106,15 @@ def test_gallery_list_and_open(tmp_path):
     assert client.post("/api/route", json={}).status_code in (404, 405)
 
 
+def test_review_pages(tmp_path):
+    gallery = make_gallery(tmp_path)
+    assert TestClient(create_app(None, use_env=False, gallery=gallery)).get("/review/x/").status_code == 404
+    (tmp_path / "review" / "x").mkdir(parents=True)
+    (tmp_path / "review" / "x" / "index.html").write_text("<p>ok</p>")
+    client = TestClient(create_app(None, use_env=False, gallery=gallery))
+    assert client.get("/review/x/").text == "<p>ok</p>"
+
+
 def test_gallery_unknown_and_absent(tmp_path):
     client = TestClient(create_app(None, use_env=False, gallery=make_gallery(tmp_path)))
     assert client.post("/api/gallery/../../etc").status_code == 404

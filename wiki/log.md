@@ -91,3 +91,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/exit-mark-check.md`: the Meta grounding rules, the 5-plan pilot of a one-call prompt, the square-image check, and the clamp.
 - Source: the owner request of 2026-10-28, the Meta image understanding page, `src/hereout/reader.py`.
+
+## [2026-10-28] ingest | Review pages at /review/
+
+- Updated `components/plan-reader.md`: the server shows the gallery `review/` folder at `/review/`.
+- Source: the owner request of 2026-10-28 (check the samples on the subdomain), `src/hereout/app.py`.

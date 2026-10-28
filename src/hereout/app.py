@@ -131,6 +131,10 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
     app.mount("/static", StaticFiles(directory=WEB), name="static")
     if gallery:
         app.mount("/gallery/thumbs", StaticFiles(directory=gallery.folder / "thumbs"), name="thumbs")
+        # Review pages for the owner, written outside the repository by test scripts.
+        # robots.txt keeps them out of search.
+        if (gallery.folder / "review").is_dir():
+            app.mount("/review", StaticFiles(directory=gallery.folder / "review", html=True), name="review")
     return app
 
 

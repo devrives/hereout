@@ -49,6 +49,7 @@ The plan reader changes a photo of a posted evacuation plan into a route and spo
 - In the first version, the page showed the grid route at once and the network route about a second later. On 13 of 202 gallery plans the exit changed (ux review, 2026-10-27). One answer that does not change is better in an evacuation.
 - The exit in use goes over the route again, so its number shows.
 - The page keeps the last answer in the session storage of the browser, so a reload shows it again.
+- The server shows the `review/` folder of the gallery at `/review/`. Test scripts write pages there for the owner, for example a comparison of two prompts (owner request, 2026-10-28). The pages are outside the repository, because they show plan photos.
 - Reviews of the fixes with no model call (2026-10-27): ux and accessibility. Their entries are in the hub `review-ledger/`.
 - Reviews before the first release: UX, accessibility (WCAG 2.2 AA) and copy. Their entries are in the hub `review-ledger/`.
 
