@@ -96,3 +96,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `components/plan-reader.md`: the server shows the gallery `review/` folder at `/review/`.
 - Source: the owner request of 2026-10-28 (check the samples on the subdomain), `src/hereout/app.py`.
+
+## [2026-10-28] ingest | Country hints test
+
+- Updated `decisions/exit-mark-check.md`: the 20-call test of one prompt for all countries against one prompt for each country.
+- Source: the owner request of 2026-10-28 and the test outputs.

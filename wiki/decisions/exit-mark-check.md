@@ -68,3 +68,25 @@ A pilot on 5 of the 30 plans used a prompt in this style:
 - PT-commons_000107 on a square image with a white border: the error was larger. So the aspect ratio of the image is not the cause.
 
 The parser now clamps a value from -10 to 1010 to the grid. It drops a value outside that range.
+
+## Country hints
+
+The owner asked to test country hints (2026-10-28). The question was: one prompt for all countries, or a prompt for the country of the plan.
+
+- Arm "all": one prompt with hints for six countries.
+- Arm "one": only the hint for the country of the plan. The server can get the country from the `CF-IPCountry` header, with no model call.
+- The test read 5 plans from Russia and 5 plans from Japan with each arm, 20 calls.
+
+| Result | Plans |
+|---|---|
+| Arm "one" better | 2 |
+| No clear difference | 8 |
+| Arm "all" better | 0 |
+
+- One of the two "one" wins was a plan with a single level. The hint is not about such a plan, so that win is noise.
+- The Russian hint did not stop exits on the legend. On RU-commons_000346, both arms put three exits in the legend box.
+- On the five plans with a result for the prompt with no hint, the hints gave about the same exits.
+- The floor rule of the base prompt already gives the result of the Japan hint.
+- A filter that drops exits outside the box of the floor drawing does not work. The box of the model includes the legend. The filter also dropped a real exit.
+
+So country hints do not go into the product now. The errors that stay are positions and legend symbols, not knowledge of a country.
