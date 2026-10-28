@@ -19,6 +19,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Find the walls as straight lines](decisions/wall-lines.md): wall lines and blocks from the wall mask.
 - [Check the exits with numbered marks](decisions/exit-mark-check.md): a second call keeps, moves or drops each exit (proposed).
 - [Take the start from a tap, not from the model](decisions/start-from-tap.md): the model finds only the exits; the user taps the start.
+- [Follow the printed escape routes in the way network](decisions/printed-route-marks.md): rejected; the lines still crossed walls.
 
 ## Timelines
 

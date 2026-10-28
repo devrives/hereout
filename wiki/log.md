@@ -130,3 +130,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `components/plan-reader.md`: the read stage and the second call.
 - Updated `decisions/exit-mark-check.md`: the rule for every level is on main.
 - Source: the owner words of 2026-10-28, `src/hereout/reader.py`, `src/hereout/web/app.js`, `scripts/run_set.py`.
+
+## [2026-10-28] ingest | Printed route marks rejected
+
+- Created `decisions/printed-route-marks.md`: the owner found no plan better, and the lines crossed walls before and after.
+- Source: the owner check of 2026-10-28, branch `route-marks`, the crossed-line count on the 7 review plans.
