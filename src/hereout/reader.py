@@ -30,16 +30,20 @@ MAX_TOKENS = 12000  # the model reasons first; the answer itself is short
 DEFAULT_EFFORT = "low"
 USER_AGENT = "HereOut/0.1 (+https://hereout.devrives.com/)"
 
-PROMPT = """You see a photo of a posted evacuation plan (fire escape plan).
-Find:
-1. plan_box: the box around the floor drawing itself. Leave out the title, the legend, the text blocks and the small site map.
-2. you_are_here: the point where the reader of the plan stands. It may be a dot, a star or a pin, with text such as "You are here", "Vous etes ici", "Sie sind hier", "Standort", "Io sono qui", or the same in any language. When the mark is a label with a pointer, a tail or a line, give the point where the pointer ends, not the label.
-3. exits: the final exits of this floor, where the escape route leaves it: a door to the outside or to a protected staircase. On plans with green arrows, these are where the arrows end. A running-man sign that only shows the way along a corridor is not an exit.
-Use only the floor drawing. Never use the symbols in the legend.
-
-Coordinates are integers from 0 to 1000: x from the left edge, y from the top edge of the whole image.
-Answer with JSON only, no other text:
-{"plan_box": [x0, y0, x1, y1], "you_are_here": [x, y] or null, "exits": [{"x": x, "y": y, "label": "short text"}], "notes": "one short sentence"}"""
+# In the style of the Meta grounding examples (dev.meta.ai/docs/image-understanding):
+# a direct request, {"x", "y"} points and an x_min..y_max box. Tested on gallery plans
+# (wiki/decisions/exit-mark-check.md); the floor rule helped plans with more than one level.
+PROMPT = """You are an object grounding expert. This is a photo of a posted evacuation plan (fire escape plan).
+Point to these objects in the image:
+- "you are here": the point where the reader of the plan stands. It is a dot, a star or a pin, often with text such as "You are here", "Vous etes ici", "Sie sind hier", "Standort", or the same in any language. When a label has a pointer, a tail or a line, point to where the pointer ends, not to the label.
+- "final exit": the end of each escape route on this floor. That is a door in the outer wall of the building, or the door of a protected staircase. Escape arrows end there. Point just inside that door, on the floor of the building. When an exit sign stands at that door, point to the sign. Never point to the street, the pavement, the paper outside the building or the legend. Never point to the middle of an arrow or a corridor. A running-man sign along a corridor, with the route going on past it, is not a final exit.
+Also give the bounding box of "floor drawing": the drawing of the floor itself, without the title, the legend, the text blocks and the small site map.
+When the plan shows more than one floor, use only the floor with the "you are here" mark.
+Do not miss any final exit.
+The coordinates should be integers in the 0-1000 range of the whole image: x from the left edge, y from the top edge.
+Answer with JSON only, in this format:
+{"floor_drawing": {"x_min": <int>, "y_min": <int>, "x_max": <int>, "y_max": <int>}, "you_are_here": {"x": <int>, "y": <int>}, "final_exits": [{"x": <int>, "y": <int>, "label": "<short text>"}], "notes": "<one short sentence>"}
+If you cannot find "you are here", give null for it."""
 
 
 REFINE_CROP = 0.35  # side of the zoomed crop, as a share of the long side
@@ -157,33 +161,28 @@ def parse_answer(text: str, width: int, height: int) -> Reading:
 
     here = None
     yah = data.get("you_are_here")
-    if isinstance(yah, (list, tuple)) and len(yah) == 2:
+    if isinstance(yah, dict):
         try:
-            here = px(*yah)
-        except (TypeError, ValueError):
+            here = px(yah["x"], yah["y"])
+        except (KeyError, TypeError, ValueError):
             here = None
     exits = []
-    for e in data.get("exits") or []:
+    for e in data.get("final_exits") or []:
         try:
-            if isinstance(e, dict):
-                x, y = px(e["x"], e["y"])
-                label = str(e.get("label", ""))[:60]
-            else:
-                x, y = px(*e)
-                label = ""
+            x, y = px(e["x"], e["y"])
         except (KeyError, TypeError, ValueError):
             continue
-        exits.append({"x": x, "y": y, "label": label})
+        exits.append({"x": x, "y": y, "label": str(e.get("label", ""))[:60]})
 
     box = None
-    b = data.get("plan_box")
-    if isinstance(b, (list, tuple)) and len(b) == 4:
+    b = data.get("floor_drawing")
+    if isinstance(b, dict):
         try:
-            x0, y0 = px(b[0], b[1])
-            x1, y1 = px(b[2], b[3])
+            x0, y0 = px(b["x_min"], b["y_min"])
+            x1, y1 = px(b["x_max"], b["y_max"])
             if x1 - x0 > 0.1 * width and y1 - y0 > 0.1 * height:
                 box = (x0, y0, x1, y1)
-        except (TypeError, ValueError):
+        except (KeyError, TypeError, ValueError):
             pass
 
     return Reading(here, exits, str(data.get("notes", ""))[:200], plan_box=box)

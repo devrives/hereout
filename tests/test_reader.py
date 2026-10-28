@@ -19,23 +19,24 @@ def make_client(tmp_path, handler, cap=1.0):
 
 
 def test_parse_scales_to_pixels():
-    r = parse_answer('ok {"you_are_here": [500, 250], "exits": [{"x": 1000, "y": 0, "label": "A"}],'
-                     ' "plan_box": [100, 0, 900, 1000]}', 800, 400)
+    r = parse_answer('ok {"you_are_here": {"x": 500, "y": 250}, "final_exits": [{"x": 1000, "y": 0, "label": "A"}],'
+                     ' "floor_drawing": {"x_min": 100, "y_min": 0, "x_max": 900, "y_max": 1000}}', 800, 400)
     assert r.you_are_here == (400, 100)
     assert r.exits == [{"x": 800, "y": 0, "label": "A"}]
     assert r.plan_box == (80, 0, 720, 400)
 
 
 def test_parse_drops_bad_points():
-    r = parse_answer('{"you_are_here": [1500, 2], "exits": [[10, 10], {"x": "a"}],'
-                     ' "plan_box": [0, 0, 5, 5]}', 1000, 1000)
+    r = parse_answer('{"you_are_here": {"x": 1500, "y": 2}, "final_exits": [{"x": 10, "y": 10}, {"x": "a"}, [5, 5]],'
+                     ' "floor_drawing": {"x_min": 0, "y_min": 0, "x_max": 5, "y_max": 5}}', 1000, 1000)
     assert r.you_are_here is None
     assert r.exits == [{"x": 10, "y": 10, "label": ""}]
     assert r.plan_box is None
 
 
 def test_parse_clamps_a_small_miss():
-    r = parse_answer('{"you_are_here": [1001, -3], "exits": [{"x": 1008, "y": 500}, {"x": 1020, "y": 500}]}', 1000, 1000)
+    r = parse_answer('{"you_are_here": {"x": 1001, "y": -3}, "final_exits": [{"x": 1008, "y": 500}, {"x": 1020, "y": 500}]}',
+                     1000, 1000)
     assert r.you_are_here == (1000, 0)
     assert r.exits == [{"x": 1000, "y": 500, "label": ""}]
 
@@ -51,7 +52,7 @@ def test_read_plan_records_cost(tmp_path):
     def handler(request):
         seen.append((json.loads(request.content), request.headers["user-agent"]))
         if len(seen) == 1:
-            return httpx.Response(200, json=answer('{"you_are_here": [100, 100], "exits": []}'))
+            return httpx.Response(200, json=answer('{"you_are_here": {"x": 100, "y": 100}, "final_exits": []}'))
         return httpx.Response(200, json=answer('{"you_are_here": [500, 500]}'))
 
     client, ledger = make_client(tmp_path, handler)
@@ -70,7 +71,7 @@ def test_read_plan_records_cost(tmp_path):
 
 
 def test_refine_null_keeps_first_guess(tmp_path):
-    answers = iter(['{"you_are_here": [100, 100], "exits": []}', '{"you_are_here": null}'])
+    answers = iter(['{"you_are_here": {"x": 100, "y": 100}, "final_exits": []}', '{"you_are_here": null}'])
 
     def handler(request):
         return httpx.Response(200, json=answer(next(answers)))

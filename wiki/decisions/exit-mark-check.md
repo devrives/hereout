@@ -90,3 +90,10 @@ The owner asked to test country hints (2026-10-28). The question was: one prompt
 - A filter that drops exits outside the box of the floor drawing does not work. The box of the model includes the legend. The filter also dropped a real exit.
 
 So country hints do not go into the product now. The errors that stay are positions and legend symbols, not knowledge of a country.
+
+## Product change
+
+- The owner approved the base prompt of the pilot for the product (2026-10-28). The prompt has the floor rule and no country hints.
+- `reader.py` sends this prompt in the first call. The answer has `floor_drawing`, `you_are_here` and `final_exits` in the Meta point and box format.
+- The zoomed second call for "you are here" did not change.
+- The mark check is not in the product. The owner did not want a third call.

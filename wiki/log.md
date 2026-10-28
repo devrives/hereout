@@ -101,3 +101,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/exit-mark-check.md`: the 20-call test of one prompt for all countries against one prompt for each country.
 - Source: the owner request of 2026-10-28 and the test outputs.
+
+## [2026-10-28] ingest | New read prompt in the product
+
+- Updated `decisions/exit-mark-check.md`: the first call uses the Meta-style prompt with the floor rule.
+- Source: the owner approval of 2026-10-28, `src/hereout/reader.py`.
