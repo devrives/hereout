@@ -34,6 +34,12 @@ def test_parse_drops_bad_points():
     assert r.plan_box is None
 
 
+def test_parse_clamps_a_small_miss():
+    r = parse_answer('{"you_are_here": [1001, -3], "exits": [{"x": 1008, "y": 500}, {"x": 1020, "y": 500}]}', 1000, 1000)
+    assert r.you_are_here == (1000, 0)
+    assert r.exits == [{"x": 1000, "y": 500, "label": ""}]
+
+
 def test_parse_needs_json():
     with pytest.raises(ModelError):
         parse_answer("sorry", 10, 10)

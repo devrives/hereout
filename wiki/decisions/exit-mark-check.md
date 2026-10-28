@@ -3,13 +3,15 @@ type: decision
 title: Check the exits with numbered marks
 status: proposed
 updated: 2026-10-28
-checked: 386176c
+checked: 77d443d
 sources:
   - owner:2026-10-27
   - owner:2026-10-28
   - src/hereout/reader.py
   - https://arxiv.org/abs/2310.11441
   - https://simonw.substack.com/p/metas-new-model-is-muse-spark-and
+  - https://dev.meta.ai/docs/image-understanding
+  - https://dev.meta.ai/docs/muse-spark-open/settings
 ---
 # Check the exits with numbered marks
 
@@ -45,3 +47,24 @@ sources:
 - On the 29 plans with a "you are here" point, the route counts did not change.
 - The check costs one more call for each plan, about 0.008 USD. The call can run at the same time as the zoomed "you are here" call.
 - The moved PT exits are still about 30 px outside the building line. The check makes the error smaller but does not remove it.
+
+## One call with a better prompt
+
+The owner did not want a second call for each plan (2026-10-28). The owner asked for a better read prompt that follows the Meta guidance.
+
+The Meta image understanding page gives these rules:
+
+- Muse Spark gives positions on a 0 to 1000 grid of the image that it received.
+- A point answer is `{"x": <int>, "y": <int>}`. A box answer is `x_min`, `y_min`, `x_max`, `y_max`.
+- Keep the request direct, and put it in the user message next to the image. Keep the system prompt small.
+- For boxes, the words "You are an object grounding expert" and "do not miss any objects" give better recall.
+- The model can give a value a little outside the grid, for example 1001. Clamp such a value.
+
+A pilot on 5 of the 30 plans used a prompt in this style:
+
+- A rule "use only the floor with the you are here mark" removed exits on other floors. On two station plans, the exits moved to the floor of the reader.
+- The exits on the legend went away.
+- PT-commons_000107: the bottom exits stayed on the pavement. The model said that it pointed to the exit signs. It gave one y value for all ten signs, 50 to 120 px below them.
+- PT-commons_000107 on a square image with a white border: the error was larger. So the aspect ratio of the image is not the cause.
+
+The parser now clamps a value from -10 to 1010 to the grid. It drops a value outside that range.

@@ -49,6 +49,18 @@ Coordinates are integers from 0 to 1000 of this crop: x from the left edge, y fr
 Answer with JSON only: {"you_are_here": [x, y]} or {"you_are_here": null} when the mark is not in this crop."""
 
 
+# The model can give a value a little outside 0 to 1000, for example 1001
+# (Meta image understanding docs). Such a value is clamped; a larger miss is dropped.
+GRID_SLACK = 10
+
+
+def on_grid(v) -> float:
+    v = float(v)
+    if not (-GRID_SLACK <= v <= 1000 + GRID_SLACK):
+        raise ValueError
+    return min(1000.0, max(0.0, v))
+
+
 class SpendCapReached(Exception):
     pass
 
@@ -141,10 +153,7 @@ def parse_answer(text: str, width: int, height: int) -> Reading:
         raise ModelError(f"bad JSON in the answer: {e}") from e
 
     def px(x, y):
-        x, y = float(x), float(y)
-        if not (0 <= x <= 1000 and 0 <= y <= 1000):
-            raise ValueError
-        return x / 1000 * width, y / 1000 * height
+        return on_grid(x) / 1000 * width, on_grid(y) / 1000 * height
 
     here = None
     yah = data.get("you_are_here")
@@ -274,9 +283,7 @@ class ModelClient:
         m = re.search(r"\{.*\}", text, re.S)
         try:
             p = json.loads(m.group(0)).get("you_are_here") if m else None
-            x, y = float(p[0]), float(p[1])
+            x, y = on_grid(p[0]), on_grid(p[1])
         except (TypeError, ValueError, IndexError, json.JSONDecodeError):
-            return None, cost
-        if not (0 <= x <= 1000 and 0 <= y <= 1000):
             return None, cost
         return (x0 + x / 1000 * cw, y0 + y / 1000 * ch), cost

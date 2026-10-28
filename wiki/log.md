@@ -86,3 +86,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/exit-mark-check.md`: research on coordinate formats, the failed local candidates, and the 30-plan test of a second call with numbered marks.
 - Updated `components/plan-reader.md`: the PT exit limit links the test.
 - Source: the owner requests of 2026-10-27 and 2026-10-28, and the test outputs.
+
+## [2026-10-28] ingest | Read prompt in the Meta style, clamp on the grid
+
+- Updated `decisions/exit-mark-check.md`: the Meta grounding rules, the 5-plan pilot of a one-call prompt, the square-image check, and the clamp.
+- Source: the owner request of 2026-10-28, the Meta image understanding page, `src/hereout/reader.py`.
