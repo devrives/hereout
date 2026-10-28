@@ -140,3 +140,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Created `decisions/ink-walls.md`: the test, the 7-plan check and the gallery count.
 - Source: the owner request of 2026-10-28, local branch `ink-walls`, the scratchpad evaluation.
+
+## [2026-10-28] ingest | Plan parsing methods to test
+
+- Created `concepts/plan-parsing-methods.md`: the research summary and the test order.
+- Source: the owner request of 2026-10-28, the hub folder `docs/hereout-plan-parsing-2026-10-28/`.

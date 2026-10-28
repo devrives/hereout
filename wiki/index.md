@@ -32,3 +32,5 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 ## Incidents
 
 ## Concepts
+
+- [Plan parsing methods to test](concepts/plan-parsing-methods.md): research of 2026-10-28 and the test order.
