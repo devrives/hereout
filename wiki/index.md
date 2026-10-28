@@ -21,6 +21,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Take the start from a tap, not from the model](decisions/start-from-tap.md): the model finds only the exits; the user taps the start.
 - [Follow the printed escape routes in the way network](decisions/printed-route-marks.md): rejected; the lines still crossed walls.
 - [Take the walls from all drawn ink](decisions/ink-walls.md): proposed; better on 2 of 7 plans, not on the gallery.
+- [Test the wall methods on a small ground truth](decisions/wall-method-tests.md): three scores on 7 plans and the result of each method.
 
 ## Timelines
 

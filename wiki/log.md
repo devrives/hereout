@@ -145,3 +145,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Created `concepts/plan-parsing-methods.md`: the research summary and the test order.
 - Source: the owner request of 2026-10-28, the hub folder `docs/hereout-plan-parsing-2026-10-28/`.
+
+## [2026-10-28] ingest | Wall method tests
+
+- Created `decisions/wall-method-tests.md`: the ground truth, the scores and the result of each method.
+- Source: the owner request of 2026-10-28, the test scripts of the session.
