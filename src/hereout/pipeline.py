@@ -31,21 +31,22 @@ class Plan:
     text: list = field(default_factory=list)  # the text boxes of the image
 
     @classmethod
-    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None, text: list | None = None) -> "Plan":
+    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None, text: list | None = None,
+           exits: list[dict] = ()) -> "Plan":
         text = text_boxes(image) if text is None else text
-        walls, soft, drawn = find_walls(image, plan_box, text)
+        walls, soft, drawn = find_walls(image, plan_box, text, exits)
         return cls(image, walls, changes or [], drawn, soft, text)
 
     def use_reading(self, reading: Reading) -> None:
-        """Find the walls again inside the box the model saw."""
-        if reading.plan_box is not None:
-            self.walls, self.soft, self.drawn = find_walls(self.image, reading.plan_box, self.text)
+        """Drop the exits in a legend, then find the walls again inside the box the model saw."""
+        reading.exits = drop_legend_exits(self.image, self.text, reading.exits, reading.plan_box)
+        self.walls, self.soft, self.drawn = find_walls(self.image, reading.plan_box, self.text, reading.exits)
 
 
-def find_walls(image: np.ndarray, plan_box, text: list) -> tuple[np.ndarray, np.ndarray, dict]:
+def find_walls(image: np.ndarray, plan_box, text: list, exits=()) -> tuple[np.ndarray, np.ndarray, dict]:
     """The hard walls, the soft lines, and the wall lines to draw."""
     _, drawn = plan_walls(image, plan_box)
-    walls, soft = ink_walls(image, plan_box, text)
+    walls, soft = ink_walls(image, plan_box, text, [(e["x"], e["y"]) for e in exits])
     return walls, soft, drawn
 
 
@@ -85,5 +86,4 @@ def read_marks(plan: Plan, client: ModelClient | None) -> tuple[Reading | None, 
     except ModelError as e:
         return None, str(e)
     plan.use_reading(reading)
-    reading.exits = drop_legend_exits(plan.image, plan.text, reading.exits, reading.plan_box)
     return reading, None

@@ -51,6 +51,7 @@ ARC_RADIUS = (0.01, 0.07)   # share of the image: the radius of a door arc
 ARC_SWEEP = (55, 125)       # degrees
 ARC_FIT = 0.12              # mean distance from the circle, as a share of the radius
 DOOR_CUT = 0.006            # share of the image: the width of the cut through a door
+EXIT_ROOM = 0.03            # share of the image: the paper around an exit that stays open
 
 _ocr = None
 _ocr_lock = threading.Lock()
@@ -282,8 +283,10 @@ def footprints(walls: np.ndarray, plan_box=None) -> np.ndarray | None:
     return fp > 0 if fp.any() else None
 
 
-def ink_walls(img: np.ndarray, plan_box=None, boxes=None) -> tuple[np.ndarray, np.ndarray]:
-    """The hard walls (with the outside of the drawings) and the soft lines."""
+def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.ndarray, np.ndarray]:
+    """The hard walls (with the outside of the drawings) and the soft lines.
+    exits: (x, y) points; the paper just around each exit stays open, because
+    an exit mark often sits just outside the outer wall, at its door."""
     side = max(img.shape[:2])
     ink = drawn_ink(img, plan_box, boxes)
     core, thin = split_strokes(ink, plan_box)
@@ -293,6 +296,10 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None) -> tuple[np.ndarray, n
     soft = grow(ink) & ~hard
     fp = footprints(hard | soft, plan_box)
     if fp is not None:
+        disc = np.zeros(ink.shape, np.uint8)
+        for x, y in exits:
+            cv2.circle(disc, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
+        fp |= disc > 0
         hard |= ~fp
         soft &= fp
     cut = np.zeros(ink.shape, np.uint8)
