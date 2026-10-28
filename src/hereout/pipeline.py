@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from .ink_walls import ink_walls, text_boxes
+from .legend import drop_legend_exits
 from .plan import rectify
 from .reader import ModelClient, ModelError, Reading, SpendCapReached
 from .wall_lines import plan_walls
@@ -43,8 +44,8 @@ class Plan:
 
 def find_walls(image: np.ndarray, plan_box, text: list) -> tuple[np.ndarray, np.ndarray, dict]:
     """The hard walls, the soft lines, and the wall lines to draw."""
-    lines, drawn = plan_walls(image, plan_box)
-    walls, soft = ink_walls(image, lines, plan_box, text)
+    _, drawn = plan_walls(image, plan_box)
+    walls, soft = ink_walls(image, plan_box, text)
     return walls, soft, drawn
 
 
@@ -84,4 +85,5 @@ def read_marks(plan: Plan, client: ModelClient | None) -> tuple[Reading | None, 
     except ModelError as e:
         return None, str(e)
     plan.use_reading(reading)
+    reading.exits = drop_legend_exits(plan.image, plan.text, reading.exits, reading.plan_box)
     return reading, None
