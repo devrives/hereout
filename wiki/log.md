@@ -135,3 +135,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Created `decisions/printed-route-marks.md`: the owner found no plan better, and the lines crossed walls before and after.
 - Source: the owner check of 2026-10-28, branch `route-marks`, the crossed-line count on the 7 review plans.
+
+## [2026-10-28] ingest | Walls from all drawn ink (test)
+
+- Created `decisions/ink-walls.md`: the test, the 7-plan check and the gallery count.
+- Source: the owner request of 2026-10-28, local branch `ink-walls`, the scratchpad evaluation.

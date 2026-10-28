@@ -20,6 +20,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Check the exits with numbered marks](decisions/exit-mark-check.md): a second call keeps, moves or drops each exit (proposed).
 - [Take the start from a tap, not from the model](decisions/start-from-tap.md): the model finds only the exits; the user taps the start.
 - [Follow the printed escape routes in the way network](decisions/printed-route-marks.md): rejected; the lines still crossed walls.
+- [Take the walls from all drawn ink](decisions/ink-walls.md): proposed; better on 2 of 7 plans, not on the gallery.
 
 ## Timelines
 
