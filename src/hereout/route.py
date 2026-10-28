@@ -25,6 +25,9 @@ GRID_SIDE = 320          # cells on the longest side
 BLOCK_SHARE = 0.25       # share of wall pixels that blocks a cell
 SNAP_SHARE = 0.06        # a mark may move this share of the grid to a free cell
 MARK_CLEAR_SHARE = 0.012 # the ink of a mark itself is not a wall within this radius
+SOFT_COST = 10.0         # extra cost of a cell on a soft line (a door swing, a dash): passable, not wanted
+SOFT_SHARE = 0.15        # share of soft-line pixels that makes a cell soft
+EXIT_REACH_SHARE = 0.015 # an exit reaches the open cells this close, on each side of the line it is on
 WALL_COST = 2.0          # extra cost next to a wall, fading with distance
 SQRT2 = math.sqrt(2)
 # Chamfer weights of a 3x3 distance transform that is close to Euclidean.
@@ -54,12 +57,26 @@ def blocked_grid(walls: np.ndarray) -> tuple[np.ndarray, float]:
     return share >= BLOCK_SHARE, scale
 
 
-def grid_payload(walls: np.ndarray) -> dict:
-    """The grid for the browser: blocked cells as packed bits, first bit high."""
+def pack(cells: np.ndarray) -> str:
+    return base64.b64encode(np.packbits(cells.ravel().astype(np.uint8)).tobytes()).decode()
+
+
+def soft_grid(soft: np.ndarray, blocked: np.ndarray) -> np.ndarray:
+    """The open cells on a soft line (a door swing, a dash), from the soft-line pixels."""
+    gh, gw = blocked.shape
+    share = cv2.resize(soft.astype(np.float32), (gw, gh), interpolation=cv2.INTER_AREA)
+    return (share >= SOFT_SHARE) & ~blocked
+
+
+def grid_payload(walls: np.ndarray, soft: np.ndarray | None = None) -> dict:
+    """The grid for the browser: blocked cells as packed bits, first bit high.
+    With soft lines, "soft" has the soft cells in the same form."""
     blocked, scale = blocked_grid(walls)
     gh, gw = blocked.shape
-    bits = np.packbits(blocked.ravel().astype(np.uint8))
-    return {"w": gw, "h": gh, "scale": scale, "bits": base64.b64encode(bits.tobytes()).decode()}
+    out = {"w": gw, "h": gh, "scale": scale, "bits": pack(blocked)}
+    if soft is not None and soft.any():
+        out["soft"] = pack(soft_grid(soft, blocked))
+    return out
 
 
 def wall_distance(blocked: np.ndarray) -> list[float]:
@@ -88,7 +105,8 @@ class Field:
     """Cost to the nearest exit and the next cell, for every open cell."""
 
     def __init__(self, blocked: np.ndarray, scale: float,
-                 exits: list[tuple[float, float]], clear: list[tuple[float, float]] = ()):
+                 exits: list[tuple[float, float]], clear: list[tuple[float, float]] = (),
+                 soft: np.ndarray | None = None):
         self.scale = scale
         self.exits = list(exits)
         gh, gw = blocked.shape
@@ -109,6 +127,10 @@ class Field:
         self.blocked = blocked.ravel().tolist()
         wd = wall_distance(blocked)
         self.cost = [1.0 + WALL_COST / (1.0 + v) for v in wd]
+        # A soft line (a door swing, a dash) can be crossed, at a cost.
+        if soft is not None:
+            for i in np.flatnonzero(soft.ravel()):
+                self.cost[i] += SOFT_COST
         self.dist = [math.inf] * (gw * gh)
         self.next = [-1] * (gw * gh)
         self.owner = [-1] * (gw * gh)  # the exit each cell leads to
@@ -117,11 +139,11 @@ class Field:
             return
         heap: list[tuple[float, int]] = []
         for k, e in enumerate(self.exits):
-            g = self.snap(e)
-            if g is not None and self.owner[g] < 0:
-                self.dist[g] = 0.0
-                self.owner[g] = k
-                heap.append((0.0, g))
+            for g, d in self.exit_cells(e):
+                if d < self.dist[g]:
+                    self.dist[g] = d
+                    self.owner[g] = k
+                    heap.append((d, g))
         heapq.heapify(heap)
         dist, nxt, owner, cost, blk = self.dist, self.next, self.owner, self.cost, self.blocked
         while heap:
@@ -173,6 +195,25 @@ class Field:
         if best is None or math.sqrt(best_d2) > limit:
             return None
         return best
+
+    def exit_cells(self, e: tuple[float, float]) -> list[tuple[int, float]]:
+        """The open cells that an exit reaches at once, with their distance in cells.
+        An exit mark is often on a wall line or just outside it: it reaches the open
+        cells near it on each side, so no hole is cut in the wall. With no open
+        cell that close, the exit snaps to the nearest open cell."""
+        r0, c0 = self.to_cell(e)
+        reach = EXIT_REACH_SHARE * max(self.gw, self.gh)
+        span = int(reach)
+        out = []
+        for r in range(max(0, r0 - span), min(self.gh, r0 + span + 1)):
+            for c in range(max(0, c0 - span), min(self.gw, c0 + span + 1)):
+                d = math.sqrt((r - r0) ** 2 + (c - c0) ** 2)
+                if d <= reach and not self.blocked[r * self.gw + c]:
+                    out.append((r * self.gw + c, d))
+        if out:
+            return out
+        g = self.snap(e)
+        return [] if g is None else [(g, 0.0)]
 
     def route(self, start: tuple[float, float]) -> Route:
         if not self.exits:

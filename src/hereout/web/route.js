@@ -7,6 +7,8 @@
 const HereOutRoute = (() => {
   const SNAP_SHARE = 0.06;
   const MARK_CLEAR_SHARE = 0.012;
+  const SOFT_COST = 10.0;  // extra cost of a cell on a soft line, as in route.py
+  const EXIT_REACH_SHARE = 0.015;  // an exit reaches the open cells this close, on each side of its line
   const WALL_COST = 2.0;
   const CHAMFER_A = 0.955, CHAMFER_B = 1.3693;
   const FAR = 1e9;
@@ -123,8 +125,10 @@ const HereOutRoute = (() => {
 
   // Cost to the nearest exit and the next cell, for every open cell.
   class Field {
-    constructor(blocked, gw, gh, scale, exits, clear = []) {
-      Object.assign(this, { gw, gh, scale, exits });
+    // soft: the cells of soft lines (door swings, dashes), or null. They can
+    // be crossed, at a cost; a straight line of the map never crosses them.
+    constructor(blocked, gw, gh, scale, exits, clear = [], soft = null) {
+      Object.assign(this, { gw, gh, scale, exits, soft });
       blocked = Uint8Array.from(blocked);
       // A start can sit on ink, for example the plan's own "you are here"
       // dot: clear a small disc so it does not wall in its own point. An exit gets no disc, as in route.py: a disc
@@ -144,16 +148,16 @@ const HereOutRoute = (() => {
       this.wd = wd;
       const n = gw * gh;
       const cost = new Float64Array(n);
-      for (let i = 0; i < n; i++) cost[i] = 1.0 + WALL_COST / (1.0 + wd[i]);
+      for (let i = 0; i < n; i++) cost[i] = 1.0 + WALL_COST / (1.0 + wd[i]) + (soft && soft[i] ? SOFT_COST : 0);
       const dist = new Float64Array(n).fill(Infinity);
       const next = new Int32Array(n).fill(-1);
       const owner = new Int32Array(n).fill(-1);
       Object.assign(this, { dist, next, owner });
 
       const heap = new Heap();
-      exits.forEach((e, k) => {
-        const g = this.snap(e);
-        if (g !== null && owner[g] < 0) { dist[g] = 0; owner[g] = k; heap.push(0, g); }
+      this.seeds = exits.map((e) => this.exitCells(e));
+      this.seeds.forEach((cells, k) => {
+        for (const [g, d] of cells) if (d < dist[g]) { dist[g] = d; owner[g] = k; heap.push(d, g); }
       });
       while (heap.size) {
         const [d, i] = heap.pop();
@@ -199,6 +203,25 @@ const HereOutRoute = (() => {
       }
       if (best === null || Math.sqrt(bestD2) > limit) return null;
       return best;
+    }
+
+    // The open cells that an exit reaches at once, with their distance in
+    // cells, as in route.py: on each side of the line the exit is on, so no
+    // hole is cut in the wall. Else the nearest open cell.
+    exitCells(e) {
+      const [r0, c0] = this.toCell(e);
+      const reach = EXIT_REACH_SHARE * Math.max(this.gw, this.gh);
+      const span = Math.trunc(reach);
+      const out = [];
+      for (let r = Math.max(0, r0 - span); r < Math.min(this.gh, r0 + span + 1); r++) {
+        for (let c = Math.max(0, c0 - span); c < Math.min(this.gw, c0 + span + 1); c++) {
+          const d = Math.sqrt((r - r0) ** 2 + (c - c0) ** 2);
+          if (d <= reach && !this.blocked[r * this.gw + c]) out.push([r * this.gw + c, d]);
+        }
+      }
+      if (out.length) return out;
+      const g = this.snap(e);
+      return g === null ? [] : [[g, 0]];
     }
 
     route(start) {
@@ -249,10 +272,10 @@ const HereOutRoute = (() => {
 
     // Is there a way from a start to exit k?
     reaches(start, k) {
-      const s = this.snap(start), g = this.snap(this.exits[k]);
-      if (s === null || g === null) return false;
+      const s = this.snap(start);
+      if (s === null) return false;
       const area = this.areas();
-      return area[s] === area[g];
+      return this.seeds[k].some(([g]) => area[g] === area[s]);
     }
 
     // The ways out as straight lines. Browser only.
@@ -305,22 +328,24 @@ const HereOutRoute = (() => {
   const NODE_GAP = 2.5;         // cells; doors and exits closer than this are one node
   const TRUNK = 1.2;            // a way costs its length to this power, so near ways join into one line
   const LINE_EPS = 1.2;         // cells off the straight line that a way can be
+  const LONG_MIDDLE = 0.08;     // share of the plan: a room middle this far from the next node draws its line
 
   class Network {
     constructor(field) {
       const { gw, gh } = field;
       const n = gw * gh;
       this.field = field;
+      this.planSide = Math.max(gw, gh) / field.scale;
       // Open: the cells with a way to an exit. The walls are lines already,
       // with no text or symbols, so every blocked cell is a wall.
       const open = new Uint8Array(n);
       for (let i = 0; i < n; i++) open[i] = field.owner[i] >= 0 ? 1 : 0;
-      const ink = field.blocked;
+      const ink = inkOf(field);
       this.open = open;
       this.ink = ink;
-      this.wd = wallDistance(ink, gw, gh);
+      this.wd = wallDistance(field.blocked, gw, gh);
       this.cost = new Float64Array(n);
-      for (let i = 0; i < n; i++) this.cost[i] = 1.0 + WALL_COST / (1.0 + this.wd[i]);
+      for (let i = 0; i < n; i++) this.cost[i] = 1.0 + WALL_COST / (1.0 + this.wd[i]) + (field.soft && field.soft[i] ? SOFT_COST : 0);
       this.findRooms();
 
       // Nodes: exits, doors, the middle of each room.
@@ -338,9 +363,23 @@ const HereOutRoute = (() => {
         this.nodeAt[node.cell] = nodes.length;
         nodes.push(node);
       };
+      // An exit gets a node in each room that it reaches at once: the
+      // reached cell nearest to it.
       field.exits.forEach((e, k) => {
-        const g = field.snap(e);
-        if (g !== null && open[g]) add({ cell: g, px: [...e], rooms: [this.room[g]], exit: k });
+        const best = new Map();
+        for (const [g, d] of field.seeds[k]) {
+          if (!open[g]) continue;
+          const r = this.room[g];
+          if (!best.has(r) || d < best.get(r)[1]) best.set(r, [g, d]);
+        }
+        // The node is drawn at the exit mark when the mark is in that room or
+        // on ink; else at the reached cell, so no line crosses the wall.
+        const [er, ec] = field.toCell(e);
+        const at = er * gw + ec;
+        for (const [r, [g]] of best) {
+          const px = field.blocked[at] || this.room[at] === r ? [...e] : field.toPx(g);
+          add({ cell: g, px, rooms: [r], exit: k });
+        }
       });
       for (const d of this.doors) add({ cell: d.cell, px: field.toPx(d.cell), rooms: d.rooms });
       for (const [room, cell] of this.middles) add({ cell, px: field.toPx(cell), rooms: [room], middle: true });
@@ -389,7 +428,7 @@ const HereOutRoute = (() => {
 
     static fromData(field, d) {
       const net = Object.create(Network.prototype);
-      Object.assign(net, d, { field, ink: field.blocked, nextRooms: new Map(d.nextRooms), middles: new Map(d.middles),
+      Object.assign(net, d, { field, ink: inkOf(field), planSide: Math.max(field.gw, field.gh) / field.scale, nextRooms: new Map(d.nextRooms), middles: new Map(d.middles),
                               byRoom: new Map(d.byRoom), edges: d.edges.map((e) => new Map(e)), trees: new Map() });
       Object.assign(net, net.tree(-1));
       return net;
@@ -424,7 +463,11 @@ const HereOutRoute = (() => {
         // The map shows the ways between doors and exits. A room middle or a
         // door with nothing behind it draws no line, unless the door leads
         // straight to an exit: such ends stop in the open.
-        if (next[i] < 0 || (below[i] === 1 && (nodes[i].middle || nodes[next[i]].exit === undefined))) continue;
+        // A long room, such as a corridor, draws the line from its middle:
+        // that line is the main way of the room.
+        if (next[i] < 0) continue;
+        const longWay = nodes[i].middle && polyLength([nodes[i].px, nodes[next[i]].px]) >= LONG_MIDDLE * this.planSide;
+        if ((below[i] === 1 && !longWay && (nodes[i].middle || nodes[next[i]].exit === undefined))) continue;
         const pts = this.edges[i].get(next[i]).pts;
         for (let k = 0; k < pts.length - 1; k++) legs.push({ a: pts[k], b: pts[k + 1], flow: below[i] });
       }
@@ -635,9 +678,17 @@ const HereOutRoute = (() => {
       }
       pts.splice(0, pts.length, ...tight.map((j) => pts[j]));
       const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6);
-      if (out.length === 1) out.push([...f.exits[k]]);
+      // The route ends at the exit mark, also when its node is the reached
+      // cell on the inner side of the wall line that the mark is on.
+      if (out.length === 1 || dist(out[out.length - 1], f.exits[k]) > 1e-6) out.push([...f.exits[k]]);
       return { points: out, exitIndex: k, onNetwork: true };
     }
+  }
+
+  // The cells that a straight line of the map may not cross: walls and soft lines.
+  function inkOf(field) {
+    if (!field.soft) return field.blocked;
+    return field.blocked.map((b, i) => (b || field.soft[i] ? 1 : 0));
   }
 
   const polyLength = (pts) => pts.slice(1).reduce((a, q, i) => a + dist(q, pts[i]), 0);

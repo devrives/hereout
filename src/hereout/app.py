@@ -69,7 +69,7 @@ def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None
     """The response for a new plan: the flat image, the marks, the wall grid and the wall lines."""
     h, w = plan.image.shape[:2]
     out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
-           "exits": [], "grid": grid_payload(plan.walls), "walls": plan.drawn, "model_error": err}
+           "exits": [], "grid": grid_payload(plan.walls, plan.soft), "walls": plan.drawn, "model_error": err}
     if reading:
         out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
     return out

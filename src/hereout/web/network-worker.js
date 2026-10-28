@@ -2,7 +2,7 @@
 
 // Makes the way network of a plan (route.js) off the main thread, so the
 // page does not stop while it is made. The page sends the grid, the exits
-// and the marks, and the URL of route.js with its content hash.
+// and the soft lines, and the URL of route.js with its content hash.
 let loaded = "";
 
 onmessage = (ev) => {
@@ -12,7 +12,8 @@ onmessage = (ev) => {
     loaded = routeUrl;
   }
   const R = HereOutRoute;
-  const field = new R.Field(R.decodeGrid(grid), grid.w, grid.h, grid.scale, exits);
+  const field = new R.Field(R.decodeGrid(grid), grid.w, grid.h, grid.scale, exits, [],
+                            grid.soft ? R.decodeGrid({ ...grid, bits: grid.soft }) : null);
   const data = field.network().toData();
   postMessage({ id, data }, [data.room.buffer, data.nodeAt.buffer, data.open.buffer, data.wd.buffer, data.cost.buffer]);
 };

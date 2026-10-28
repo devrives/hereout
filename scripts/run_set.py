@@ -39,7 +39,7 @@ import numpy as np
 
 from hereout.pipeline import Plan, decode_photo, prepare, read_marks
 from hereout.reader import ModelClient, Reading
-from hereout.route import Field, blocked_grid
+from hereout.route import Field, blocked_grid, soft_grid
 
 THUMB_SIDE = 360
 RETRIES = 3
@@ -91,7 +91,7 @@ def route_result(image_path: Path, reading: Reading) -> dict:
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     plan = Plan.of(image, reading.plan_box)
     blocked, scale = blocked_grid(plan.walls)
-    field = Field(blocked, scale, [(e["x"], e["y"]) for e in reading.exits])
+    field = Field(blocked, scale, [(e["x"], e["y"]) for e in reading.exits], soft=soft_grid(plan.soft, blocked))
     owner = np.array(field.owner).reshape(blocked.shape)
     inside = ~blocked
     if reading.plan_box:

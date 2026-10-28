@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from .ink_walls import ink_walls, text_boxes
 from .plan import rectify
 from .reader import ModelClient, ModelError, Reading, SpendCapReached
 from .wall_lines import plan_walls
@@ -25,16 +26,26 @@ class Plan:
     walls: np.ndarray                  # the walls to route in
     changes: list[str] = field(default_factory=list)  # what was done to the photo
     drawn: dict = field(default_factory=dict)  # the walls to draw: straight lines and filled blocks
+    soft: np.ndarray | None = None     # soft lines: door swings and dashes, passable at a cost
+    text: list = field(default_factory=list)  # the text boxes of the image
 
     @classmethod
-    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None) -> "Plan":
-        walls, drawn = plan_walls(image, plan_box)
-        return cls(image, walls, changes or [], drawn)
+    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None, text: list | None = None) -> "Plan":
+        text = text_boxes(image) if text is None else text
+        walls, soft, drawn = find_walls(image, plan_box, text)
+        return cls(image, walls, changes or [], drawn, soft, text)
 
     def use_reading(self, reading: Reading) -> None:
         """Find the walls again inside the box the model saw."""
         if reading.plan_box is not None:
-            self.walls, self.drawn = plan_walls(self.image, reading.plan_box)
+            self.walls, self.soft, self.drawn = find_walls(self.image, reading.plan_box, self.text)
+
+
+def find_walls(image: np.ndarray, plan_box, text: list) -> tuple[np.ndarray, np.ndarray, dict]:
+    """The hard walls, the soft lines, and the wall lines to draw."""
+    lines, drawn = plan_walls(image, plan_box)
+    walls, soft = ink_walls(image, lines, plan_box, text)
+    return walls, soft, drawn
 
 
 def decode_photo(data: bytes) -> np.ndarray:

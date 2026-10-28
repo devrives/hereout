@@ -66,5 +66,6 @@ class Gallery:
             notes=r.get("notes", ""),
             plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None,
         )
-        plan = Plan.of(image, reading.plan_box)
+        # Saved text boxes spare the OCR on each open.
+        plan = Plan.of(image, reading.plan_box, text=item.get("text_boxes"))
         return plan, reading, item
