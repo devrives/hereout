@@ -11,7 +11,7 @@
 <body>
 <header>
   <h1>HereOut</h1>
-  <p>In front of an evacuation plan you don't know? Take a photo and see a route from "you are here" to the nearest exit, drawn on the plan.</p>
+  <p>In front of an evacuation plan you don't know? Take a photo, tap where you stand and see a route to the nearest exit, drawn on the plan.</p>
 </header>
 <main>
   <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
@@ -23,7 +23,7 @@
 
 
   <section id="result" hidden aria-labelledby="result-head">
-    <h2 id="result-head" tabindex="-1">Your route</h2>
+    <h2 id="result-head" tabindex="-1">Plan and route</h2>
     <div class="view" role="group" aria-label="What the plan shows">
       <button id="show-map" type="button" aria-pressed="true">Escape map</button>
       <button id="show-photo" type="button" aria-pressed="false">Photo only</button>
@@ -40,11 +40,11 @@
       <span><i class="sw-route" aria-hidden="true"></i>Your route</span>
       <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
     </div>
-    <p id="tap-hint" class="hint">Tap any open spot on the plan to see the route from there.<span id="kbd-hint" hidden></span></p>
+    <p id="tap-hint" class="hint"><span id="tap-text">Tap any open spot on the plan to see the route from there.</span><span id="kbd-hint" hidden></span></p>
     <p id="plan-status" class="plan-status" role="status" aria-live="polite"></p>
+    <p id="marker-status" class="sr" role="status" aria-live="polite"></p>
     <div class="fix">
       <button id="fix" type="button">Mark the exit</button>
-      <button id="to-mark" type="button" hidden>Start at "you are here"</button>
       <button id="found-exits" type="button" hidden>Use the exits HereOut found</button>
       <span id="fix-hint" hidden>Tap the exit on the plan. HereOut then routes to that exit only.</span>
     </div>

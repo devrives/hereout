@@ -6,13 +6,13 @@
 let loaded = "";
 
 onmessage = (ev) => {
-  const { id, routeUrl, grid, exits, clear } = ev.data;
+  const { id, routeUrl, grid, exits } = ev.data;
   if (loaded !== routeUrl) {
     importScripts(routeUrl);
     loaded = routeUrl;
   }
   const R = HereOutRoute;
-  const field = new R.Field(R.decodeGrid(grid), grid.w, grid.h, grid.scale, exits, clear);
+  const field = new R.Field(R.decodeGrid(grid), grid.w, grid.h, grid.scale, exits);
   const data = field.network().toData();
   postMessage({ id, data }, [data.room.buffer, data.nodeAt.buffer, data.open.buffer, data.wd.buffer, data.cost.buffer]);
 };

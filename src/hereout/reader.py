@@ -1,4 +1,7 @@
-"""Ask Muse Spark where "you are here" and the exits are.
+"""Ask Muse Spark where the exits are.
+
+The model gives only the exits and the box of the floor drawing. The user sets the
+start with a tap: "you are here" does not come from the model (owner, 2026-10-28).
 
 Every model call goes through ModelClient, which keeps a spend ledger on disk
 and refuses a call that could take the total over the cap. A spend notice from
@@ -13,7 +16,6 @@ import json
 import os
 import re
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,8 +28,7 @@ DEFAULT_MODEL = "meta-models/muse-spark-open-1026"
 MAX_IMAGE_SIDE = 1600
 MAX_TOKENS = 12000  # the model reasons first; the answer itself is short
 # Low reasoning effort: on 30 gallery plans it was 1.9 times faster and 2.5
-# times cheaper than the default, and 29 of 30 "you are here" points stayed
-# within 5 percent of the image side (with the zoomed second look).
+# times cheaper than the default, with the same points.
 DEFAULT_EFFORT = "low"
 USER_AGENT = "HereOut/0.1 (+https://hereout.devrives.com/)"
 
@@ -36,22 +37,14 @@ USER_AGENT = "HereOut/0.1 (+https://hereout.devrives.com/)"
 # (wiki/decisions/exit-mark-check.md). On a plan with several levels, every level gets its exits.
 PROMPT = """You are an object grounding expert. This is a photo of a posted evacuation plan (fire escape plan).
 Point to these objects in the image:
-- "you are here": the point where the reader of the plan stands. It is a dot, a star or a pin, often with text such as "You are here", "Vous etes ici", "Sie sind hier", "Standort", or the same in any language. When a label has a pointer, a tail or a line, point to where the pointer ends, not to the label.
 - "final exit": the end of each escape route on this floor. That is a door in the outer wall of the building, or the door of a protected staircase. Escape arrows end there. Point just inside that door, on the floor of the building. When an exit sign stands at that door, point to the sign. Never point to the street, the pavement, the paper outside the building or the legend. Never point to the middle of an arrow or a corridor. A running-man sign along a corridor, with the route going on past it, is not a final exit.
 Also give the bounding box of "floor drawing": the drawing of the floor itself, without the title, the legend, the text blocks and the small site map.
 When the plan shows more than one floor or level, point to the final exits of every floor. On a level with no exit to the outside, the stairs or escalators that lead up toward the exits are its final exits.
 Do not miss any final exit.
 The coordinates should be integers in the 0-1000 range of the whole image: x from the left edge, y from the top edge.
 Answer with JSON only, in this format:
-{"floor_drawing": {"x_min": <int>, "y_min": <int>, "x_max": <int>, "y_max": <int>}, "you_are_here": {"x": <int>, "y": <int>}, "final_exits": [{"x": <int>, "y": <int>, "label": "<short text>"}], "notes": "<one short sentence>"}
-If you cannot find "you are here", give null for it."""
+{"floor_drawing": {"x_min": <int>, "y_min": <int>, "x_max": <int>, "y_max": <int>}, "final_exits": [{"x": <int>, "y": <int>, "label": "<short text>"}], "notes": "<one short sentence>"}"""
 
-
-REFINE_CROP = 0.35  # side of the zoomed crop, as a share of the long side
-REFINE_PROMPT = """This is a zoomed part of a posted evacuation plan. It shows the "you are here" mark (a dot, star or pin, or a label with a pointer or line, with text such as "You are here" in any language).
-Give the exact point where the reader stands: the dot itself, or the end of the pointer or line, not the label text.
-Coordinates are integers from 0 to 1000 of this crop: x from the left edge, y from the top edge.
-Answer with JSON only: {"you_are_here": [x, y]} or {"you_are_here": null} when the mark is not in this crop."""
 
 
 # The model can give a value a little outside 0 to 1000, for example 1001
@@ -185,7 +178,6 @@ class SpendLedger:
 
 @dataclass
 class Reading:
-    you_are_here: tuple[float, float] | None   # image pixels
     exits: list[dict] = field(default_factory=list)  # {"x", "y", "label"} in image pixels
     notes: str = ""
     cost_usd: float = 0.0
@@ -217,13 +209,6 @@ def parse_answer(text: str, width: int, height: int) -> Reading:
     def px(x, y):
         return on_grid(x) / 1000 * width, on_grid(y) / 1000 * height
 
-    here = None
-    yah = data.get("you_are_here")
-    if isinstance(yah, dict):
-        try:
-            here = px(yah["x"], yah["y"])
-        except (KeyError, TypeError, ValueError):
-            here = None
     exits = []
     for e in data.get("final_exits") or []:
         try:
@@ -243,7 +228,7 @@ def parse_answer(text: str, width: int, height: int) -> Reading:
         except (KeyError, TypeError, ValueError):
             pass
 
-    return Reading(here, exits, str(data.get("notes", ""))[:200], plan_box=box)
+    return Reading(exits, str(data.get("notes", ""))[:200], plan_box=box)
 
 
 class ModelClient:
@@ -318,43 +303,13 @@ class ModelClient:
         if not refine:
             return reading
         suspects = suspect_exits(img, reading.exits)
-        # The two second looks are separate calls at the same time, so the zoom adds no wait.
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            here_job = pool.submit(self.refine_here, img, reading.you_are_here) if reading.you_are_here else None
-            zoom_job = pool.submit(self.zoom_exits, img, reading.exits, suspects) if suspects else None
-            if here_job:
-                try:
-                    point, extra = here_job.result()
-                except (ModelError, SpendCapReached):
-                    point, extra = None, 0.0
+        if suspects:
+            try:
+                reading.exits, extra = self.zoom_exits(img, reading.exits, suspects)
                 reading.cost_usd += extra
-                if point is not None:
-                    reading.you_are_here = point
-            if zoom_job:
-                try:
-                    exits, extra = zoom_job.result()
-                except (ModelError, SpendCapReached):
-                    exits, extra = reading.exits, 0.0
-                reading.cost_usd += extra
-                reading.exits = exits
+            except (ModelError, SpendCapReached):
+                pass
         return reading
-
-    def refine_here(self, img: np.ndarray, guess: tuple[float, float]) -> tuple[tuple[float, float] | None, float]:
-        """Look again at a zoomed crop around the first guess."""
-        h, w = img.shape[:2]
-        side = round(REFINE_CROP * max(h, w))
-        x0 = int(min(max(0, guess[0] - side / 2), max(0, w - side)))
-        y0 = int(min(max(0, guess[1] - side / 2), max(0, h - side)))
-        crop = img[y0:y0 + side, x0:x0 + side]
-        ch, cw = crop.shape[:2]
-        text, cost, _ = self._ask(REFINE_PROMPT, crop)
-        m = re.search(r"\{.*\}", text, re.S)
-        try:
-            p = json.loads(m.group(0)).get("you_are_here") if m else None
-            x, y = on_grid(p[0]), on_grid(p[1])
-        except (TypeError, ValueError, IndexError, json.JSONDecodeError):
-            return None, cost
-        return (x0 + x / 1000 * cw, y0 + y / 1000 * ch), cost
 
     def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]) -> tuple[list[dict], float]:
         """Look again at crops around the suspect exits. Returns the exits after the look and its cost."""

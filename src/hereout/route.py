@@ -93,8 +93,8 @@ class Field:
         self.exits = list(exits)
         gh, gw = blocked.shape
         self.gw, self.gh = gw, gh
-        # A "you are here" dot is ink too. Clear a small disc so the mark
-        # does not wall in its own point. An exit gets no disc: it is often on
+        # A start can sit on ink, for example the plan's own "you are here"
+        # dot. Clear a small disc so the mark does not wall in its own point. An exit gets no disc: it is often on
         # a wall line, and a disc would cut a door into the wall. It snaps to
         # the nearest open cell instead.
         blocked = blocked.copy()

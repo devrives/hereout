@@ -19,6 +19,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 body {
   margin: 0;
   background: var(--bg);

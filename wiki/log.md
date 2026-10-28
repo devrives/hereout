@@ -123,3 +123,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/exit-mark-check.md`: the owner check of the review set and the test of the rule for every level (branch `exit-level-rule`).
 - Updated `components/plan-reader.md`: the known limits after the exit zoom.
 - Source: the owner check of 2026-10-28 and the test outputs.
+
+## [2026-10-28] ingest | Start from a tap, exits of every level on main
+
+- Created `decisions/start-from-tap.md`: the model gives no start, and the gallery check has no start.
+- Updated `components/plan-reader.md`: the read stage and the second call.
+- Updated `decisions/exit-mark-check.md`: the rule for every level is on main.
+- Source: the owner words of 2026-10-28, `src/hereout/reader.py`, `src/hereout/web/app.js`, `scripts/run_set.py`.

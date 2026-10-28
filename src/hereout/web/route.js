@@ -126,8 +126,8 @@ const HereOutRoute = (() => {
     constructor(blocked, gw, gh, scale, exits, clear = []) {
       Object.assign(this, { gw, gh, scale, exits });
       blocked = Uint8Array.from(blocked);
-      // A "you are here" dot is ink too: clear a small disc so it does not
-      // wall in its own point. An exit gets no disc, as in route.py: a disc
+      // A start can sit on ink, for example the plan's own "you are here"
+      // dot: clear a small disc so it does not wall in its own point. An exit gets no disc, as in route.py: a disc
       // would cut a door into the wall that the exit is on.
       const radius = MARK_CLEAR_SHARE * Math.max(gw, gh);
       const span = Math.trunc(radius) + 1;

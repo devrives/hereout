@@ -46,19 +46,17 @@ function remember() {
 
 const exitPoints = () => state.exits.map((e) => [e.x, e.y]);
 
-// The escape field for the current exits. The ink of the "you are here"
-// mark is not a wall.
+// The escape field for the current exits.
 function buildField() {
   const g = state.grid;
   const blocked = R.decodeGrid(g);
-  const clear = state.here ? [state.here] : [];
-  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, clear);
+  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits);
   const field = make(exitPoints());
   const single = new Map();  // a field to one exit, made when the user picks that exit
   view = { field, layer: null, walls: null, route: null, steps: [], error: null,
            toExit: (i) => { if (!single.has(i)) single.set(i, make([exitPoints()[i]])); return single.get(i); } };
   view.reachable = field.owner.some((o) => o >= 0);
-  if (view.reachable) makeNetwork(field, clear);
+  if (view.reachable) makeNetwork(field);
 }
 
 // The ways out take about a second to make on a phone, so a worker makes
@@ -69,7 +67,7 @@ let networkJob = 0;
 let networkReady = null;  // the callback of the newest job
 const scriptUrl = (sel) => { const el = document.querySelector(sel); return el && (el.src || el.href); };
 
-function makeNetwork(field, clear) {
+function makeNetwork(field) {
   const job = ++networkJob;
   field.waitForNetwork = true;
   const ready = (data) => {
@@ -81,7 +79,8 @@ function makeNetwork(field, clear) {
     update();
     if (exitAt >= 0) $("exits").children[exitAt]?.focus();
     // The status said "Finding the route…": now it names the route.
-    explain(view.pendingHow || startKind());
+    // With no start, the instruction is already there: do not read it again.
+    if (state.start) explain(view.pendingHow || undefined);
     view.pendingHow = null;
   };
   networkReady = ready;
@@ -93,7 +92,7 @@ function makeNetwork(field, clear) {
     }
     const g = state.grid;
     worker.postMessage({ id: job, routeUrl: scriptUrl('script[src*="/static/route.js"]'),
-                         grid: { w: g.w, h: g.h, scale: g.scale, bits: g.bits }, exits: exitPoints(), clear });
+                         grid: { w: g.w, h: g.h, scale: g.scale, bits: g.bits }, exits: exitPoints() });
   } catch (e) {
     worker = null;
     setTimeout(() => ready(null), 0);
@@ -232,7 +231,7 @@ function draw() {
 }
 
 function drawMarks(unit) {
-  // Exit and "you are here" differ in shape and label, not only in colour.
+  // Exit and the start (YOU) differ in shape and label, not only in colour.
   const here = state.start;
   const used = view.route ? view.route.exitIndex : -1;
   state.exits.forEach((e, i) => exitMark(e.x, e.y, unit * 2.2, i + 1, i === used));
@@ -468,8 +467,9 @@ function update() {
   draw();
   showSteps();
   showExits();
-  $("to-mark").hidden = !state.here || !state.start || startKind() === "mark";
   $("found-exits").hidden = !state.exitsMarked || !state.foundExits.length;
+  // With no start, the status line gives the same instruction.
+  $("tap-text").hidden = !state.start;
   showLegend();
 }
 
@@ -492,23 +492,20 @@ const ROUTE_ERRORS = {
   "no open way to an exit": "HereOut found no way from that spot to an exit in this photo. Try a spot in a corridor.",
   "every exit is inside a wall": 'HereOut reads every exit as part of a wall. Tap "Mark the exit" and mark one in a doorway.',
 };
-const MARK_ERRORS = {
-  "start is inside a wall": 'HereOut reads "you are here" as wall. Tap where you are.',
-  "no open way to an exit": 'HereOut found no way from "you are here" to an exit in this photo. Tap a spot in a corridor near it.',
-};
-
-// Is the start the plan's own "you are here" mark, or a spot the user chose?
-const startKind = () => (state.here && state.start && state.start[0] === state.here[0] &&
-  state.start[1] === state.here[1] ? "mark" : "tap");
-
-// how: "mark" (the plan's "you are here"), "tap" (a start the user chose) or "exit" (an exit the user marked).
-function explain(how) {
+// how: "tap" (a start the user chose) or "exit" (an exit the user marked).
+function explain(how = "tap") {
   if (!state.exits.length) {
     sayPlan(state.model_error
       ? 'Could not read the plan. Tap "Mark the exit" and mark it, then tap where you are.'
       : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
+  } else if (!state.start && how === "exit") {
+    sayPlan(view.reachable ? "Exit marked. Now tap where you are on the plan."
+                           : "HereOut reads that exit as wall. Mark it in a doorway.");
   } else if (!state.start) {
-    sayPlan('No "you are here" mark found. Tap where you are on the plan.');
+    // A sample is not where the user stands: its own mark is the natural start.
+    sayPlan(state.credit
+      ? 'Tap the plan\'s own "you are here" mark, or any open spot, to see the route to the nearest exit.'
+      : "Tap where you are on the plan to see the route to the nearest exit.");
   } else if (view.pending) {
     view.pendingHow = how;
     sayPlan(FINDING);
@@ -518,15 +515,13 @@ function explain(how) {
     sayPlan(`HereOut found no way to the exit you marked. Mark it at a doorway${
       state.foundExits.length ? ", or use the exits HereOut found" : ""}.`);
   } else if (view.error) {
-    sayPlan((how === "mark" && MARK_ERRORS[view.error]) || ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
-  } else if (how === "exit") {
+    sayPlan(ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
+  } else if (how === "exit" || state.exitsMarked) {
     sayPlan("Route to the exit you marked. Check it against the plan.");
   } else if (state.exitChoice >= 0) {
     sayPlan(`Route to ${exitName(state.exitChoice)}. Check it against the plan.`);
-  } else if (how === "tap") {
-    sayPlan("Route from the spot you chose to the nearest exit. Check it against the plan.");
   } else {
-    sayPlan('Route from "you are here" to the nearest exit. Check it against the plan.');
+    sayPlan("Route from the spot you chose to the nearest exit. Check it against the plan.");
   }
 }
 
@@ -571,7 +566,7 @@ function stopMarking() {
 }
 
 $("fix").addEventListener("click", (ev) => {
-  if (marking) { stopMarking(); explain(startKind()); return; }
+  if (marking) { stopMarking(); explain(); return; }
   startMarking();
   // A click from Enter or Space has detail 0: go on with the keyboard.
   if (ev.detail === 0) canvas.focus();
@@ -612,17 +607,8 @@ $("found-exits").addEventListener("click", () => {
   buildField();
   update();
   remember();
-  explain(startKind());
+  explain();
   $("fix").focus();  // this button is hidden now
-});
-
-$("to-mark").addEventListener("click", () => {
-  state.start = [...state.here];
-  state.exitChoice = -1;
-  update();
-  remember();
-  explain("mark");
-  $("steps").focus();  // this button is hidden now
 });
 
 function hints() {
@@ -636,10 +622,11 @@ function hints() {
 
 function showPlan(answer, focusResult, push) {
   state = answer;
-  if (state.start === undefined) state.start = state.here;
+  if (state.start === undefined) state.start = null;
   if (state.exitChoice === undefined) state.exitChoice = -1;
   if (state.foundExits === undefined) state.foundExits = state.exits.map((e) => ({ ...e }));
   say("");
+  sayPlan("");  // the same instruction for the next plan is then a change, and is read
   stopMarking();
   cursor = null;
   keyboard = false;
@@ -648,7 +635,7 @@ function showPlan(answer, focusResult, push) {
     buildField();
     showCredit();
     update();
-    explain(startKind());
+    explain();
     if ($("stage").classList.contains("big")) centreOnStart();
     markOpenSample(push);
     if (focusResult) {
@@ -811,19 +798,46 @@ canvas.addEventListener("keydown", (ev) => {
               Math.min(state.height, Math.max(0, cursor[1] + move[1]))];
     draw();
     scrollToPoint(cursor);
+    sayMarker();
   } else if (ev.key === "Enter" || ev.key === " ") {
     keyboard = true;
     place(cursor[0], cursor[1]);
   } else if (ev.key === "Escape" && marking) {
     stopMarking();
-    explain(startKind());
+    explain();
   } else {
     return;
   }
   ev.preventDefault();
 });
 // The keyboard hint only for keyboard focus, not after a tap.
-canvas.addEventListener("focus", () => { $("kbd-hint").hidden = !canvas.matches(":focus-visible"); draw(); });
+// A keyboard user sees the marker at once, so Enter places a start they saw.
+canvas.addEventListener("focus", () => {
+  const kbd = canvas.matches(":focus-visible");
+  $("kbd-hint").hidden = !kbd;
+  if (kbd && state) {
+    if (!cursor) cursor = state.start ? [...state.start] : [state.width / 2, state.height / 2];
+    keyboard = true;
+  }
+  draw();
+});
+
+// Where the marker is, in words, for a user who cannot see it. It waits for
+// the arrow keys to stop, so a screen reader reads one place, not every step.
+let markerTimer = null;
+function sayMarker() {
+  clearTimeout(markerTimer);
+  markerTimer = setTimeout(() => {
+    if (!cursor || !state) return;
+    const [x, y] = cursor;
+    const col = ["left", "middle", "right"][Math.min(2, Math.floor(3 * x / state.width))];
+    const row = ["top", "middle", "bottom"][Math.min(2, Math.floor(3 * y / state.height))];
+    const at = row === col ? "middle" : `${row} ${col}`;
+    let near = -1, best = Infinity;
+    state.exits.forEach((e, i) => { const d = Math.hypot(e.x - x, e.y - y); if (d < best) { best = d; near = i; } });
+    $("marker-status").textContent = `Marker: ${at} of the plan` + (near >= 0 ? `, closest exit mark ${exitName(near)}.` : ".");
+  }, 400);
+}
 canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; draw(); });
 
 // In the larger plan, put the start in the middle, so the start of the route is in view.

@@ -3,7 +3,7 @@ type: decision
 title: Check the exits with numbered marks
 status: proposed
 updated: 2026-10-28
-checked: 77d443d
+checked: 03aa6f9
 sources:
   - owner:2026-10-27
   - owner:2026-10-28
@@ -134,3 +134,4 @@ The owner put the zoom into the product on 2026-10-28. The next section gives th
 - A new rule gives the exits of every level. On a level with no exit to the outside, the stairs or escalators up are its exits.
 - A test read 7 plans with the new rule. The station plans got exits on both levels. RU-commons_000169 got 8 exits, the old count.
 - The rule is on the branch `exit-level-rule`. It goes to main after the owner checks the 7 plans.
+- The owner found the 7 plans almost good (2026-10-28). The rule went to main with the start change. Why: [Take the start from a tap](start-from-tap.md).

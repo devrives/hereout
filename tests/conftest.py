@@ -6,7 +6,7 @@ import pytest
 def draw_plan(w=800, h=500):
     """A plain floor: outer walls, one inner wall with a door, an exit gap.
 
-    Returns the image, the "you are here" point and the exit point.
+    Returns the image, the start point and the exit point.
     """
     img = np.full((h, w, 3), 245, np.uint8)
     black = (20, 20, 20)

@@ -62,7 +62,6 @@ class Gallery:
             return None
         r = item["reading"]
         reading = Reading(
-            you_are_here=tuple(r["you_are_here"]) if r.get("you_are_here") else None,
             exits=r.get("exits") or [],
             notes=r.get("notes", ""),
             plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None,

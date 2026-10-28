@@ -15,25 +15,15 @@ import cv2
 import numpy as np
 
 from hereout.gallery import Gallery
-from hereout.route import NoRoute, find_route
 
 
 def overlay(plan, reading) -> np.ndarray:
     img = plan.image.copy()
     img[plan.walls] = (img[plan.walls] * 0.5 + np.array([120, 0, 0])).astype("uint8")
     unit = max(img.shape[:2]) / 160
-    if reading.you_are_here and reading.exits:
-        try:
-            r = find_route(plan.walls, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits])
-            pts = np.int32(r.points).reshape(-1, 1, 2)
-            cv2.polylines(img, [pts], False, (0, 170, 0), max(2, int(unit)))
-        except NoRoute:
-            pass
     for e in reading.exits:
         c = (int(e["x"]), int(e["y"]))
         cv2.rectangle(img, (c[0] - int(unit * 2), c[1] - int(unit * 2)), (c[0] + int(unit * 2), c[1] + int(unit * 2)), (0, 140, 0), -1)
-    if reading.you_are_here:
-        cv2.circle(img, tuple(int(v) for v in reading.you_are_here), int(unit * 2.4), (210, 80, 0), -1)
     return img
 
 

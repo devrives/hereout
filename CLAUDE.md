@@ -1,6 +1,6 @@
 # HereOut
 
-HereOut reads a photo of a posted evacuation plan and shows the way out. The user takes a photo of the plan. HereOut finds the "you are here" mark and the exits, finds a route that stays inside the walls, and gives turn-by-turn steps. It is the owner's entry for the Meta Global AI Developer Hackathon (2026-10-26 to 2026-11-04 ET).
+HereOut reads a photo of a posted evacuation plan and shows the way out. The user takes a photo of the plan. HereOut finds the exits with the model. The user taps where they stand: the start does not come from the model. HereOut then finds a route that stays inside the walls and gives turn-by-turn steps. It is the owner's entry for the Meta Global AI Developer Hackathon (2026-10-26 to 2026-11-04 ET).
 
 `AGENTS.md` is a symlink to this file. Also read the hub `CLAUDE.md`.
 

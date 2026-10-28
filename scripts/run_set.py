@@ -6,9 +6,10 @@ Usage:
 
 --refresh makes no model call. It flattens each photo again with the current
 code. When the flat plan changed, it deletes the saved result, so the next run
-reads that photo again. Otherwise it writes the credit again and finds the
-route again from the saved reading with the current wall and route code.
-Routes are found on the saved plan image, the same image the browser gets.
+reads that photo again. Otherwise it writes the credit again and checks the
+ways out again from the saved reading with the current wall and route code.
+The check runs on the saved plan image, the same image the browser gets. The
+model gives no start, so the check is the share of open floor with a way out.
 
 INDEX.csv has one row per photo: zip_name (path relative to the CSV folder),
 country, licence, author, title, url, readable, security_sensitive. Only rows
@@ -36,11 +37,13 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from hereout.pipeline import Plan, decode_photo, plan_route, prepare, read_marks
+from hereout.pipeline import Plan, decode_photo, prepare, read_marks
 from hereout.reader import ModelClient, Reading
+from hereout.route import Field, blocked_grid
 
 THUMB_SIDE = 360
 RETRIES = 3
+OPEN_WITH_WAY = 0.5  # a plan passes when this share of its open floor has a way out
 
 LICENCE_URLS = {
     "cc0": "https://creativecommons.org/publicdomain/zero/1.0/",
@@ -81,16 +84,25 @@ def item_id(row: dict) -> str:
 
 
 def route_result(image_path: Path, reading: Reading) -> dict:
-    """The route from "you are here" on the saved plan image, as the gallery serves it."""
-    if not reading.you_are_here:
-        return {"route_found": False, "route_error": "no you-are-here mark", "steps": 0}
+    """How much of the open floor has a way out, on the saved plan image as the gallery serves it.
+    The model gives no start, so the check looks at every open cell in the floor box."""
     if not reading.exits:
-        return {"route_found": False, "route_error": "no exits", "steps": 0}
+        return {"route_found": False, "route_error": "no exits", "open_with_way": 0.0}
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     plan = Plan.of(image, reading.plan_box)
-    result = plan_route(plan, reading.you_are_here, [(e["x"], e["y"]) for e in reading.exits])
-    return {"route_found": result["route"] is not None, "route_error": result["route_error"],
-            "steps": len(result["steps"])}
+    blocked, scale = blocked_grid(plan.walls)
+    field = Field(blocked, scale, [(e["x"], e["y"]) for e in reading.exits])
+    owner = np.array(field.owner).reshape(blocked.shape)
+    inside = ~blocked
+    if reading.plan_box:
+        x0, y0, x1, y1 = (int(v * scale) for v in reading.plan_box)
+        box = np.zeros_like(inside)
+        box[y0:y1 + 1, x0:x1 + 1] = True
+        inside &= box
+    share = float((owner[inside] >= 0).mean()) if inside.any() else 0.0
+    found = share >= OPEN_WITH_WAY
+    return {"route_found": found, "route_error": None if found else "most open floor has no way out",
+            "open_with_way": round(share, 3)}
 
 
 def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threading.Lock) -> dict:
@@ -117,10 +129,10 @@ def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threadi
 
     item = {"id": pid, "country": row["country"].strip(), "credit": {**credit(row), "changes": plan.changes},
             "size": [w, h], "seconds": round(took, 1), "error": err,
-            "reading": None, "route_found": False, "route_error": None, "steps": 0}
+            "reading": None, "route_found": False, "route_error": None, "open_with_way": 0.0}
     if reading:
         item["reading"] = {
-            "you_are_here": reading.you_are_here, "exits": reading.exits,
+            "exits": reading.exits,
             "plan_box": reading.plan_box, "notes": reading.notes,
         }
         item["cost_usd"] = round(reading.cost_usd, 5)
@@ -151,9 +163,9 @@ def refresh(rows: list[dict], base: Path, out: Path) -> None:
         item["credit"] = {**credit(row), "changes": plan.changes}
         r = item.get("reading")
         if r:
-            reading = Reading(
-                you_are_here=tuple(r["you_are_here"]) if r.get("you_are_here") else None,
-                exits=r.get("exits") or [], plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None)
+            r.pop("you_are_here", None)
+            item.pop("steps", None)
+            reading = Reading(exits=r.get("exits") or [], plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None)
             plan.use_reading(reading)
             item.update(route_result(out / "plans" / f"{pid}.jpg", reading))
         path.write_text(json.dumps(item, ensure_ascii=False))

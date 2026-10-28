@@ -13,11 +13,11 @@ from conftest import draw_plan, field_from_payload
 class FakeReader:
     """Answers with fixed marks, in the image the server sends."""
 
-    def __init__(self, here, exits):
-        self.here, self.exits = here, exits
+    def __init__(self, exits):
+        self.exits = exits
 
     def read_plan(self, img):
-        return Reading(self.here, [{"x": x, "y": y, "label": ""} for x, y in self.exits])
+        return Reading([{"x": x, "y": y, "label": ""} for x, y in self.exits])
 
 
 def upload(client, img):
@@ -27,23 +27,23 @@ def upload(client, img):
 
 def test_plan_with_marks_gets_a_route():
     img, here, exit_ = draw_plan()
-    client = TestClient(create_app(FakeReader(here, [exit_]), use_env=False))
+    client = TestClient(create_app(FakeReader([exit_]), use_env=False))
     r = upload(client, img)
     assert r.status_code == 200
     data = r.json()
     assert data["image"].startswith("data:image/jpeg;base64,")
-    assert data["id"] is None and data["here"] == list(here)
+    # The model gives no start: the user taps it.
+    assert data["id"] is None and "here" not in data
     # The grid the browser gets is enough to find the route.
     exits = [(e["x"], e["y"]) for e in data["exits"]]
-    field = field_from_payload(data["grid"], exits, clear=[data["here"]])
-    assert field.route(data["here"]).exit_index == 0
+    assert field_from_payload(data["grid"], exits).route(here).exit_index == 0
 
 
 def test_no_model_still_sends_the_grid():
     img, here, exit_ = draw_plan()
     client = TestClient(create_app(None, use_env=False))
     data = upload(client, img).json()
-    assert data["here"] is None and data["model_error"] == "model not configured"
+    assert data["exits"] == [] and data["model_error"] == "model not configured"
     # Marks the user places by hand are routed on the same grid.
     assert field_from_payload(data["grid"], [exit_]).route(here).exit_index == 0
 
@@ -88,7 +88,7 @@ def make_gallery(tmp_path):
     cv2.imwrite(str(tmp_path / "thumbs" / "XX-test_1.jpg"), img[:100, :100])
     item = {"id": "XX-test_1", "country": "XX", "route_found": True,
             "credit": {"title": "T", "author": "A", "licence": "CC0 1.0", "licence_url": "", "source_url": ""},
-            "reading": {"you_are_here": here, "exits": [{"x": exit_[0], "y": exit_[1], "label": "E"}], "plan_box": None}}
+            "reading": {"exits": [{"x": exit_[0], "y": exit_[1], "label": "E"}], "plan_box": None}}
     (tmp_path / "items" / "XX-test_1.json").write_text(json.dumps(item))
     # An item without a reading is left out.
     (tmp_path / "items" / "XX-bad.json").write_text(json.dumps({**item, "id": "XX-bad", "reading": None}))
