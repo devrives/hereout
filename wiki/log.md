@@ -117,3 +117,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/exit-mark-check.md`: the zoom is a separate call at the same time as the "you are here" zoom, with its numbers.
 - Updated `components/plan-reader.md`: the two second looks and the review set.
 - Source: the owner request of 2026-10-28, `src/hereout/reader.py`, `src/hereout/app.py`, `src/hereout/web/app.js`.
+
+## [2026-10-28] ingest | Exits of every level, open problems
+
+- Updated `decisions/exit-mark-check.md`: the owner check of the review set and the test of the rule for every level (branch `exit-level-rule`).
+- Updated `components/plan-reader.md`: the known limits after the exit zoom.
+- Source: the owner check of 2026-10-28 and the test outputs.

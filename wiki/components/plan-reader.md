@@ -60,7 +60,11 @@ The plan reader changes a photo of a posted evacuation plan into a route and spo
 The owner asked on 2026-10-27 to record these problems. Later on 2026-10-27 the owner asked to fix the problems that need no model call. The fixes are in the Behavior section above.
 
 - PT-commons_000107: the wavy side walls of the hall give no wall line. Their ink touches columns, dashed lines and door swings. A looser rule drew a wall across a double door and two escape bands, so the strict rule stays. Why: [Find the walls as straight lines](../decisions/wall-lines.md).
-- PT-commons_000107: the model put exits 9 to 13 outside the street-side line of the building, about 80 px below the exit signs. A tap in the lower hall goes out of the bottom door and walks along the pavement to Exit 8. A test with a second call and numbered marks moved these exits near the building line. The check is not in the product. Why: [Check the exits with numbered marks](../decisions/exit-mark-check.md).
+- PT-commons_000107: the first read puts the bottom exits on the pavement, below the exit signs. The exit zoom moves most of them to the building line (owner check, 2026-10-28). In one read, two exits on the right stayed on the pavement.
+- The model gives different exits for the same photo in different reads. On NO-openverse_000112, one read sent the route from "you are here" to Exit 5, not to the door above it.
+- RU-commons_000346: one exit can stay in the legend box. The route can go to it.
+- JP-commons_000356: some exits fall on the title band or on the text under the plan.
+- A route does not continue from the stairs of one level to the exits of another level. Each level is a separate drawing.
 - PT-commons_000107: the left wing has no open way to an exit. A line closes each door of the wing. A test that found door swings with a Hough circle transform did not find the hinges, so it did not go in.
 - US-openverse_000109: the grey middle line of the printed red escape arrow is still a wall line. The colour rule removes only the red outline. The middle line has no colour.
 - The first build of the ways out takes about 1.3 s on a phone-class CPU (4x slowdown in Chromium). The worker keeps the page live during that time.

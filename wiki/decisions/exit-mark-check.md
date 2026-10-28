@@ -126,3 +126,11 @@ The owner put the zoom into the product on 2026-10-28. The next section gives th
 - A move of more than 7 percent of the long side is not used. An exit with the answer "no exit" goes away, but at least one exit stays.
 - On the 203 saved gallery readings, 142 plans have a suspect exit. On a plan with no green or red marks, all exits are suspect.
 - The review set read 8 plans with the product code: 16 to 27 seconds and 0.010 to 0.026 USD for each plan. Against the gallery readings, 4 were better, 1 had no change and 3 had better and worse changes. NO-openverse_000112 had 7 suspect exits that were correct, and they stayed correct.
+
+## Exits of every level
+
+- The owner checked 4 plans of the review set (2026-10-28). PT-commons_000107, NO-openverse_000112 and RU-commons_000169 were good. On RU-commons_000169, the old count of exits was right.
+- JP-commons_000369 was a problem. The old prompt found the exits of the upper level. The floor rule kept only the stairs of the lower level. The owner asked for both.
+- A new rule gives the exits of every level. On a level with no exit to the outside, the stairs or escalators up are its exits.
+- A test read 7 plans with the new rule. The station plans got exits on both levels. RU-commons_000169 got 8 exits, the old count.
+- The rule is on the branch `exit-level-rule`. It goes to main after the owner checks the 7 plans.
