@@ -33,13 +33,13 @@ USER_AGENT = "HereOut/0.1 (+https://hereout.devrives.com/)"
 
 # In the style of the Meta grounding examples (dev.meta.ai/docs/image-understanding):
 # a direct request, {"x", "y"} points and an x_min..y_max box. Tested on gallery plans
-# (wiki/decisions/exit-mark-check.md); the floor rule helped plans with more than one level.
+# (wiki/decisions/exit-mark-check.md). On a plan with several levels, every level gets its exits.
 PROMPT = """You are an object grounding expert. This is a photo of a posted evacuation plan (fire escape plan).
 Point to these objects in the image:
 - "you are here": the point where the reader of the plan stands. It is a dot, a star or a pin, often with text such as "You are here", "Vous etes ici", "Sie sind hier", "Standort", or the same in any language. When a label has a pointer, a tail or a line, point to where the pointer ends, not to the label.
 - "final exit": the end of each escape route on this floor. That is a door in the outer wall of the building, or the door of a protected staircase. Escape arrows end there. Point just inside that door, on the floor of the building. When an exit sign stands at that door, point to the sign. Never point to the street, the pavement, the paper outside the building or the legend. Never point to the middle of an arrow or a corridor. A running-man sign along a corridor, with the route going on past it, is not a final exit.
 Also give the bounding box of "floor drawing": the drawing of the floor itself, without the title, the legend, the text blocks and the small site map.
-When the plan shows more than one floor, use only the floor with the "you are here" mark.
+When the plan shows more than one floor or level, point to the final exits of every floor. On a level with no exit to the outside, the stairs or escalators that lead up toward the exits are its final exits.
 Do not miss any final exit.
 The coordinates should be integers in the 0-1000 range of the whole image: x from the left edge, y from the top edge.
 Answer with JSON only, in this format:
