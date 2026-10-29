@@ -160,3 +160,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/wall-method-tests.md`: the best set on the branch, the gallery numbers and the A/B page.
 - Source: branch `ink-walls`, the gallery check, the A/B page.
+
+## [2026-10-29] ingest | Level and upright way lines
+
+- Created `decisions/orthogonal-way-tree.md`: the owner verdict on the A/B page and the new tree of lines on branch `ortho-net`.
+- Updated `decisions/wall-method-tests.md`: the owner verdict on the A/B page.
+- Source: the owner words of 2026-10-29, commit 6920028.

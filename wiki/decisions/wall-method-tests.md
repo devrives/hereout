@@ -2,9 +2,10 @@
 type: decision
 title: Test the wall methods on a small ground truth
 status: proposed
-updated: 2026-10-28
+updated: 2026-10-29
 checked: 8a41f46
 sources:
+  - owner:2026-10-29
   - owner:2026-10-28
 ---
 # Test the wall methods on a small ground truth
@@ -59,4 +60,5 @@ Scores on 2026-10-28 (floor, leak, walls):
 - The legend check found a legend box on 78 plans. It dropped 6 exits, and all 6 were in a legend or a text panel (look by eye).
 - A look by eye found mixed results: DE-commons_000155 and US-openverse_000109 are better, RU-commons_000346 lost lines, and PT-commons_000107 is not clean.
 - The owner gets a blind A/B page of 14 plans at `/review/` (2026-10-28). The key is `ab-key-2026-10-28.json` in the experiments folder of the hub workspace. A method that the owner does not choose does not go to main.
+- The owner verdict on the A/B page (2026-10-29): both sides are bad. The lines have diagonals and do not join. Next: [Draw the ways out as one tree of level and upright lines](orthogonal-way-tree.md).
 - The branch `route-marks` was deleted on 2026-10-28. Its commit 3d6310b stays in this page.
