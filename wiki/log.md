@@ -171,3 +171,11 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/orthogonal-way-tree.md`: the second round of refinement (commit 828f6e4) and its numbers.
 - Source: the owner words of 2026-10-29, commit 828f6e4.
+
+## [2026-10-29] ingest | Way lines, third round: outside areas, exit placement, room doors, wing
+
+- Created `decisions/outside-and-closed-rooms.md`: grey fills, areas beyond the exits and at the edge, exit placement, room doors.
+- Updated `decisions/orthogonal-way-tree.md`: third round (wing network, long staircases only, the worker gets the axes).
+- Updated `index.md`.
+- Source: the owner words of 2026-10-29, commit 78dcaca on `ortho-net`, the ground truth and the 38-plan comparison.
+

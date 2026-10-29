@@ -3,11 +3,12 @@ type: decision
 title: Draw the ways out as one tree of level and upright lines
 status: proposed
 updated: 2026-10-29
-checked: 828f6e4
+checked: 78dcaca
 sources:
   - owner:2026-10-29
   - commit:6920028
   - commit:828f6e4
+  - commit:78dcaca
 ---
 # Draw the ways out as one tree of level and upright lines
 
@@ -44,3 +45,12 @@ sources:
   - The two main directions differ by 10 degrees at most. The direction with more wall edges leads.
 - On 38 plans the small steps went from 156 to 47, and the turns from 602 to 377. No line crosses a hard wall.
 - A wing at an angle (CN-commons_000279) still has stubs on the main directions. The wall errors of the first round stay.
+
+## Third round
+
+- The owner asked to fix all open problems with code (2026-10-29). Commit 78dcaca on `ortho-net` holds the changes. The wall changes are in [Close the outside of the building and give closed rooms a door](outside-and-closed-rooms.md).
+- A wing at an angle: `route.py` finds a second wall tilt when walls agree on it in both square directions. The tilt must be at least 10 degrees from the main walls, and the wing must cover a tenth of the grid. Each cell goes with the tilt of its nearest wall edge.
+- The browser makes a second network along the wing tilt. The map shows its lines inside the wing and the main lines outside it. A short line joins the cut ends at the edge of the wing.
+- On 38 plans, only CN-commons_000279 has a wing. Its corridor is now one straight slanted line, with stubs at right angles to it.
+- A staircase becomes one slanted line only when the line is long. Two short slanted lines in rooms of DE-commons_000012 went back to steps.
+- The page did not send the wall directions to the network worker. The commit fixes that, so the browser draws the lines along the walls as the tests do.
