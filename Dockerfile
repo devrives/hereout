@@ -10,7 +10,7 @@ COPY src ./src
 RUN uv sync --frozen --no-dev
 # RapidOCR fetches its text models on first use, into its package folder.
 # Fetch them at build time: the container user cannot write there.
-RUN .venv/bin/python -c "from hereout.ink_walls import text_boxes, read_texts; import numpy as np; text_boxes(np.full((64, 64, 3), 255, np.uint8)); read_texts([np.full((32, 96, 3), 255, np.uint8)]); read_texts([np.full((32, 96, 3), 255, np.uint8)], 'eslav')"
+RUN .venv/bin/python -c "from hereout.ink_walls import warm_text_models; warm_text_models()"
 
 RUN useradd --uid 1000 --create-home hereout && mkdir /data && chown hereout /data
 USER hereout

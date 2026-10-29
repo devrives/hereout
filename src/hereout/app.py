@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from .gallery import Gallery
+from .ink_walls import warm_text_models
 from .pipeline import BadPhoto, Plan, decode_photo, image_data_url, prepare, read_marks
 from .reader import ModelClient, Reading
 from .route import grid_payload
@@ -84,6 +85,9 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
     if gallery is None and use_env and os.environ.get("HEREOUT_GALLERY"):
         gallery = Gallery(Path(os.environ["HEREOUT_GALLERY"]))
     app = FastAPI(title="HereOut", docs_url=None, redoc_url=None, openapi_url=None)
+    if use_env:
+        # Load the text models now, not in the first request (seconds on one CPU).
+        threading.Thread(target=warm_text_models, daemon=True).start()
     reads = RateLimit(READS_PER_WINDOW, READ_WINDOW)
     page = index_html()
 

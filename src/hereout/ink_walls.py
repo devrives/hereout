@@ -136,6 +136,13 @@ def read_texts(crops: list[np.ndarray], lang: str | None = None) -> list[str]:
     return out
 
 
+def warm_text_models() -> None:
+    """Load the text models (and fetch them on the first run)."""
+    text_boxes(np.full((64, 64, 3), 255, np.uint8))
+    for lang in (None, "eslav"):
+        read_texts([np.full((32, 96, 3), 255, np.uint8)], lang)
+
+
 def _chroma(img: np.ndarray) -> np.ndarray:
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
     a, b = lab[..., 1] - 128, lab[..., 2] - 128
