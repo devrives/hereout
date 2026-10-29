@@ -179,3 +179,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `index.md`.
 - Source: the owner words of 2026-10-29, commit 78dcaca on `ortho-net`, the ground truth and the 38-plan comparison.
 
+## [2026-10-29] ingest | Start points of the way lines
+
+- Updated `decisions/orthogonal-way-tree.md`: small rooms join the line at their door; halls keep a line.
+- Source: the owner words of 2026-10-29, commit bb987a5 on `ortho-net`.
+

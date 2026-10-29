@@ -3,12 +3,13 @@ type: decision
 title: Draw the ways out as one tree of level and upright lines
 status: proposed
 updated: 2026-10-29
-checked: 78dcaca
+checked: bb987a5
 sources:
   - owner:2026-10-29
   - commit:6920028
   - commit:828f6e4
   - commit:78dcaca
+  - commit:bb987a5
 ---
 # Draw the ways out as one tree of level and upright lines
 
@@ -54,3 +55,13 @@ sources:
 - On 38 plans, only CN-commons_000279 has a wing. Its corridor is now one straight slanted line, with stubs at right angles to it.
 - A staircase becomes one slanted line only when the line is long. Two short slanted lines in rooms of DE-commons_000012 went back to steps.
 - The page did not send the wall directions to the network worker. The commit fixes that, so the browser draws the lines along the walls as the tests do.
+
+## Start points of the lines
+
+- The owner found the third round better on most plans (2026-10-29). The owner asked where the lines must start: inside a toilet, in each room, or on ways that all join. The owner said to fix this before the map uses the position of the user.
+- A printed plan draws the shared ways (corridors, halls). It draws no line inside a toilet, a store or an office.
+- Commit bb987a5 on `ortho-net`: a room under 3 percent of the open floor has no line of its own. Its door joins the line outside it. The way from its door shows only when it is long, as at the far end of a corridor.
+- A hall or a lobby (3 percent of the open floor or more) keeps a short line into the room.
+- A route from a tap still starts at the tap, also inside a small room. It goes out of the door to the line, then to the exit.
+- On 38 plans the legs went from 2252 to 1768. No line crosses a hard wall.
+
