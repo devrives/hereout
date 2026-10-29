@@ -854,14 +854,53 @@ async function loadPlan(request, waitText, push) {
   remember();
 }
 
+// A phone photo has up to 50 megapixels. The server works on 1600 pixels at
+// most, so a smaller copy uploads faster on mobile data and stays under the
+// size limit. A file that the browser cannot decode goes as it is.
+const UPLOAD_SIDE = 3200;
+const UPLOAD_BYTES = 3 * 1024 * 1024;
+
+async function smallPhoto(file) {
+  let bmp;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch (e) {
+    return file;
+  }
+  try {
+    const f = Math.min(1, UPLOAD_SIDE / Math.max(bmp.width, bmp.height));
+    if (f === 1 && file.size <= UPLOAD_BYTES) return file;
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width * f);
+    c.height = Math.round(bmp.height * f);
+    // A high-quality resize keeps 1-pixel wall lines; the default one can drop them.
+    // createImageBitmap resizes off the main thread, so the page does not freeze.
+    let small = bmp;
+    try {
+      small = await createImageBitmap(bmp, { resizeWidth: c.width, resizeHeight: c.height, resizeQuality: "high" });
+    } catch (e) { /* the canvas resizes instead */ }
+    const g = c.getContext("2d");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(small, 0, 0, c.width, c.height);
+    if (small !== bmp) small.close();
+    const blob = await new Promise((done) => c.toBlob(done, "image/jpeg", 0.9));
+    return blob && blob.size < file.size ? blob : file;
+  } catch (e) {
+    return file;
+  } finally {
+    bmp.close();
+  }
+}
+
 $("photo").addEventListener("change", (ev) => {
   const file = ev.target.files[0];
   ev.target.value = "";  // so the same file can be picked again
   if (!file) return;
-  const body = new FormData();
-  body.append("photo", file);
-  loadPlan(() => fetch("/api/plan", { method: "POST", body }),
-           "Reading the plan. This takes about 15 seconds. The button works again when it is done.");
+  loadPlan(async () => {
+    const body = new FormData();
+    body.append("photo", await smallPhoto(file), "photo.jpg");
+    return fetch("/api/plan", { method: "POST", body });
+  }, "Reading the plan. This takes about 15 seconds. The button works again when it is done.");
 });
 
 // Gallery of open-licensed plan photos with saved readings.

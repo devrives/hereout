@@ -218,3 +218,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/photo-speed.md`: the times, the changes, the check on the gallery.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-29, the measurement in the container image, the gallery check.
+
+## [2026-10-29] ingest | Smaller upload of a large photo
+
+- Updated `decisions/photo-speed.md`: the resize in the page, the times in the container, the reviews.
+- Source: the browser checks, the ux and a11y reviews.
