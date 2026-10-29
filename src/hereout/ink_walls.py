@@ -551,9 +551,16 @@ def place_exits(exits: list, fp: np.ndarray, blocked: np.ndarray) -> list:
         where = [order[nearest[min(h - 1, max(0, round(p[1]))), min(w - 1, max(0, round(p[0])))]] if p else 0
                  for p in out]
         count = np.bincount(where, minlength=n)
-        main = st[1:, cv2.CC_STAT_AREA].max()
+        big = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+        main = st[big, cv2.CC_STAT_AREA]
+        # A part of the building that the closing split off (the middle of a
+        # hall) lies inside the bounds of the main drawing; a text panel does not.
+        bx, by, bw, bh = st[big, :4]
         for i, c in enumerate(where):
-            if c and count[c] == 1 and st[c, cv2.CC_STAT_AREA] < MINOR_DRAWING * main and count[1:].sum() > 1:
+            cx, cy = st[c, 0] + st[c, 2] / 2, st[c, 1] + st[c, 3] / 2
+            inside = bx <= cx <= bx + bw and by <= cy <= by + bh
+            if c and count[c] == 1 and st[c, cv2.CC_STAT_AREA] < MINOR_DRAWING * main and count[1:].sum() > 1 \
+                    and not inside:
                 out[i] = None
     if exits and all(p is None for p in out):
         return [(float(x), float(y)) for x, y in exits]

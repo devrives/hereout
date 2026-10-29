@@ -101,6 +101,13 @@ def test_exit_off_the_drawing_is_dropped():
     fp[470:540, 700:800] = True
     assert place_exits([(300, 200), (820, 520)], fp, ~fp)[1] is None
     assert None not in place_exits([(300, 200), (750, 520), (780, 500)], fp, ~fp)
+    # A small shape inside the bounds of the main drawing (the middle of a
+    # hall that the closing split off) is part of the building: its exit stays.
+    ring = np.zeros((500, 1000), bool)
+    ring[50:450, 50:950] = True
+    ring[150:350, 600:850] = False
+    ring[200:300, 650:800] = True
+    assert place_exits([(300, 200), (700, 250)], ring, ~ring)[1] is not None
 
 
 def test_exit_on_the_street_moves_to_the_building():
