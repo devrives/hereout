@@ -203,14 +203,18 @@ def door_arcs(thin: np.ndarray, seed: int = 0) -> list[tuple]:
     steps = sum(((ring[i] == 0) & (ring[(i + 1) % 8] == 1)).astype(np.uint8) for i in range(8))
     junction = sk & (steps >= 3)
     branches = sk & ~(cv2.dilate(junction.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0)
-    n, lab = cv2.connectedComponents(branches.astype(np.uint8), connectivity=8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(branches.astype(np.uint8), connectivity=8)
     rng = np.random.default_rng(seed)
     out = []
+    # The points of each branch, found in one pass (a plan has thousands of branches).
+    ys, xs = np.nonzero(lab)
+    order = np.argsort(lab[ys, xs], kind="stable")
+    ys, xs = ys[order], xs[order]
+    start = np.r_[0, np.cumsum(st[1:, cv2.CC_STAT_AREA])]
     for i in range(1, n):
-        ys, xs = np.nonzero(lab == i)
-        if len(xs) < 0.6 * (np.pi / 2) * ARC_RADIUS[0] * side:
+        if st[i, cv2.CC_STAT_AREA] < 0.6 * (np.pi / 2) * ARC_RADIUS[0] * side:
             continue
-        pts = np.c_[xs, ys].astype(float)
+        pts = np.c_[xs[start[i - 1]:start[i]], ys[start[i - 1]:start[i]]].astype(float)
         best = None
         for _ in range(60):
             a, b, c = pts[rng.choice(len(pts), 3, replace=False)]
