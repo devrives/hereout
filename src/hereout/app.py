@@ -12,7 +12,7 @@ import os
 import re
 import threading
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -28,6 +28,7 @@ from .route import grid_payload
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
 READS_PER_WINDOW = 12
+OPENED_PLANS = 24
 READ_WINDOW = 10 * 60
 
 
@@ -128,8 +129,18 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         g = pick(set)
         return {"plans": g.listing() if g else []}
 
+    # The last sample plans opened: the walls of one take seconds on one CPU.
+    # They are open-licensed samples, not photos from users.
+    opened: OrderedDict[tuple, dict] = OrderedDict()
+    opened_lock = threading.Lock()
+
     @app.post("/api/gallery/{gid}")
     def gallery_open(gid: str, set: str | None = None):
+        key = (set == "review", gid)
+        with opened_lock:
+            if key in opened:
+                opened.move_to_end(key)
+                return opened[key]
         g = pick(set)
         found = g.open(gid) if g else None
         if found is None:
@@ -137,6 +148,10 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         plan, reading, item = found
         out = answer(f"g-{gid}", plan, reading, None)
         out["credit"] = item["credit"]
+        with opened_lock:
+            opened[key] = out
+            while len(opened) > OPENED_PLANS:
+                opened.popitem(last=False)
         return out
 
     app.mount("/static", StaticFiles(directory=WEB), name="static")

@@ -94,6 +94,10 @@ OUTDOOR_WORDS = re.compile(
 _ocr = None
 _rec = None
 _ocr_lock = threading.Lock()
+# One thread: the server container has one CPU, and more threads than CPUs
+# made text detection 2.7 times slower there (4.9 s against 1.8 s).
+ONE_THREAD = {"EngineConfig.onnxruntime.intra_op_num_threads": 1,
+              "EngineConfig.onnxruntime.inter_op_num_threads": 1}
 
 
 def text_boxes(img: np.ndarray) -> list[list[list[int]]]:
@@ -103,7 +107,7 @@ def text_boxes(img: np.ndarray) -> list[list[list[int]]]:
         if _ocr is None:
             from rapidocr import RapidOCR
             _ocr = RapidOCR(params={"Global.use_cls": False, "Global.use_rec": False,
-                                    "Global.log_level": "error"})
+                                    "Global.log_level": "error", **ONE_THREAD})
         r = _ocr(img, use_det=True, use_cls=False, use_rec=False)
     if r.boxes is None:
         return []
@@ -117,7 +121,7 @@ def read_texts(crops: list[np.ndarray]) -> list[str]:
     with _ocr_lock:
         if _rec is None:
             from rapidocr import RapidOCR
-            _rec = RapidOCR(params={"Global.use_cls": False, "Global.log_level": "error"})
+            _rec = RapidOCR(params={"Global.use_cls": False, "Global.log_level": "error", **ONE_THREAD})
         for c in crops:
             r = _rec(c, use_det=False, use_cls=False, use_rec=True)
             out.append(r.txts[0] if r.txts else "")
