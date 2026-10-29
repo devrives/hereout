@@ -3,13 +3,14 @@ type: decision
 title: Draw the ways out as one tree of level and upright lines
 status: proposed
 updated: 2026-10-29
-checked: bb987a5
+checked: 6913303
 sources:
   - owner:2026-10-29
   - commit:6920028
   - commit:828f6e4
   - commit:78dcaca
   - commit:bb987a5
+  - commit:6913303
 ---
 # Draw the ways out as one tree of level and upright lines
 
@@ -64,4 +65,20 @@ sources:
 - A hall or a lobby (3 percent of the open floor or more) keeps a short line into the room.
 - A route from a tap still starts at the tap, also inside a small room. It goes out of the door to the line, then to the exit.
 - On 38 plans the legs went from 2252 to 1768. No line crosses a hard wall.
+
+## Position of the user
+
+- The owner asked for the position of the user after the start points of the lines (2026-10-29). Commit 6913303 on `ortho-net` holds the change.
+- A tap starts the route at the tap, also inside a small room. The route goes out by the door to the nearest line, then along the line to the exit.
+- The first exit is the nearest exit by the cost of the way. A second exit shows as a dashed line, in case the first exit is blocked. Its way may not pass the door of the first exit. An exit at that door is the same door. The solid route is never the longer one.
+- The status line, a line under the steps with a button, and the spoken steps name the second exit. A user who does not see the plan gets it from the text.
+- Filled arrow heads on the lines of the map point to the exits. No arrow shows near a drawn route, because a route to a chosen exit can run against them.
+- On a plan with a wing at an angle, a route follows the walls of each part that it crosses. On CN-commons_000279 the share of route length along the walls went from 0.85 to 0.95.
+- The ux and a11y reviews of the first version found these problems:
+  - arrows too small on a phone;
+  - a hidden number of the second exit;
+  - a dashed route shorter than the solid one;
+  - a zigzag in the wing, and arrows against the route;
+  - text out of view.
+- The commit fixes all of them. The page goes to a new review before the deploy.
 

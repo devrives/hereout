@@ -51,3 +51,8 @@ All changes are on branch `ortho-net`, in `ink_walls.py`. They make no model cal
   - exits that the model put on the margin of the sheet.
 - Commit 8ce3579 finds the points of each skeleton branch in one pass. The door arcs stay the same. The wall step took 2.6 to 8.9 seconds on 10 plans, before 11 to 70 seconds.
 
+## Causes of the weak types
+
+- Sheets with many floors and thin-line station diagrams: the gallery readings are from 2026-10-27. The read rule for every level came on 2026-10-28 (see [Check the exits with numbered marks](exit-mark-check.md)). In these readings only one floor has exits, so the other floors get no lines. A new photo gets the rule. A new read of the gallery plans costs money, so it waits for the owner.
+- Yards and streets inside a site outline: the area between the building and the site line joins the building through its doors. The thickness of the border does not separate a yard from a room: on US-commons_000225 the site line is thick too. No rule is in place.
+

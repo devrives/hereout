@@ -189,3 +189,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/outside-and-closed-rooms.md`: the result on 165 gallery plans, the exit fix and the speed fix.
 - Source: the owner words of 2026-10-29, commits 8ce3579 and 985375d on `ortho-net`, the gallery run.
 
+## [2026-10-29] ingest | Position of the user and causes of the weak types
+
+- Updated `decisions/orthogonal-way-tree.md`: the second exit, the arrows, the routes in a wing, the review findings.
+- Updated `decisions/outside-and-closed-rooms.md`: why sheets with many floors and yards stay weak.
+- Source: the owner words of 2026-10-29, commit 6913303 on `ortho-net`, the ux and a11y reviews.
+
