@@ -206,3 +206,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/weak-plan-types.md`: accepted; the merge to main, the gallery speed, legend headings, the tests that were not kept, the open limits.
 - Updated `index.md`: the new summary.
 - Source: the owner words of 2026-10-29, commits ef7ebe6 and 1fd3209, the gallery run.
+
+## [2026-10-29] ingest | Saved gallery answers
+
+- Updated `components/gallery.md`: the saved answers, their key and the script.
+- Updated `index.md`: the gallery summary.
+- Source: the owner words of 2026-10-29, `scripts/save_answers.py`.

@@ -106,6 +106,18 @@ def test_gallery_list_and_open(tmp_path):
     assert client.post("/api/route", json={}).status_code in (404, 405)
 
 
+def test_saved_answer_is_sent(tmp_path):
+    import json
+    g = make_gallery(tmp_path)
+    (tmp_path / "answers").mkdir()
+    g.answer_path("XX-test_1").write_text(json.dumps({"id": "g-XX-test_1", "saved": True}))
+    assert TestClient(create_app(None, use_env=False, gallery=g)).post("/api/gallery/XX-test_1").json()["saved"]
+    # A saved answer from other code is not used.
+    g.code = "other"
+    data = TestClient(create_app(None, use_env=False, gallery=g)).post("/api/gallery/XX-test_1").json()
+    assert "saved" not in data and data["grid"]["bits"]
+
+
 def test_review_pages(tmp_path):
     gallery = make_gallery(tmp_path)
     assert TestClient(create_app(None, use_env=False, gallery=gallery)).get("/review/x/").status_code == 404

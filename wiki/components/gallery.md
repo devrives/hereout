@@ -1,11 +1,14 @@
 ---
 type: component
 title: Sample gallery
-updated: 2026-10-27
+updated: 2026-10-29
+checked: 0cb938d
 sources:
   - src/hereout/gallery.py
   - scripts/run_set.py
   - scripts/summarize_set.py
+  - scripts/save_answers.py
+  - owner:2026-10-29
   - docker-compose.yml
 ---
 # Sample gallery
@@ -26,6 +29,10 @@ The gallery lets a person without a plan nearby try HereOut on real posted plans
 - A gallery plan has the id `g-<photo id>`. The browser finds every route from the grid in the answer, so the plan needs no server state.
 - The address `?sample=<photo id>` opens that plan, so a link can show one sample.
 - The list puts plans with a route first. The countries take turns, so the first rows show many countries.
+- Saved answers: the walls of one plan take 5 to 11 s on the server CPU. On 2026-10-29 the owner said to save the gallery answers ahead of time. `scripts/save_answers.py` writes the answer of each plan to `answers/` in the gallery folder.
+  - The file name holds a key: a hash of the server code (`src/hereout/*.py`), the item and the plan image.
+  - The server sends a saved answer only when its key matches. After a change of the code or the gallery, the server finds the walls again until the next run of the script.
+  - The script makes no model call. It deletes the answers with an old key.
 - `scripts/summarize_set.py` counts the results and draws contact sheets for a check by eye.
 - A route that the reader finds is not always the correct route. The gallery text does not claim accuracy.
 - `plan.py` rejects a sheet whose opposite sides differ much in length (ratio below 0.72). In the photo set, every false sheet had a ratio of 0.71 or less. `run_set.py --refresh` finds the saved results that a change of `plan.py` makes old, with no model call. It also finds the route again from each saved reading with the current wall and route code.

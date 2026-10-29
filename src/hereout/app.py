@@ -17,14 +17,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .gallery import Gallery
 from .ink_walls import warm_text_models
-from .pipeline import BadPhoto, Plan, decode_photo, image_data_url, prepare, read_marks
-from .reader import ModelClient, Reading
-from .route import grid_payload
+from .pipeline import BadPhoto, answer, decode_photo, prepare, read_marks
+from .reader import ModelClient
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
@@ -65,17 +64,6 @@ class RateLimit:
 
 def client_ip(request: Request) -> str:
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
-
-
-def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None) -> dict:
-    """The response for a new plan: the flat image, the marks, the wall grid and the wall lines."""
-    h, w = plan.image.shape[:2]
-    out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
-           "exits": [], "grid": grid_payload(plan.walls, plan.soft), "walls": plan.drawn, "model_error": err,
-           "photo_map": plan.photo_map}
-    if reading:
-        out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
-    return out
 
 
 def create_app(client: ModelClient | None = None, use_env: bool = True,
@@ -146,12 +134,13 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
                 opened.move_to_end(key)
                 return opened[key]
         g = pick(set)
-        found = g.open(gid) if g else None
-        if found is None:
+        # An answer saved by scripts/save_answers.py with the current code.
+        saved = g.saved_answer(gid) if g else None
+        if saved is not None:
+            return Response(saved, media_type="application/json")
+        out = g.answer(gid) if g else None
+        if out is None:
             raise HTTPException(404, "this sample plan is not available")
-        plan, reading, item = found
-        out = answer(f"g-{gid}", plan, reading, None)
-        out["credit"] = item["credit"]
         with opened_lock:
             opened[key] = out
             while len(opened) > OPENED_PLANS:

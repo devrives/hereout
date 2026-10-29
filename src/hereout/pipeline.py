@@ -13,6 +13,7 @@ from .legend import drop_legend_exits
 from .photo_map import is_photo_map
 from .plan import rectify
 from .reader import ModelClient, ModelError, Reading, SpendCapReached
+from .route import grid_payload
 from .wall_lines import plan_walls
 
 WORK_SIDE = 1600  # every coordinate the client sees is in this image
@@ -94,6 +95,17 @@ def prepare(photo: np.ndarray) -> Plan:
 def image_data_url(img: np.ndarray) -> str:
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
+
+
+def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None) -> dict:
+    """The response for a new plan: the flat image, the marks, the wall grid and the wall lines."""
+    h, w = plan.image.shape[:2]
+    out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
+           "exits": [], "grid": grid_payload(plan.walls, plan.soft), "walls": plan.drawn, "model_error": err,
+           "photo_map": plan.photo_map}
+    if reading:
+        out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
+    return out
 
 
 def read_marks(plan: Plan, client: ModelClient | None) -> tuple[Reading | None, str | None]:

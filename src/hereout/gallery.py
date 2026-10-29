@@ -1,12 +1,14 @@
 """Open-licensed plan photos with saved readings, for the demo gallery.
 
 The folder is made by scripts/run_set.py and lives outside the repository.
-Opening a gallery plan uses the saved model reading, so it costs nothing and
-answers at once.
+Opening a gallery plan uses the saved model reading, so it costs nothing.
+scripts/save_answers.py saves the whole answer of each plan ahead of time, so a
+plan opens at once: finding the walls takes seconds on the server's one CPU.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -14,16 +16,25 @@ from pathlib import Path
 import cv2
 
 from .ink_walls import text_boxes
-from .pipeline import Plan
+from .pipeline import Plan, answer
 from .reader import Reading
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+
+
+def code_hash() -> str:
+    """A hash of the server code. A saved answer is good only for the code that made it."""
+    h = hashlib.sha256()
+    for p in sorted(Path(__file__).parent.glob("*.py")):
+        h.update(p.name.encode() + b"\0" + p.read_bytes())
+    return h.hexdigest()
 
 
 class Gallery:
     def __init__(self, folder: Path, thumbs_url: str = "/gallery/thumbs"):
         self.folder = folder
         self.thumbs_url = thumbs_url
+        self.code = code_hash()
         self.items: dict[str, dict] = {}
         for p in sorted((folder / "items").glob("*.json")):
             item = json.loads(p.read_text())
@@ -71,3 +82,29 @@ class Gallery:
         text = item.get("text_boxes")
         text = text_boxes(image) if text is None else text
         return Plan.of_reading(image, reading, text), reading, item
+
+    def answer(self, pid: str) -> dict | None:
+        """The answer for a gallery plan, found now: the walls take seconds."""
+        found = self.open(pid)
+        if found is None:
+            return None
+        plan, reading, item = found
+        out = answer(f"g-{pid}", plan, reading, None)
+        out["credit"] = item["credit"]
+        return out
+
+    def answer_path(self, pid: str) -> Path:
+        """Where the saved answer for the current code, item and image goes."""
+        h = hashlib.sha256(self.code.encode())
+        h.update(json.dumps(self.items[pid], sort_keys=True).encode())
+        h.update((self.folder / "plans" / f"{pid}.jpg").read_bytes())
+        return self.folder / "answers" / f"{pid}.{h.hexdigest()[:24]}.json"
+
+    def saved_answer(self, pid: str) -> bytes | None:
+        """The saved answer as JSON, or None when there is none for the current code."""
+        if pid not in self.items:
+            return None
+        try:
+            return self.answer_path(pid).read_bytes()
+        except OSError:
+            return None
