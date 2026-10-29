@@ -397,26 +397,31 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     grow = lambda m: cv2.dilate(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     box_out = outside_box(ink.shape, plan_box)
     base = grow(core) | box_out
-    fill = fills(img, plan_box, boxes, exits)
-    hard = base | fill
-    soft = grow(ink) & ~hard
-    placed = [(float(x), float(y)) for x, y in exits]
-    fp = footprints(hard | soft, plan_box)
-    # Fills over most of the open drawing are the floor itself (a plan
-    # behind tinted glass on white paper): the plan has no fills.
-    if fill.any() and fp is not None:
-        open_ = fp & ~base
-        if (fill & open_).sum() > FILL_MAX * max(1, open_.sum()):
-            hard = base
-            soft = grow(ink) & ~hard
-            fp = footprints(hard | soft, plan_box)
+
+    def walls_for(exits):
+        fill = fills(img, plan_box, boxes, exits)
+        hard = base | fill
+        soft = grow(ink) & ~hard
+        fp = footprints(hard | soft, plan_box)
+        # Fills over most of the open drawing are the floor itself (a plan
+        # behind tinted glass on white paper): the plan has no fills.
+        if fill.any() and fp is not None:
+            open_ = fp & ~base
+            if (fill & open_).sum() > FILL_MAX * max(1, open_.sum()):
+                hard = base
+                soft = grow(ink) & ~hard
+                fp = footprints(hard | soft, plan_box)
+        return hard, soft, fp
+
+    hard, soft, fp = walls_for(exits)
+    marks = [(float(x), float(y)) for x, y in exits]
+    legend = legend_exits(img, marks, fp, boxes) if fp is not None else set()
+    if legend and len(legend) < len(marks):
+        hard, soft, fp = walls_for([p for i, p in enumerate(exits) if i not in legend])
+    else:
+        legend = set()
+    placed = [p for i, p in enumerate(marks) if i not in legend]
     if fp is not None:
-        legend = legend_exits(img, placed, fp, boxes)
-        if legend and len(legend) < len(placed):
-            live = [p for i, p in enumerate(placed) if i not in legend]
-            hard, soft, live = ink_walls(img, plan_box, boxes, live)
-            it = iter(live)
-            return hard, soft, [None if i in legend else next(it) for i in range(len(placed))]
         near_exit = np.zeros(ink.shape, np.uint8)
         for x, y in placed:
             cv2.circle(near_exit, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
@@ -438,7 +443,8 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     kept = [p for p in placed if p is not None]
     hard &= ~exit_doors(hard, kept)
     hard &= ~room_doors(hard, kept, None if fp is None else ~fp | box_out)
-    return hard, soft & ~hard, placed
+    it = iter(placed)
+    return hard, soft & ~hard, [None if i in legend else next(it) for i in range(len(marks))]
 
 
 def fills(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> np.ndarray:
