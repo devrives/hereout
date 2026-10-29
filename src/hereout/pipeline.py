@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from .ink_walls import ink_walls, text_boxes
+from .legend import drop_legend_exits
+from .photo_map import is_photo_map
 from .plan import rectify
 from .reader import ModelClient, ModelError, Reading, SpendCapReached
 from .wall_lines import plan_walls
@@ -25,16 +28,46 @@ class Plan:
     walls: np.ndarray                  # the walls to route in
     changes: list[str] = field(default_factory=list)  # what was done to the photo
     drawn: dict = field(default_factory=dict)  # the walls to draw: straight lines and filled blocks
+    soft: np.ndarray | None = None     # soft lines: door swings and dashes, passable at a cost
+    text: list = field(default_factory=list)  # the text boxes of the image
+    photo_map: bool = False            # a route printed on an aerial photo: no walls, the exits only
 
     @classmethod
-    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None) -> "Plan":
-        walls, drawn = plan_walls(image, plan_box)
-        return cls(image, walls, changes or [], drawn)
+    def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None, text: list | None = None,
+           exits: list[dict] = ()) -> "Plan":
+        text = text_boxes(image) if text is None else text
+        walls, soft, drawn, _ = find_walls(image, plan_box, text, exits)
+        return cls(image, walls, changes or [], drawn, soft, text)
+
+    @classmethod
+    def of_reading(cls, image: np.ndarray, reading: Reading, text: list) -> "Plan":
+        """The plan for a saved reading, with its walls found once."""
+        plan = cls(image, np.zeros(image.shape[:2], bool), text=text)
+        plan.use_reading(reading)
+        return plan
 
     def use_reading(self, reading: Reading) -> None:
-        """Find the walls again inside the box the model saw."""
-        if reading.plan_box is not None:
-            self.walls, self.drawn = plan_walls(self.image, reading.plan_box)
+        """Drop the exits in a legend, then find the walls again inside the box
+        the model saw. An exit off the drawing goes; one on the street moves
+        to the building (ink_walls.place_exits)."""
+        exits = drop_legend_exits(self.image, self.text, reading.exits, reading.plan_box)
+        # Walls found in an aerial photo are roofs and trees: the page shows
+        # the exits and points to the printed route.
+        self.photo_map = is_photo_map(self.image, reading.plan_box)
+        if self.photo_map:
+            self.walls, self.soft, self.drawn = np.ones(self.image.shape[:2], bool), None, {"lines": [], "blocks": []}
+            reading.exits = exits
+            return
+        self.walls, self.soft, self.drawn, placed = find_walls(self.image, reading.plan_box, self.text, exits)
+        reading.exits = [{**e, "x": p[0], "y": p[1]} for e, p in zip(exits, placed) if p is not None]
+
+
+def find_walls(image: np.ndarray, plan_box, text: list, exits=()) -> tuple[np.ndarray, np.ndarray, dict, list]:
+    """The hard walls, the soft lines, the wall lines to draw, and the exits
+    as placed on the drawing (None for an exit that is not on it)."""
+    _, drawn = plan_walls(image, plan_box)
+    walls, soft, placed = ink_walls(image, plan_box, text, [(e["x"], e["y"]) for e in exits])
+    return walls, soft, drawn, placed
 
 
 def decode_photo(data: bytes) -> np.ndarray:

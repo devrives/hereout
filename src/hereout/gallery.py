@@ -13,6 +13,7 @@ from pathlib import Path
 
 import cv2
 
+from .ink_walls import text_boxes
 from .pipeline import Plan
 from .reader import Reading
 
@@ -66,5 +67,7 @@ class Gallery:
             notes=r.get("notes", ""),
             plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None,
         )
-        plan = Plan.of(image, reading.plan_box)
-        return plan, reading, item
+        # Saved text boxes spare the OCR on each open.
+        text = item.get("text_boxes")
+        text = text_boxes(image) if text is None else text
+        return Plan.of_reading(image, reading, text), reading, item
