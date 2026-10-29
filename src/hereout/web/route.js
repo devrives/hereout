@@ -327,13 +327,17 @@ const HereOutRoute = (() => {
   //    beside them.
   // 5. A route from a tap goes the same way to the tree, then along the
   //    tree to its exit.
-  const TURN_COST = 8;          // cells of way that one turn costs
-  const TREE_SHARE = 0.6;       // a cell of the tree costs this share of its way to the exit
+  const TURN_COST = 30;         // cells of way that one turn costs
+  const TREE_SHARE = 0.25;      // a cell of the tree costs this share of its way to the exit
   const DOOR_RATIO = 0.7;       // a way narrower than this share of the smaller room is a door
   const MIN_ROOM = 2.5;         // cells from the wall; a smaller space is part of the room next to it
   const MIN_SPUR = 3;           // cells; a shorter line to a room middle is not drawn
   const BRIDGE_SHARE = 0.06;    // share of the frame: the longest bridge between the lines to two exits
   const HOOK_SHARE = 0.02;      // share of the frame: a shorter first leg of a line from a room middle is not drawn
+  const STUB_SHARE = 0.015;     // share of the frame: how far a line goes into a room that only it serves
+  const STAIR_LEGS = 4;         // legs of a staircase that become one straight line
+  const STAIR_SHARE = 0.05;     // share of the frame: the longest leg of a staircase
+  const STAIR_SLOPE = 0.25;     // a staircase line is at least this steep (about 14 degrees)
   const PASS_STEPS = 8;         // points on the line of one move that must be clear of walls
   const DR = [0, 1, 0, -1], DC = [1, 0, -1, 0];  // the four moves: right, down, left, up
 
@@ -571,26 +575,44 @@ const HereOutRoute = (() => {
       for (const cells of branches) for (let i = cells[0]; i >= 0; i = tnext[i]) below[i] += 1;
       const legs = [];
       const hook = HOOK_SHARE * Math.max(this.fw, this.fh);
+      const stub = Math.round(STUB_SHARE * Math.max(this.fw, this.fh));
       const drawn = new Uint8Array(n);
       for (let cells of branches) {
-        // A short line that no other line joins is not drawn. A short last
-        // turn into the room middle is a hook: it goes too.
+        // A short line that no other line joins is not drawn.
         if (cells.length < MIN_SPUR && below[cells[1]] === 1 && tnext[cells[cells.length - 1]] >= 0) continue;
-        let k = 1;
-        while (k + 1 < cells.length && cells[k + 1] - cells[k] === cells[k] - cells[k - 1]) k++;
-        if (k < hook && k + 1 < cells.length && below[cells[k]] === 1) cells = cells.slice(k);
-        for (const i of cells) drawn[i] = 1;
-        const run = [cells[0]];
-        const flush = () => {
-          if (run.length > 1) legs.push({ a: this.toPx(this.middle(run[0])), b: this.toPx(this.middle(run[run.length - 1])), flow: below[run[0]] });
-        };
-        for (let k = 1; k < cells.length; k++) {
-          const p = run[run.length - 1], q = cells[k];
-          const same = run.length < 2 || (q - p === p - run[run.length - 2] && below[q] === below[p]);
-          if (!same) { flush(); run.splice(0, run.length, p); }
-          run.push(q);
+        // A line from a room that no other line joins stops a short way
+        // into the room, as the stub at a door of a printed plan.
+        const home = this.room[cells[0]];
+        let out = 0;
+        while (out < cells.length && this.room[cells[out]] === home && below[cells[out]] === 1) out++;
+        if (out < cells.length && this.room[cells[out]] !== home && out > stub) {
+          cells = cells.slice(out - stub);
+        } else {
+          // A short last turn into the room middle is a hook: it goes too.
+          let k = 1;
+          while (k + 1 < cells.length && cells[k + 1] - cells[k] === cells[k] - cells[k - 1]) k++;
+          if (k < hook && k + 1 < cells.length && below[cells[k]] === 1) cells = cells.slice(k);
         }
-        flush();
+        for (const i of cells) drawn[i] = 1;
+        // Corners: where the line turns or its flow changes. A change of
+        // flow is where another line joins: that point stays.
+        const idx = [0], fixed = [true];
+        for (let k = 1; k < cells.length - 1; k++) {
+          const turn = cells[k + 1] - cells[k] !== cells[k] - cells[k - 1];
+          const join = below[cells[k + 1]] !== below[cells[k]];
+          if (turn || join) { idx.push(k); fixed.push(join); }
+        }
+        if (cells.length > 1) { idx.push(cells.length - 1); fixed.push(true); }
+        const [cs, fs] = this.squareUp(idx.map((k) => cells[k]), fixed);
+        // The flow of a leg is the flow at its end; a new corner takes the
+        // flow of the next old one.
+        const old = new Set(idx.map((k) => cells[k]));
+        const flow = cs.map((c) => (old.has(c) ? below[c] : 0));
+        for (let k = cs.length - 2; k >= 0; k--) if (!flow[k]) flow[k] = flow[k + 1];
+        const pts = this.unstair(cs.map((c) => this.middle(c)), fs);
+        for (let k = 0; k + 1 < pts.length; k++) {
+          legs.push({ a: this.toPx(pts[k]), b: this.toPx(pts[k + 1]), flow: flow[pts[k + 1][2]] });
+        }
         const end = cells[cells.length - 1];
         if (tnext[end] < 0) {
           const pts = this.toExit(end, towner[end], cells.length > 1 ? cells[cells.length - 2] : -1);
@@ -625,9 +647,130 @@ const HereOutRoute = (() => {
           legs.push({ a: this.toPx(this.middle(i)), b: this.toPx(this.middle(j)), flow: 1, bridge: true });
         }
       }
-      const t = { dist, prev, inTree, tcost, tnext, towner, legs };
+      // Joins: the tree cells where the flow changes, that is where another
+      // line of the map joins.
+      const joins = new Uint8Array(n);
+      for (let i = 0; i < n; i++) if (tnext[i] >= 0 && below[tnext[i]] !== below[i]) joins[tnext[i]] = 1;
+      const t = { dist, prev, inTree, tcost, tnext, towner, legs, joins };
       this.trees.set(only, t);
       return t;
+    }
+
+    // Fewer turns: from each corner (a frame cell), go to the farthest later
+    // corner that one straight line or one right angle reaches, clear of
+    // walls and no nearer to them than the way it replaces. A fixed corner
+    // is never passed. Gives the corners and their fixed flags.
+    squareUp(corners, fixed) {
+      const fw = this.fw;
+      const out = [corners[0]], outFixed = [fixed[0]];
+      let i = 0;
+      while (i < corners.length - 1) {
+        let best = i + 1, via = -1;
+        let lim = i + 1;
+        while (lim < corners.length - 1 && !fixed[lim]) lim++;
+        // The clearance of the way from corner i: its nearest approach to a wall.
+        let near = Infinity;
+        const clearance = [Infinity];
+        for (let j = i + 1; j <= lim; j++) {
+          near = Math.min(near, this.lineClearance(corners[j - 1], corners[j]));
+          clearance.push(near);
+        }
+        // Turns: the way in to corner i comes from the last point out.
+        const dir = (p, q) => (Math.floor(p / fw) === Math.floor(q / fw) ? Math.sign(q - p) : 2 * Math.sign(q - p));
+        const din = out.length > 1 ? dir(out[out.length - 2], out[out.length - 1]) : 0;
+        for (let j = lim; j > i + 1; j--) {
+          const a = corners[i], b = corners[j];
+          const need = clearance[j - i] - 0.5;
+          const dend = dir(corners[j - 1], b);
+          const before = j - i - 1 + (din && din !== dir(a, corners[i + 1]) ? 1 : 0);
+          const ar = Math.floor(a / fw), ac = a - ar * fw, br = Math.floor(b / fw), bc = b - br * fw;
+          const tries = ar === br || ac === bc ? [-1] : [ar * fw + bc, br * fw + ac];
+          let pick, fewest = before;
+          for (const m of tries) {
+            const d1 = m < 0 ? dir(a, b) : dir(a, m), d2 = m < 0 ? d1 : dir(m, b);
+            const turns = (m < 0 ? 0 : 1) + (din && din !== d1 ? 1 : 0) + (d2 !== dend ? 1 : 0);
+            if (turns >= fewest) continue;
+            if (m < 0 ? this.walkable(a, b, need) : this.walkable(a, m, need) && this.walkable(m, b, need)) { pick = m; fewest = turns; }
+          }
+          if (pick !== undefined) { best = j; via = pick; break; }
+        }
+        if (via >= 0) { out.push(via); outFixed.push(false); }
+        out.push(corners[best]); outFixed.push(fixed[best]);
+        i = best;
+      }
+      return [out, outFixed];
+    }
+
+    // The smallest wall distance on the straight frame line between two cells.
+    lineClearance(a, b) {
+      let low = Infinity;
+      this.cellsOn(a, b, (i) => { low = Math.min(low, this.wd[i]); });
+      return low;
+    }
+
+    // Can a line go straight along a row or a column from cell a to cell b,
+    // with every cell open, every move clear and no cell nearer than need to a wall?
+    walkable(a, b, need) {
+      const fw = this.fw;
+      if (Math.floor(a / fw) !== Math.floor(b / fw) && a % fw !== b % fw) return false;
+      const step = Math.floor(a / fw) === Math.floor(b / fw) ? Math.sign(b - a) : Math.sign(b - a) * fw;
+      for (let i = a; i !== b; i += step) {
+        const j = i + step;
+        if (!this.open[j] || this.wd[j] < need) return false;
+        const lo = Math.min(i, j), bit = Math.abs(step) === 1 ? 1 : 2;
+        if (!(this.pass[lo] & bit)) return false;
+      }
+      return true;
+    }
+
+    // Calls f for each cell on the row or column line from a to b.
+    cellsOn(a, b, f) {
+      const fw = this.fw;
+      const step = Math.floor(a / fw) === Math.floor(b / fw) ? Math.sign(b - a) : Math.sign(b - a) * fw;
+      if (!step) { f(a); return; }
+      for (let i = a; ; i += step) { f(i); if (i === b) break; }
+    }
+
+    // A staircase of short legs is a way along walls that are not on the
+    // two main directions, as in a wing of a building at an angle. Corners
+    // (frame points, fixed ones stay) of STAIR_LEGS or more short legs that
+    // turn left and right in turn become one straight line, when that line
+    // is clear of walls. One short step in a line stays: it is not a slope.
+    // Each point that stays gets the index of its corner as a third item.
+    unstair(corners, fixed) {
+      const pts = corners.map((q, k) => [q[0], q[1], k]);
+      const longest = STAIR_SHARE * Math.max(this.fw, this.fh);
+      const leg = (k) => Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
+      const turn = (k) => Math.sign((pts[k][0] - pts[k - 1][0]) * (pts[k + 1][1] - pts[k][1]) -
+                                    (pts[k][1] - pts[k - 1][1]) * (pts[k + 1][0] - pts[k][0]));
+      const out = [pts[0]];
+      let i = 0;
+      while (i < pts.length - 1) {
+        let best = i + 1;
+        for (let j = i + 2; j < pts.length; j++) {
+          if (fixed[j - 1] || leg(j - 1) > longest || leg(i) > longest) break;
+          if (j - 1 > i + 1 && turn(j - 1) !== -turn(j - 2)) break;
+          if (j - i < STAIR_LEGS) continue;
+          const dx = Math.abs(pts[j][0] - pts[i][0]), dy = Math.abs(pts[j][1] - pts[i][1]);
+          if (Math.min(dx, dy) < STAIR_SLOPE * Math.max(dx, dy)) continue;
+          if (this.clearLine(pts[i], pts[j])) best = j;
+        }
+        out.push(pts[best]);
+        i = best;
+      }
+      return out;
+    }
+
+    // Is the straight line between two frame points clear of walls on the grid?
+    clearLine(p, q) {
+      const { gw, gh, blocked } = this.field;
+      const [x0, y0] = this.gridPoint(p[0], p[1]), [x1, y1] = this.gridPoint(q[0], q[1]);
+      const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 3) + 1;
+      for (let k = 0; k <= steps; k++) {
+        const x = Math.floor(x0 + (x1 - x0) * k / steps), y = Math.floor(y0 + (y1 - y0) * k / steps);
+        if (x < 0 || x >= gw || y < 0 || y >= gh || blocked[y * gw + x]) return false;
+      }
+      return true;
     }
 
     middle(i) {
@@ -722,8 +865,12 @@ const HereOutRoute = (() => {
       const k = t.towner[end];
       // Corners only: where the way turns.
       const keep = cells.filter((q, j) => j === 0 || j === cells.length - 1 ||
-        q - cells[j - 1] !== cells[j + 1] - q);
-      const pts = [[start[0], start[1]], ...keep.slice(1, -1).map((q) => this.toPx(this.middle(q)))];
+        q - cells[j - 1] !== cells[j + 1] - q || t.joins[q] === 1);
+      // A point where another line of the map joins stays, so the route
+      // keeps to the lines of the map.
+      const [cs, fs] = this.squareUp(keep, keep.map((q, j) => j === 0 || j === keep.length - 1 || t.joins[q] === 1));
+      const corners = this.unstair(cs.map((q) => this.middle(q)), fs);
+      const pts = [[start[0], start[1]], ...corners.slice(1, -1).map((q) => this.toPx(q))];
       pts.push(...this.toExit(end, k, cells.length > 1 ? cells[cells.length - 2] : -1));
       const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6);
       if (out.length === 1) out.push([...this.field.exits[k]]);

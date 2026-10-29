@@ -33,6 +33,7 @@ AXIS_RANGE = 20.0        # degrees from the image axes that a main wall directio
 AXIS_LINE = 0.04         # share of the long side: the shortest wall edge that counts for the directions
 AXIS_SHARE = 0.25        # share of the edge length near an axis that must agree on one direction
 AXIS_MIN = 0.4           # degrees; a smaller tilt counts as 0
+AXIS_SHEAR = 10.0        # degrees; the most that the two main directions differ in tilt
 SQRT2 = math.sqrt(2)
 # Chamfer weights of a 3x3 distance transform that is close to Euclidean.
 CHAMFER_A, CHAMFER_B = 0.955, 1.3693
@@ -88,8 +89,9 @@ def wall_axes(walls: np.ndarray) -> tuple[float, float]:
     """The two main directions of the walls, in radians: the tilt of the walls
     near the x axis and the tilt of the walls near the y axis. The way network
     of web/route.js draws its lines along them. A photo taken at an angle
-    tilts the two by different amounts. A direction that few long wall edges
-    agree on, or a tilt smaller than AXIS_MIN, counts as 0."""
+    tilts the two by different amounts, by at most AXIS_SHEAR. A direction
+    that few long wall edges agree on, or a tilt smaller than AXIS_MIN,
+    counts as 0."""
     mask = walls.astype(np.uint8) * 255
     edges = cv2.morphologyEx(mask, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
     side = max(mask.shape)
@@ -101,22 +103,36 @@ def wall_axes(walls: np.ndarray) -> tuple[float, float]:
     angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
     length = np.hypot(x2 - x1, y2 - y1)
 
-    def tilt(shift: float) -> float:
+    def tilt(shift: float, around: float = 0.0, width: float = AXIS_RANGE) -> tuple[float, float] | None:
+        """The main tilt in degrees of the edges near one axis, within width
+        of around, and the edge length that agrees on it."""
         a = (angle - shift + 90) % 180 - 90
-        near = np.abs(a) <= AXIS_RANGE
+        near = np.abs(a - around) <= width
         if not near.any():
-            return 0.0
-        hist, edges_ = np.histogram(a[near], bins=np.arange(-AXIS_RANGE, AXIS_RANGE + 0.25, 0.25),
-                                    weights=length[near])
+            return None
+        bins = np.arange(around - width, around + width + 0.25, 0.25)
+        hist, edges_ = np.histogram(a[near], bins=bins, weights=length[near])
         k = int(np.convolve(hist, [1, 2, 3, 2, 1], "same").argmax())
         top = (edges_[k] + edges_[k + 1]) / 2
         peak = near & (np.abs(a - top) < 1)
         if length[peak].sum() < AXIS_SHARE * length[near].sum():
-            return 0.0
-        t = float(np.average(a[peak], weights=length[peak]))
-        return 0.0 if abs(t) < AXIS_MIN else math.radians(t)
+            return None
+        return float(np.average(a[peak], weights=length[peak])), float(length[peak].sum())
 
-    return tilt(0.0), tilt(90.0)
+    x, y = tilt(0.0), tilt(90.0)
+    # With no clear direction near one axis, that axis is square to the other.
+    tx, ty = (x or y or (0.0, 0.0))[0], (y or x or (0.0, 0.0))[0]
+    # A photo at an angle shears the two directions a little. More shear is
+    # a wing of the building at an angle: the direction with more wall
+    # edges leads, and the other one is found near it.
+    if x and y and abs(tx - ty) > AXIS_SHEAR:
+        if x[1] >= y[1]:
+            near = tilt(90.0, tx, AXIS_SHEAR)
+            ty = near[0] if near else tx
+        else:
+            near = tilt(0.0, ty, AXIS_SHEAR)
+            tx = near[0] if near else ty
+    return tuple(0.0 if abs(t) < AXIS_MIN else math.radians(t) for t in (tx, ty))
 
 
 def wall_distance(blocked: np.ndarray) -> list[float]:
