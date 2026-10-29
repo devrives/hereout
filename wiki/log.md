@@ -212,3 +212,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `components/gallery.md`: the saved answers, their key and the script.
 - Updated `index.md`: the gallery summary.
 - Source: the owner words of 2026-10-29, `scripts/save_answers.py`.
+
+## [2026-10-29] ingest | Fast processing of a new photo
+
+- Added `decisions/photo-speed.md`: the times, the changes, the check on the gallery.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-29, the measurement in the container image, the gallery check.

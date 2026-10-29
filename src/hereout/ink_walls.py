@@ -34,7 +34,7 @@ import cv2
 import numpy as np
 
 from .route import GRID_SIDE
-from .walls import _drop_faint, _ink, outside_box, stroke_width, wall_hue
+from .walls import outside_box, strong_ink, stroke_width
 
 CHROMA = 14.0          # Lab chroma above the paper: coloured ink, not a wall
 TEXT_PAD = 3           # px around each text box
@@ -52,6 +52,7 @@ BRIDGE_ANGLE = 15      # degrees: the two ends must face each other this well
 ARC_RADIUS = (0.01, 0.07)   # share of the image: the radius of a door arc
 ARC_SWEEP = (55, 125)       # degrees
 ARC_FIT = 0.12              # mean distance from the circle, as a share of the radius
+ARC_TRIES = 60              # RANSAC tries for each branch of the thin ink
 DOOR_CUT = 0.006            # share of the image: the width of the cut through a door
 EXIT_ROOM = 0.03            # share of the image: the paper around an exit that stays open
 HINGE_NEAR = 3              # px: the hinge of a door arc is this close to a wall
@@ -149,15 +150,15 @@ def _chroma(img: np.ndarray) -> np.ndarray:
     return np.hypot(a - np.median(a), b - np.median(b))
 
 
-def drawn_ink(img: np.ndarray, plan_box=None, boxes=None) -> np.ndarray:
-    """The dark lines of the drawing, without text, colour, fills and specks."""
+def drawn_ink(img: np.ndarray, plan_box=None, boxes=None, chroma=None, strong=None) -> np.ndarray:
+    """The dark lines of the drawing, without text, colour, fills and specks.
+    chroma: _chroma(img); strong: walls.strong_ink(img, plan_box); each when the caller has it."""
     h, w = img.shape[:2]
     side = max(h, w)
-    raw = _ink(img)
-    _drop_faint(img, raw, plan_box)
+    raw, hue = strong_ink(img, plan_box) if strong is None else strong
     ink = raw > 0
-    if wall_hue(img, plan_box, raw) is None:
-        ink[_chroma(img) > CHROMA] = False
+    if hue is None:
+        ink[(_chroma(img) if chroma is None else chroma) > CHROMA] = False
     for bx in text_boxes(img) if boxes is None else boxes:
         p = np.int32(bx)
         x0, y0 = p.min(0) - TEXT_PAD
@@ -215,27 +216,82 @@ def split_strokes(ink: np.ndarray, plan_box=None) -> tuple[np.ndarray, np.ndarra
     return hard, thin
 
 
-def _thin(mask: np.ndarray) -> np.ndarray:
-    """Zhang-Suen thinning to a one-pixel skeleton."""
-    img = np.pad(mask.astype(np.uint8), 1)
-    while True:
-        changed = False
-        for step in (0, 1):
-            p = [np.roll(np.roll(img, -dy, 0), -dx, 1) for dy, dx in
-                 ((-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1))]
+# The 8 neighbours, clockwise from the top: (dy, dx).
+RING = ((-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1))
+
+
+def _thin_tables() -> tuple[np.ndarray, np.ndarray]:
+    """For each pattern of the 8 neighbours (bit k = neighbour k), whether
+    the two Zhang-Suen steps remove the pixel."""
+    out = []
+    for step in (0, 1):
+        t = np.zeros(256, bool)
+        for code in range(256):
+            p = [(code >> k) & 1 for k in range(8)]
             b = sum(p)
-            seq = p + [p[0]]
-            a = sum(((seq[i] == 0) & (seq[i + 1] == 1)).astype(np.uint8) for i in range(8))
+            a = sum(p[k] == 0 and p[(k + 1) % 8] == 1 for k in range(8))
             if step == 0:
-                c = (p[0] * p[2] * p[4] == 0) & (p[2] * p[4] * p[6] == 0)
+                c = p[0] * p[2] * p[4] == 0 and p[2] * p[4] * p[6] == 0
             else:
-                c = (p[0] * p[2] * p[6] == 0) & (p[0] * p[4] * p[6] == 0)
-            kill = (img == 1) & (b >= 2) & (b <= 6) & (a == 1) & c
-            if kill.any():
-                img[kill] = 0
-                changed = True
-        if not changed:
-            return img[1:-1, 1:-1] > 0
+                c = p[0] * p[2] * p[6] == 0 and p[0] * p[4] * p[6] == 0
+            t[code] = 2 <= b <= 6 and a == 1 and c
+        out.append(t)
+    return out[0], out[1]
+
+
+THIN_STEPS = _thin_tables()
+
+
+def _thin(mask: np.ndarray) -> np.ndarray:
+    """Zhang-Suen thinning to a one-pixel skeleton. A step removes a pixel by
+    its 8 neighbours only, so each step looks again only at the pixels whose
+    neighbours changed since that step last looked at them."""
+    out = np.zeros(mask.shape, bool)
+    ys, xs = np.nonzero(mask)
+    if not len(ys):
+        return out
+    y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+    img = np.pad(mask[y0:y1, x0:x1].astype(np.uint8), 1)
+    h, w = img.shape
+    flat = img.reshape(-1)
+    off = np.array([dy * w + dx for dy, dx in RING])
+    # A pixel with no paper around it never goes: start with the edge pixels.
+    full = np.ones(img.shape, np.uint8)
+    for dy, dx in RING:
+        full[1:-1, 1:-1] &= img[1 + dy:h - 1 + dy, 1 + dx:w - 1 + dx]
+    start = np.flatnonzero(img & (1 - full))
+    todo = [start, start.copy()]
+    queued = [np.zeros(flat.size, bool), np.zeros(flat.size, bool)]
+    queued[0][start] = queued[1][start] = True
+    stamp = np.empty(flat.size, np.int64)
+    step, idle = 0, 0
+    while idle < 2:
+        c = todo[step]
+        queued[step][c] = False
+        c = c[flat[c] == 1]
+        code = np.zeros(len(c), np.uint8)
+        for k in range(8):
+            code |= flat[c + off[k]] << k
+        kill = c[THIN_STEPS[step][code]]
+        todo[step] = c[:0]
+        if len(kill):
+            idle = 0
+            flat[kill] = 0
+            nb = (kill[:, None] + off).ravel()
+            nb = nb[flat[nb] == 1]
+            # Keep one copy of each pixel: the last write of its own index wins.
+            n = np.arange(len(nb))
+            stamp[nb] = n
+            nb = nb[stamp[nb] == n]
+            for s in (0, 1):
+                new = nb[~queued[s][nb]]
+                queued[s][new] = True
+                todo[s] = np.r_[todo[s], new]
+        else:
+            idle += 1
+        step ^= 1
+    out[y0:y1, x0:x1] = img[1:-1, 1:-1] > 0
+    return out
 
 
 def door_arcs(thin: np.ndarray, seed: int = 0) -> list[tuple]:
@@ -265,23 +321,25 @@ def door_arcs(thin: np.ndarray, seed: int = 0) -> list[tuple]:
         if st[i, cv2.CC_STAT_AREA] < 0.6 * (np.pi / 2) * ARC_RADIUS[0] * side:
             continue
         pts = np.c_[xs[start[i - 1]:start[i]], ys[start[i - 1]:start[i]]].astype(float)
-        best = None
-        for _ in range(60):
-            a, b, c = pts[rng.choice(len(pts), 3, replace=False)]
-            d = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]))
-            if abs(d) < 1e-6:
-                continue
-            ux = ((a @ a) * (b[1] - c[1]) + (b @ b) * (c[1] - a[1]) + (c @ c) * (a[1] - b[1])) / d
-            uy = ((a @ a) * (c[0] - b[0]) + (b @ b) * (a[0] - c[0]) + (c @ c) * (b[0] - a[0])) / d
-            r = float(np.hypot(*(a - (ux, uy))))
-            if not (ARC_RADIUS[0] * side <= r <= ARC_RADIUS[1] * side):
-                continue
-            inl = np.abs(np.hypot(pts[:, 0] - ux, pts[:, 1] - uy) - r) <= max(2.0, ARC_FIT * r / 2)
-            if best is None or inl.sum() > best[3].sum():
-                best = (ux, uy, r, inl)
-        if best is None:
+        # All tries of the branch at once: a circle through each three points.
+        tri = rng.integers(0, len(pts), (ARC_TRIES, 3))
+        tri = tri[(tri[:, 0] != tri[:, 1]) & (tri[:, 1] != tri[:, 2]) & (tri[:, 0] != tri[:, 2])]
+        a, b, c = pts[tri[:, 0]], pts[tri[:, 1]], pts[tri[:, 2]]
+        d = 2 * (a[:, 0] * (b[:, 1] - c[:, 1]) + b[:, 0] * (c[:, 1] - a[:, 1]) + c[:, 0] * (a[:, 1] - b[:, 1]))
+        ok = np.abs(d) >= 1e-6
+        a, b, c, d = a[ok], b[ok], c[ok], d[ok]
+        aa, bb, cc = (a * a).sum(1), (b * b).sum(1), (c * c).sum(1)
+        ux = (aa * (b[:, 1] - c[:, 1]) + bb * (c[:, 1] - a[:, 1]) + cc * (a[:, 1] - b[:, 1])) / d
+        uy = (aa * (c[:, 0] - b[:, 0]) + bb * (a[:, 0] - c[:, 0]) + cc * (b[:, 0] - a[:, 0])) / d
+        r = np.hypot(a[:, 0] - ux, a[:, 1] - uy)
+        ok = (ARC_RADIUS[0] * side <= r) & (r <= ARC_RADIUS[1] * side)
+        if not ok.any():
             continue
-        cx, cy, r, inl = best
+        ux, uy, r = ux[ok], uy[ok], r[ok]
+        tol = np.maximum(2.0, ARC_FIT * r / 2)
+        inl = np.abs(np.hypot(pts[None, :, 0] - ux[:, None], pts[None, :, 1] - uy[:, None]) - r[:, None]) <= tol[:, None]
+        k = int(np.argmax(inl.sum(1)))
+        cx, cy, r, inl = ux[k], uy[k], r[k], inl[k]
         if inl.sum() < 0.6 * (np.pi / 2) * r:
             continue
         # The sweep: the largest gap between the angles of the arc is the part it does not cover.
@@ -335,30 +393,34 @@ def gap_bridges(walls: np.ndarray) -> np.ndarray:
     nb = sum(pad[1 + dy:pad.shape[0] - 1 + dy, 1 + dx:pad.shape[1] - 1 + dx]
              for dy in (-1, 0, 1) for dx in (-1, 0, 1) if dy or dx)
     ends = np.argwhere(sk & (nb == 1))[:, ::-1].astype(float)  # (x, y)
-    pts = np.argwhere(sk)[:, ::-1].astype(float)
     reach = BRIDGE_LOOK * side
-    dirs = []
-    for e in ends:
+    R = int(np.ceil(reach))
+    h, w = sk.shape
+    dirs = np.full((len(ends), 2), np.nan)
+    for k, e in enumerate(ends):
+        # The skeleton points within reach, in the window around the end.
+        x0, y0 = max(0, int(e[0]) - R), max(0, int(e[1]) - R)
+        pts = np.argwhere(sk[y0:int(e[1]) + R + 1, x0:int(e[0]) + R + 1])[:, ::-1] + (x0, y0)
         near = pts[np.hypot(*(pts - e).T) <= reach]
         d = e - near.mean(0)  # the wall runs from its body to its end
         n = np.hypot(*d)
-        dirs.append(d / n if n > 1e-6 else None)
+        if n > 1e-6:
+            dirs[k] = d / n
     out = np.zeros(walls.shape, np.uint8)
     lim = BRIDGE_MAX * side
     cos = np.cos(np.radians(BRIDGE_ANGLE))
-    for i in range(len(ends)):
-        if dirs[i] is None:
-            continue
-        for j in range(i + 1, len(ends)):
-            if dirs[j] is None:
-                continue
-            v = ends[j] - ends[i]
-            L = np.hypot(*v)
-            if not (2 < L <= lim):
-                continue
-            u = v / L
-            if dirs[i] @ u >= cos and dirs[j] @ -u >= cos:
-                cv2.line(out, tuple(map(int, ends[i])), tuple(map(int, ends[j])), 1, 3)
+    good = ~np.isnan(dirs[:, 0])
+    for i in np.flatnonzero(good):
+        # Every later end at once.
+        j = np.flatnonzero(good[i + 1:]) + i + 1
+        v = ends[j] - ends[i]
+        L = np.hypot(v[:, 0], v[:, 1])
+        near = (L > 2) & (L <= lim)
+        j, v, L = j[near], v[near], L[near]
+        u = v / L[:, None]
+        face = (dirs[i, 0] * u[:, 0] + dirs[i, 1] * u[:, 1] >= cos) & (-(dirs[j, 0] * u[:, 0] + dirs[j, 1] * u[:, 1]) >= cos)
+        for jj in j[face]:
+            cv2.line(out, tuple(map(int, ends[i])), tuple(map(int, ends[jj])), 1, 3)
     return out > 0
 
 
@@ -388,14 +450,15 @@ def footprints(walls: np.ndarray, plan_box=None) -> np.ndarray | None:
     return fp > 0 if fp.any() else None
 
 
-def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.ndarray, np.ndarray, list]:
+def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None) -> tuple[np.ndarray, np.ndarray, list]:
     """The hard walls (with the outside of the drawings), the soft lines, and
     the exits as placed on the drawing (place_exits; None for a dropped exit).
     exits: (x, y) points; the paper just around each exit stays open, because
     an exit mark often sits just outside the outer wall, at its door."""
     side = max(img.shape[:2])
     boxes = text_boxes(img) if boxes is None else boxes
-    ink = drawn_ink(img, plan_box, boxes)
+    chroma = _chroma(img)
+    ink = drawn_ink(img, plan_box, boxes, chroma, strong)
     core, thin = split_strokes(ink, plan_box)
     # A wall drawn as two thin lines has a strip of paper inside it: close it.
     k = max(3, int(WALL_STRIP * side)) | 1
@@ -406,7 +469,7 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     base = grow(core) | box_out
 
     def walls_for(exits):
-        fill = fills(img, plan_box, boxes, exits)
+        fill = fills(img, plan_box, boxes, exits, chroma)
         hard = base | fill
         soft = grow(ink) & ~hard
         fp = footprints(hard | soft, plan_box)
@@ -454,7 +517,7 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     return hard, soft & ~hard, [None if i in legend else next(it) for i in range(len(marks))]
 
 
-def fills(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> np.ndarray:
+def fills(img: np.ndarray, plan_box=None, boxes=None, exits=(), chroma=None) -> np.ndarray:
     """Grey areas that are much darker than the paper around them and wider
     than a line: track beds, shafts, solid walls. A route never crosses them.
     Coloured areas are not fills: those are signs and marked zones. Some
@@ -473,7 +536,7 @@ def fills(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> np.ndarray:
     bright = grey >= np.percentile(grey, 70)
     # A green tint is a printed route band (ISO 7010 green), not a fill.
     green = lab[..., 1].astype(np.int16) < np.median(lab[..., 1][bright]) - GREEN_TINT
-    dark = (paper.astype(np.int16) - grey > FILL_DROP) & (_chroma(img) <= CHROMA) & ~green
+    dark = (paper.astype(np.int16) - grey > FILL_DROP) & ((_chroma(img) if chroma is None else chroma) <= CHROMA) & ~green
     for bx in boxes or []:
         p = np.int32(bx)
         x0, y0 = p.min(0) - TEXT_PAD

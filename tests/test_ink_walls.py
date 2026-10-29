@@ -44,6 +44,38 @@ def test_thick_walls_are_hard_and_a_stub_is_soft():
     assert hard[300, 500]
 
 
+def plain_thin(mask):
+    """Zhang-Suen thinning, every pixel in every pass: the reference for iw._thin."""
+    img = np.pad(mask.astype(np.uint8), 1)
+    while True:
+        changed = False
+        for step in (0, 1):
+            p = [np.roll(np.roll(img, -dy, 0), -dx, 1) for dy, dx in iw.RING]
+            b = sum(p)
+            a = sum(((p[i] == 0) & (p[(i + 1) % 8] == 1)).astype(np.uint8) for i in range(8))
+            if step == 0:
+                c = (p[0] * p[2] * p[4] == 0) & (p[2] * p[4] * p[6] == 0)
+            else:
+                c = (p[0] * p[2] * p[6] == 0) & (p[0] * p[4] * p[6] == 0)
+            kill = (img == 1) & (b >= 2) & (b <= 6) & (a == 1) & c
+            if kill.any():
+                img[kill] = 0
+                changed = True
+        if not changed:
+            return img[1:-1, 1:-1] > 0
+
+
+def test_fast_thinning_is_zhang_suen():
+    img = np.zeros((300, 400), np.uint8)
+    cv2.rectangle(img, (20, 20), (380, 280), 1, 9)
+    cv2.line(img, (60, 250), (330, 40), 1, 5)
+    cv2.circle(img, (200, 150), 60, 1, 14)
+    cv2.rectangle(img, (300, 200), (370, 270), 1, -1)
+    img[0:6, 0:400] = 1                  # ink on the edge of the image
+    for mask in (img > 0, np.zeros((50, 50), bool)):
+        assert np.array_equal(iw._thin(mask), plain_thin(mask))
+
+
 def test_door_arc_is_found():
     ink = np.all(room_with_door() < 100, axis=2)
     _, thin = split_strokes(ink)

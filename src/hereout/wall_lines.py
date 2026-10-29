@@ -69,10 +69,10 @@ END_SHARE = 0.003      # each line grows at most this much at each end, over ink
 PAPER_SHARE = 1 / 40   # the closing that finds the paper colour, as in walls.py
 
 
-def plan_walls(img: np.ndarray, plan_box=None) -> tuple[np.ndarray, dict]:
+def plan_walls(img: np.ndarray, plan_box=None, ink=None) -> tuple[np.ndarray, dict]:
     """The wall mask to route in, and the walls to draw: lines [x0, y0, x1, y1, width]
-    and blocks (filled areas, as polygons)."""
-    lines, blocks = find_lines(img, wall_mask(img, plan_box), plan_box)
+    and blocks (filled areas, as polygons). ink: walls.strong_ink(img, plan_box), when the caller has it."""
+    lines, blocks = find_lines(img, wall_mask(img, plan_box, ink), plan_box)
     return draw_walls(lines, blocks, img.shape, plan_box), {"lines": lines, "blocks": blocks}
 
 
@@ -445,7 +445,12 @@ def _grow(s: list[float], ink: np.ndarray, most: float) -> list[float]:
         k = 0
         while k < most:
             nx, ny = x + sign * ux * (k + 1), y + sign * uy * (k + 1)
-            if not (0 <= nx < w and 0 <= ny < h) or _inked(ink, (nx, ny), (nx, ny)) < 1:
+            if not (0 <= nx < w and 0 <= ny < h):
+                break
+            # Ink within a pixel of the point, rounded as in _inked.
+            rows = [min(max(int(np.round(ny + d)), 0), h - 1) for d in (-1, 0, 1)]
+            cols = [min(max(int(np.round(nx + d)), 0), w - 1) for d in (-1, 0, 1)]
+            if not ink[np.ix_(rows, cols)].any():
                 break
             k += 1
         ends.append((x + sign * ux * k, y + sign * uy * k))

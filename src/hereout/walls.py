@@ -113,17 +113,24 @@ def _drop_thin(walls: np.ndarray, plan_box=None) -> np.ndarray:
     return cv2.morphologyEx(walls.astype(np.uint8), cv2.MORPH_OPEN, kernel).astype(bool)
 
 
-def wall_mask(img: np.ndarray, plan_box: tuple[float, float, float, float] | None = None) -> np.ndarray:
-    """Return a bool array, True where a wall is.
-
-    plan_box is (x0, y0, x1, y1) in pixels.
-    """
-    h, w = img.shape[:2]
+def strong_ink(img: np.ndarray, plan_box=None) -> tuple[np.ndarray, int | None]:
+    """The ink without faint fills, and the wall hue (wall_hue). Both wall
+    passes start from it, so find_walls makes it once."""
     dark = _ink(img)
     _drop_faint(img, dark, plan_box)
+    return dark, wall_hue(img, plan_box, dark)
+
+
+def wall_mask(img: np.ndarray, plan_box: tuple[float, float, float, float] | None = None,
+              ink: tuple[np.ndarray, int | None] | None = None) -> np.ndarray:
+    """Return a bool array, True where a wall is.
+
+    plan_box is (x0, y0, x1, y1) in pixels. ink: strong_ink(img, plan_box), when the caller has it.
+    """
+    h, w = img.shape[:2]
+    dark, target = strong_ink(img, plan_box) if ink is None else (ink[0].copy(), ink[1])
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     hue, sat = hsv[:, :, 0].astype(int), hsv[:, :, 1]
-    target = wall_hue(img, plan_box, dark)
     if target is not None:
         diff = np.abs(hue - target)
         diff = np.minimum(diff, 180 - diff)

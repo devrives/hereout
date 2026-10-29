@@ -104,6 +104,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
             # The model call takes 15 to 60 seconds; keep the event loop free.
             reading, err = await run_in_threadpool(read_marks, plan, client)
         else:
+            await run_in_threadpool(plan.no_reading)
             reading, err = None, "too many photos; mark the plan by hand"
         return await run_in_threadpool(answer, None, plan, reading, err)
 
