@@ -93,3 +93,27 @@ def test_wing_lines_follow_the_wing():
     tilts = [out["axes"][0], out["wingAxes"][0]]
     assert {all(square_to(l, t) for l in inside) for t in tilts} == {True, False}
     assert {all(square_to(l, t) for l in outside) for t in tilts} == {True, False}
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_small_rooms_join_at_their_door():
+    """A corridor with an exit at its end, small rooms on one side and a hall
+    on the other. The map has no line inside a small room; the hall has one."""
+    import cv2
+    import numpy as np
+    from hereout.route import grid_payload
+    walls = np.ones((800, 1600), bool)
+    walls[380:440, 100:1500] = False                     # the corridor
+    for x in range(150, 1450, 130):                      # small rooms above it
+        walls[250:370, x:x + 110] = False
+        walls[365:385, x + 40:x + 70] = False            # the door
+    walls[450:750, 300:1300] = False                     # the hall below it
+    walls[435:455, 760:840] = False                      # its door
+    walls |= cv2.morphologyEx(walls.astype(np.uint8), cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)) > 0
+    case = {"grid": grid_payload(walls), "exits": [[1495, 410]]}
+    out = json.loads(subprocess.run([NODE, str(Path(__file__).parent / "wing_check.js")], input=json.dumps(case),
+                                    capture_output=True, text=True, check=True).stdout)
+    ends = [p for l in out["legs"] for p in (l["a"], l["b"])]
+    assert not any(255 < y < 360 for _, y in ends)       # no line inside a small room
+    assert any(470 < y < 740 for _, y in ends)           # a line into the hall
+    assert any(380 <= y <= 440 for _, y in ends)         # the corridor line

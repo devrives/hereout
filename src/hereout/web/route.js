@@ -336,6 +336,8 @@ const HereOutRoute = (() => {
   const BRIDGE_SHARE = 0.06;    // share of the frame: the longest bridge between the lines to two exits
   const HOOK_SHARE = 0.02;      // share of the frame: a shorter first leg of a line from a room middle is not drawn
   const STUB_SHARE = 0.015;     // share of the frame: how far a line goes into a room that only it serves
+  const HALL_SHARE = 0.03;      // share of the open floor: a room this large (a hall, a lobby) has a line of its own
+  const REACH_SHARE = 0.03;     // share of the frame: a shorter way from the door of a small room to a line is not drawn
   const STAIR_LEGS = 4;         // legs of a staircase that become one straight line
   const STAIR_SHARE = 0.05;     // share of the frame: the longest leg of a staircase
   const STAIR_SLOPE = 0.25;     // a staircase line is at least this steep (about 14 degrees)
@@ -636,6 +638,12 @@ const HereOutRoute = (() => {
       const legs = [];
       const hook = HOOK_SHARE * Math.max(this.fw, this.fh);
       const stub = Math.round(STUB_SHARE * Math.max(this.fw, this.fh));
+      const reach = REACH_SHARE * Math.max(this.fw, this.fh);
+      // The size of each room, and the size of a hall.
+      const area = new Map();
+      let floor = 0;
+      for (let i = 0; i < n; i++) if (open[i]) { floor++; area.set(this.room[i], (area.get(this.room[i]) || 0) + 1); }
+      const hall = HALL_SHARE * floor;
       const drawn = new Uint8Array(n);
       for (let cells of branches) {
         // A short line that no other line joins is not drawn.
@@ -645,7 +653,16 @@ const HereOutRoute = (() => {
         const home = this.room[cells[0]];
         let out = 0;
         while (out < cells.length && this.room[cells[out]] === home && below[cells[out]] === 1) out++;
-        if (out < cells.length && this.room[cells[out]] !== home && out > stub) {
+        if (area.get(home) < hall) {
+          // A small room (a toilet, a store, an office) has no line of its
+          // own: its door joins the line outside, as on a printed plan. The
+          // way from its door is drawn only when it is long: the far end of
+          // a corridor. The part that other lines share stays.
+          let k = out;
+          while (k < cells.length && below[cells[k]] === 1) k++;
+          cells = cells.slice(k - out >= reach ? out : k);
+          if (cells.length < 2) continue;
+        } else if (out < cells.length && this.room[cells[out]] !== home && out > stub) {
           cells = cells.slice(out - stub);
         } else {
           // A short last turn into the room middle is a hook: it goes too.
