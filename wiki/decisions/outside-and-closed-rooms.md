@@ -3,10 +3,12 @@ type: decision
 title: Close the outside of the building and give closed rooms a door
 status: proposed
 updated: 2026-10-29
-checked: 78dcaca
+checked: 985375d
 sources:
   - owner:2026-10-29
   - commit:78dcaca
+  - commit:8ce3579
+  - commit:985375d
 ---
 # Close the outside of the building and give closed rooms a door
 
@@ -35,3 +37,17 @@ All changes are on branch `ortho-net`, in `ink_walls.py`. They make no model cal
 - KR-commons_more_000036 is a photo map from the air. No test of texture, colour or wall shape separates it from a drawing, so its lines stay wrong. The model can name the kind of plan in its one read call; that needs a prompt test with a cost.
 - The new steps add time to the wall step. The door arc search stays the slowest part.
 - The owner gets a page of 15 plans at `/review/`: the lines of the second round next to the third. The decision waits for the result.
+
+## Gallery check
+
+- The owner asked for a check on new plans (2026-10-29). The code ran on the other 165 gallery plans with their saved readings. It made no model call.
+- The share of open floor with a way out had a mean of 0.931 and a median of 0.97. No line crossed a hard wall. One plan was under half.
+- The code dropped 2 of 723 exits. One drop was wrong: the stair exit of DE-commons_000008 sat on the middle of a round hall, a separate small shape. Commit 985375d drops a lone exit only when its shape is outside the bounds of the main drawing.
+- A visual check of all 165 plans found these weak types:
+  - photo maps from the air (7 tsunami maps of KR and US);
+  - sheets with many floors, where lines show on few floors;
+  - thin-line station diagrams, with few lines;
+  - plans where lines go onto a street, a garden or a pitch;
+  - exits that the model put on the margin of the sheet.
+- Commit 8ce3579 finds the points of each skeleton branch in one pass. The door arcs stay the same. The wall step took 2.6 to 8.9 seconds on 10 plans, before 11 to 70 seconds.
+

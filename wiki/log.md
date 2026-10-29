@@ -184,3 +184,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/orthogonal-way-tree.md`: small rooms join the line at their door; halls keep a line.
 - Source: the owner words of 2026-10-29, commit bb987a5 on `ortho-net`.
 
+## [2026-10-29] ingest | Gallery check of the new walls and lines
+
+- Updated `decisions/outside-and-closed-rooms.md`: the result on 165 gallery plans, the exit fix and the speed fix.
+- Source: the owner words of 2026-10-29, commits 8ce3579 and 985375d on `ortho-net`, the gallery run.
+
