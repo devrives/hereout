@@ -49,14 +49,16 @@ OPEN_WITH_WAY = 0.5  # a plan passes when this share of its open floor has a way
 LICENCE_URLS = {
     "cc0": "https://creativecommons.org/publicdomain/zero/1.0/",
     "cc pdm 1.0": "https://creativecommons.org/publicdomain/mark/1.0/",
+    "public domain": "https://creativecommons.org/publicdomain/mark/1.0/",
     "cc by 2.0": "https://creativecommons.org/licenses/by/2.0/",
+    "cc by 3.0": "https://creativecommons.org/licenses/by/3.0/",
     "cc by 4.0": "https://creativecommons.org/licenses/by/4.0/",
     "cc by-sa 2.0": "https://creativecommons.org/licenses/by-sa/2.0/",
     "cc by-sa 3.0": "https://creativecommons.org/licenses/by-sa/3.0/",
     "cc by-sa 4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
     "cc by-sa 3.0 de": "https://creativecommons.org/licenses/by-sa/3.0/de/",
 }
-LICENCE_NAMES = {"cc0": "CC0 1.0", "cc pdm 1.0": "Public Domain Mark 1.0"}
+LICENCE_NAMES = {"cc0": "CC0 1.0", "cc pdm 1.0": "Public Domain Mark 1.0", "public domain": "Public domain"}
 
 
 def credit(row: dict) -> dict:

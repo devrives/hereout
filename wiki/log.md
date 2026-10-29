@@ -223,3 +223,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/photo-speed.md`: the resize in the page, the times in the container, the reviews.
 - Source: the browser checks, the ux and a11y reviews.
+
+## [2026-10-29] ingest | Test on photos outside the eval set
+
+- Added `timelines/photo-set-tests.md`: the set of 28 photos, the result, the times and the check by eye.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-29, the run in `_workspace/hereout-holdout/`.

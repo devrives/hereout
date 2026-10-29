@@ -29,6 +29,8 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 
 ## Timelines
 
+- [Tests on photo sets](timelines/photo-set-tests.md): runs of the plan reader on photo sets, with time, cost and a check by eye.
+
 ## Components
 
 - [Plan reader](components/plan-reader.md): from a plan photo to a route and steps.
