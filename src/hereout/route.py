@@ -29,6 +29,10 @@ SOFT_COST = 10.0         # extra cost of a cell on a soft line (a door swing, a 
 SOFT_SHARE = 0.15        # share of soft-line pixels that makes a cell soft
 EXIT_REACH_SHARE = 0.015 # an exit reaches the open cells this close, on each side of the line it is on
 WALL_COST = 2.0          # extra cost next to a wall, fading with distance
+AXIS_RANGE = 20.0        # degrees from the image axes that a main wall direction can be
+AXIS_LINE = 0.04         # share of the long side: the shortest wall edge that counts for the directions
+AXIS_SHARE = 0.25        # share of the edge length near an axis that must agree on one direction
+AXIS_MIN = 0.4           # degrees; a smaller tilt counts as 0
 SQRT2 = math.sqrt(2)
 # Chamfer weights of a 3x3 distance transform that is close to Euclidean.
 CHAMFER_A, CHAMFER_B = 0.955, 1.3693
@@ -70,13 +74,49 @@ def soft_grid(soft: np.ndarray, blocked: np.ndarray) -> np.ndarray:
 
 def grid_payload(walls: np.ndarray, soft: np.ndarray | None = None) -> dict:
     """The grid for the browser: blocked cells as packed bits, first bit high.
-    With soft lines, "soft" has the soft cells in the same form."""
+    With soft lines, "soft" has the soft cells in the same form. "axes" are
+    the two main directions of the walls (wall_axes)."""
     blocked, scale = blocked_grid(walls)
     gh, gw = blocked.shape
-    out = {"w": gw, "h": gh, "scale": scale, "bits": pack(blocked)}
+    out = {"w": gw, "h": gh, "scale": scale, "bits": pack(blocked), "axes": list(wall_axes(walls))}
     if soft is not None and soft.any():
         out["soft"] = pack(soft_grid(soft, blocked))
     return out
+
+
+def wall_axes(walls: np.ndarray) -> tuple[float, float]:
+    """The two main directions of the walls, in radians: the tilt of the walls
+    near the x axis and the tilt of the walls near the y axis. The way network
+    of web/route.js draws its lines along them. A photo taken at an angle
+    tilts the two by different amounts. A direction that few long wall edges
+    agree on, or a tilt smaller than AXIS_MIN, counts as 0."""
+    mask = walls.astype(np.uint8) * 255
+    edges = cv2.morphologyEx(mask, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
+    side = max(mask.shape)
+    lines = cv2.HoughLinesP(edges, 1, np.pi / 720, threshold=40,
+                            minLineLength=max(8, int(side * AXIS_LINE)), maxLineGap=3)
+    if lines is None:
+        return 0.0, 0.0
+    x1, y1, x2, y2 = lines.reshape(-1, 4).T.astype(np.float64)
+    angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+    length = np.hypot(x2 - x1, y2 - y1)
+
+    def tilt(shift: float) -> float:
+        a = (angle - shift + 90) % 180 - 90
+        near = np.abs(a) <= AXIS_RANGE
+        if not near.any():
+            return 0.0
+        hist, edges_ = np.histogram(a[near], bins=np.arange(-AXIS_RANGE, AXIS_RANGE + 0.25, 0.25),
+                                    weights=length[near])
+        k = int(np.convolve(hist, [1, 2, 3, 2, 1], "same").argmax())
+        top = (edges_[k] + edges_[k + 1]) / 2
+        peak = near & (np.abs(a - top) < 1)
+        if length[peak].sum() < AXIS_SHARE * length[near].sum():
+            return 0.0
+        t = float(np.average(a[peak], weights=length[peak]))
+        return 0.0 if abs(t) < AXIS_MIN else math.radians(t)
+
+    return tilt(0.0), tilt(90.0)
 
 
 def wall_distance(blocked: np.ndarray) -> list[float]:

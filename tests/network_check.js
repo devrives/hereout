@@ -25,6 +25,9 @@ process.stdin.on("end", () => {
       adopted,
       legs: net.legs.length,
       legsClear: net.legs.filter((l) => !l.exit).every((l) => clear(l.a, l.b)),
+      // With no tilt, every line of the map is level or upright.
+      straight: net.axes.some((a) => a !== 0) ||
+        net.legs.filter((l) => !l.exit).every((l) => Math.abs(l.a[0] - l.b[0]) < 1e-6 || Math.abs(l.a[1] - l.b[1]) < 1e-6),
       routes: c.starts.map((s) => {
         let grid, way;
         try { grid = f.route(s); } catch (e) { grid = { error: e.message }; }
@@ -33,7 +36,10 @@ process.stdin.on("end", () => {
         return { gridError: grid.error || null, onNetwork: !!way.onNetwork, exitIndex: way.exitIndex,
                  end: p[p.length - 1], exit: c.exits[way.exitIndex],
                  clear: p.slice(1, -1).every((q, i) => clear(p[i], q)),
-                 bad: p.slice(1, -1).flatMap((q, i) => (clear(p[i], q) ? [] : [i])), n: p.length };
+                 bad: p.slice(1, -1).flatMap((q, i) => (clear(p[i], q) ? [] : [i])), n: p.length,
+                 // The legs between the first and the last are level or upright.
+                 straight: net.axes.some((a) => a !== 0) || p.slice(2, -2).every((q, i) =>
+                   Math.abs(q[0] - p[i + 1][0]) < 1e-6 || Math.abs(q[1] - p[i + 1][1]) < 1e-6) };
       }),
     };
   });

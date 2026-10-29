@@ -13,7 +13,9 @@ onmessage = (ev) => {
   }
   const R = HereOutRoute;
   const field = new R.Field(R.decodeGrid(grid), grid.w, grid.h, grid.scale, exits, [],
-                            grid.soft ? R.decodeGrid({ ...grid, bits: grid.soft }) : null);
+                            grid.soft ? R.decodeGrid({ ...grid, bits: grid.soft }) : null, grid.axes);
   const data = field.network().toData();
-  postMessage({ id, data }, [data.room.buffer, data.nodeAt.buffer, data.open.buffer, data.wd.buffer, data.cost.buffer]);
+  const t = data.tree;
+  postMessage({ id, data }, [data.room.buffer, data.open.buffer, data.pass.buffer, data.wd.buffer, data.cost.buffer, data.src.buffer,
+                             t.dist.buffer, t.prev.buffer, t.inTree.buffer, t.tcost.buffer, t.tnext.buffer, t.towner.buffer]);
 };

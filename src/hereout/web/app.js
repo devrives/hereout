@@ -51,7 +51,7 @@ function buildField() {
   const g = state.grid;
   const blocked = R.decodeGrid(g);
   const soft = g.soft ? R.decodeGrid({ ...g, bits: g.soft }) : null;
-  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, [], soft);
+  const make = (exits) => new R.Field(blocked, g.w, g.h, g.scale, exits, [], soft, g.axes);
   const field = make(exitPoints());
   const single = new Map();  // a field to one exit, made when the user picks that exit
   view = { field, layer: null, walls: null, route: null, steps: [], error: null,

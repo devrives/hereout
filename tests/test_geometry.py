@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from hereout.plan import find_plan_quad, order_corners, plan_aspect, plausible_sheet, rectify
-from hereout.route import NoRoute, find_route
+from hereout.route import NoRoute, find_route, wall_axes
 from hereout.steps import directions
 from hereout.walls import wall_hue, wall_mask
 
@@ -177,3 +177,16 @@ def test_door_swing_does_not_close_the_door():
     walls = wall_mask(img)
     assert walls[300, 400]                       # the thick wall stays
     assert find_route(walls, here, [exit_]).exit_index == 0
+
+
+def test_wall_axes_find_the_tilt_of_a_plan():
+    walls = np.zeros((600, 800), bool)
+    for x in (100, 400, 700):
+        walls[100:500, x - 3:x + 3] = True
+    for y in (100, 300, 500):
+        walls[y - 3:y + 3, 100:700] = True
+    assert wall_axes(walls) == (0.0, 0.0)
+    turn = cv2.getRotationMatrix2D((400, 300), -3, 1.0)  # 3 degrees clockwise on the screen
+    tilted = cv2.warpAffine(walls.astype(np.uint8), turn, (800, 600), flags=cv2.INTER_NEAREST) > 0
+    a, b = (math.degrees(t) for t in wall_axes(tilted))
+    assert abs(a - 3) < 0.5 and abs(b - 3) < 0.5
