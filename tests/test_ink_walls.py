@@ -3,7 +3,7 @@
 import cv2
 import numpy as np
 
-from hereout.ink_walls import door_arcs, footprints, ink_walls, split_strokes
+from hereout.ink_walls import beyond_exits, door_arcs, footprints, ink_walls, place_exits, room_doors, split_strokes
 from hereout.legend import drop_legend_exits
 from hereout.route import Field, NoRoute, blocked_grid, soft_grid
 
@@ -50,7 +50,7 @@ def test_door_arc_is_found():
 
 def test_door_swing_opens_the_room():
     img = room_with_door()
-    hard, soft = ink_walls(img, boxes=[])
+    hard, soft, _ = ink_walls(img, boxes=[])
     r = route(hard, soft, (400, 300), (880, 305))
     assert r.exit_index == 0
 
@@ -59,7 +59,7 @@ def test_closed_wall_has_no_way():
     img = np.full((600, 900, 3), PAPER, np.uint8)
     cv2.rectangle(img, (50, 50), (850, 550), BLACK, 10)
     cv2.line(img, (450, 50), (450, 550), BLACK, 10)
-    hard, soft = ink_walls(img, boxes=[])
+    hard, soft, _ = ink_walls(img, boxes=[])
     try:
         route(hard, soft, (250, 300), (650, 300))
     except NoRoute:
@@ -87,3 +87,49 @@ def test_legend_exit_is_dropped():
     assert [e["label"] for e in kept] == ["A"]
     # At least one exit stays.
     assert drop_legend_exits(img, text, exits[1:], plan_box=(40, 40, 600, 760)) == exits[1:]
+
+
+def test_exit_off_the_drawing_is_dropped():
+    fp = np.zeros((500, 1000), bool)
+    fp[50:450, 50:550] = True
+    placed = place_exits([(550, 200), (900, 300)], fp, ~fp)
+    assert placed[0] == (550, 200) and placed[1] is None
+    # At least one exit stays.
+    assert place_exits([(900, 300)], fp, ~fp) == [(900, 300)]
+    # A lone exit next to a small drawing apart from the main one (a text
+    # panel) goes; two exits there stay.
+    fp[470:540, 700:800] = True
+    assert place_exits([(300, 200), (820, 520)], fp, ~fp)[1] is None
+    assert None not in place_exits([(300, 200), (750, 520), (780, 500)], fp, ~fp)
+
+
+def test_exit_on_the_street_moves_to_the_building():
+    fp = np.zeros((500, 1000), bool)
+    fp[50:450, 50:950] = True
+    blocked = ~fp
+    blocked[300:450, :] = True          # the street below the front wall
+    (x, y), = place_exits([(500, 380)], fp, blocked)
+    assert x == 500 and 290 <= y < 300
+
+
+def test_area_beyond_the_exits_is_outside():
+    """A hall with exits in its front wall, and a forecourt between the front
+    wall and a thin fence. The forecourt is outside; the hall is not."""
+    blocked = np.zeros((600, 1000), bool)
+    blocked[:, :20] = blocked[:, -20:] = blocked[:20, :] = blocked[500:, :] = True
+    blocked[400:406, :] = True          # the front wall
+    blocked[470:473, :] = True          # the fence
+    inside = ~blocked
+    inside[400:473, :] = True
+    out = beyond_exits(blocked, inside, [(300, 403), (700, 403)])
+    assert out[440, 500] and not out[200, 500]
+
+
+def test_closed_room_gets_a_door():
+    hard = np.zeros((500, 900), bool)
+    hard[:10, :] = hard[-10:, :] = hard[:, :10] = hard[:, -10:] = True
+    hard[:, 445:455] = True             # a wall with no door between the two rooms
+    door = room_doors(hard, [(100, 250)], None)
+    assert door[:, 445:455].any()
+    walls = hard & ~door
+    assert route(walls, np.zeros_like(walls), (700, 250), (100, 250)).exit_index == 0

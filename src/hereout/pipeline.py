@@ -34,20 +34,31 @@ class Plan:
     def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None, text: list | None = None,
            exits: list[dict] = ()) -> "Plan":
         text = text_boxes(image) if text is None else text
-        walls, soft, drawn = find_walls(image, plan_box, text, exits)
+        walls, soft, drawn, _ = find_walls(image, plan_box, text, exits)
         return cls(image, walls, changes or [], drawn, soft, text)
 
+    @classmethod
+    def of_reading(cls, image: np.ndarray, reading: Reading, text: list) -> "Plan":
+        """The plan for a saved reading, with its walls found once."""
+        plan = cls(image, np.zeros(image.shape[:2], bool), text=text)
+        plan.use_reading(reading)
+        return plan
+
     def use_reading(self, reading: Reading) -> None:
-        """Drop the exits in a legend, then find the walls again inside the box the model saw."""
-        reading.exits = drop_legend_exits(self.image, self.text, reading.exits, reading.plan_box)
-        self.walls, self.soft, self.drawn = find_walls(self.image, reading.plan_box, self.text, reading.exits)
+        """Drop the exits in a legend, then find the walls again inside the box
+        the model saw. An exit off the drawing goes; one on the street moves
+        to the building (ink_walls.place_exits)."""
+        exits = drop_legend_exits(self.image, self.text, reading.exits, reading.plan_box)
+        self.walls, self.soft, self.drawn, placed = find_walls(self.image, reading.plan_box, self.text, exits)
+        reading.exits = [{**e, "x": p[0], "y": p[1]} for e, p in zip(exits, placed) if p is not None]
 
 
-def find_walls(image: np.ndarray, plan_box, text: list, exits=()) -> tuple[np.ndarray, np.ndarray, dict]:
-    """The hard walls, the soft lines, and the wall lines to draw."""
+def find_walls(image: np.ndarray, plan_box, text: list, exits=()) -> tuple[np.ndarray, np.ndarray, dict, list]:
+    """The hard walls, the soft lines, the wall lines to draw, and the exits
+    as placed on the drawing (None for an exit that is not on it)."""
     _, drawn = plan_walls(image, plan_box)
-    walls, soft = ink_walls(image, plan_box, text, [(e["x"], e["y"]) for e in exits])
-    return walls, soft, drawn
+    walls, soft, placed = ink_walls(image, plan_box, text, [(e["x"], e["y"]) for e in exits])
+    return walls, soft, drawn, placed
 
 
 def decode_photo(data: bytes) -> np.ndarray:

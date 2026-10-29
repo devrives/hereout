@@ -128,8 +128,9 @@ const HereOutRoute = (() => {
     // soft: the cells of soft lines (door swings, dashes), or null. They can
     // be crossed, at a cost; a straight line of the map never crosses them.
     // axes: the two main directions of the walls in radians (route.py, wall_axes).
-    constructor(blocked, gw, gh, scale, exits, clear = [], soft = null, axes = [0, 0]) {
-      Object.assign(this, { gw, gh, scale, exits, soft, axes });
+    // wing: a wing at an angle, { mask: its cells, axes: its directions } (route.py, wall_wing), or null.
+    constructor(blocked, gw, gh, scale, exits, clear = [], soft = null, axes = [0, 0], wing = null) {
+      Object.assign(this, { gw, gh, scale, exits, soft, axes, wing });
       blocked = Uint8Array.from(blocked);
       // A start can sit on ink, for example the plan's own "you are here"
       // dot: clear a small disc so it does not wall in its own point. An exit gets no disc, as in route.py: a disc
@@ -338,14 +339,17 @@ const HereOutRoute = (() => {
   const STAIR_LEGS = 4;         // legs of a staircase that become one straight line
   const STAIR_SHARE = 0.05;     // share of the frame: the longest leg of a staircase
   const STAIR_SLOPE = 0.25;     // a staircase line is at least this steep (about 14 degrees)
+  const STAIR_RUN = 0.08;       // share of the frame: a shorter staircase stays in steps (a slanted line is for a long slanted corridor)
   const PASS_STEPS = 8;         // points on the line of one move that must be clear of walls
   const DR = [0, 1, 0, -1], DC = [1, 0, -1, 0];  // the four moves: right, down, left, up
 
   class Network {
-    constructor(field) {
+    // axes: the directions of the frame; a second network along the
+    // directions of a wing gives the lines inside the wing (mergeWing).
+    constructor(field, axes = null) {
       this.field = field;
       this.ink = inkOf(field);
-      const [a, b] = field.axes;
+      const [a, b] = axes || field.axes;
       this.makeFrame(a, b);
       this.findRooms();
       // Sources: the middle of each room that is not too small.
@@ -353,7 +357,63 @@ const HereOutRoute = (() => {
       for (const [root, cell] of this.middles) if (this.wd[cell] >= MIN_ROOM && root >= 0) this.sources.push(cell);
       this.exitSeeds = field.exits.map((e, k) => this.frameSeeds(k));
       this.trees = new Map();
-      Object.assign(this, { legs: this.tree(-1).legs });
+      const t = this.tree(-1);
+      if (!axes && field.wing) t.legs = this.mergeWing(t.legs, new Network(field, field.wing.axes).legs);
+      Object.assign(this, { legs: t.legs });
+    }
+
+    // The lines of the map with a wing at an angle: the lines of this network
+    // outside the wing, and the lines of the wing's own network inside it.
+    // Where a line of each leaves the edge of the wing near the other, a
+    // short straight line joins the two cut ends.
+    mergeWing(main, wing) {
+      const f = this.field, mask = f.wing.mask;
+      const inWing = (p) => { const [r, c] = f.toCell(p); return mask[r * f.gw + c] === 1; };
+      const clip = (legs, keep) => {
+        const out = [], ends = [];
+        for (const l of legs) {
+          const n = Math.max(1, Math.ceil(Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]) * f.scale * 2));
+          let start = null, last = l.a;
+          for (let k = 0; k <= n; k++) {
+            const p = [l.a[0] + ((l.b[0] - l.a[0]) * k) / n, l.a[1] + ((l.b[1] - l.a[1]) * k) / n];
+            if (inWing(p) === keep) {
+              if (!start) { start = p; if (k > 0) ends.push({ p, flow: l.flow }); }
+            } else if (start) {
+              out.push({ ...l, a: start, b: last });
+              ends.push({ p: last, flow: l.flow });
+              start = null;
+            }
+            last = p;
+          }
+          if (start) out.push({ ...l, a: start, b: l.b });
+        }
+        return [out.filter((l) => l.a[0] !== l.b[0] || l.a[1] !== l.b[1]), ends];
+      };
+      const [outside, mainEnds] = clip(main, false);
+      const [inside, wingEnds] = clip(wing, true);
+      const legs = [...outside, ...inside];
+      const reach = (BRIDGE_SHARE * Math.max(this.fw, this.fh)) / f.scale;
+      const open = (p, q) => {
+        const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) * f.scale * 3) + 1;
+        for (let k = 0; k <= n; k++) {
+          const [r, c] = f.toCell([p[0] + ((q[0] - p[0]) * k) / n, p[1] + ((q[1] - p[1]) * k) / n]);
+          if (f.blocked[r * f.gw + c]) return false;
+        }
+        return true;
+      };
+      const used = new Set();
+      for (const w of wingEnds) {
+        let best = -1, bestD = reach;
+        mainEnds.forEach((m, k) => {
+          const d = Math.hypot(m.p[0] - w.p[0], m.p[1] - w.p[1]);
+          if (!used.has(k) && d < bestD && open(w.p, m.p)) { best = k; bestD = d; }
+        });
+        if (best >= 0) {
+          used.add(best);
+          legs.push({ a: w.p, b: mainEnds[best].p, flow: Math.max(w.flow, mainEnds[best].flow) });
+        }
+      }
+      return legs;
     }
 
     // The frame: cell (r, c) of the frame has its middle at grid point
@@ -735,11 +795,13 @@ const HereOutRoute = (() => {
     // two main directions, as in a wing of a building at an angle. Corners
     // (frame points, fixed ones stay) of STAIR_LEGS or more short legs that
     // turn left and right in turn become one straight line, when that line
-    // is clear of walls. One short step in a line stays: it is not a slope.
+    // is clear of walls and long (STAIR_RUN). One short step in a line, or a
+    // short staircase, stays: it is not a slanted corridor.
     // Each point that stays gets the index of its corner as a third item.
     unstair(corners, fixed) {
       const pts = corners.map((q, k) => [q[0], q[1], k]);
       const longest = STAIR_SHARE * Math.max(this.fw, this.fh);
+      const run = STAIR_RUN * Math.max(this.fw, this.fh);
       const leg = (k) => Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]);
       const turn = (k) => Math.sign((pts[k][0] - pts[k - 1][0]) * (pts[k + 1][1] - pts[k][1]) -
                                     (pts[k][1] - pts[k - 1][1]) * (pts[k + 1][0] - pts[k][0]));
@@ -753,6 +815,7 @@ const HereOutRoute = (() => {
           if (j - i < STAIR_LEGS) continue;
           const dx = Math.abs(pts[j][0] - pts[i][0]), dy = Math.abs(pts[j][1] - pts[i][1]);
           if (Math.min(dx, dy) < STAIR_SLOPE * Math.max(dx, dy)) continue;
+          if (Math.hypot(dx, dy) < run) continue;
           if (this.clearLine(pts[i], pts[j])) best = j;
         }
         out.push(pts[best]);

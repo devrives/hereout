@@ -14,7 +14,6 @@ from pathlib import Path
 import cv2
 
 from .ink_walls import text_boxes
-from .legend import drop_legend_exits
 from .pipeline import Plan
 from .reader import Reading
 
@@ -71,6 +70,4 @@ class Gallery:
         # Saved text boxes spare the OCR on each open.
         text = item.get("text_boxes")
         text = text_boxes(image) if text is None else text
-        reading.exits = drop_legend_exits(image, text, reading.exits, reading.plan_box)
-        plan = Plan.of(image, reading.plan_box, text=text, exits=reading.exits)
-        return plan, reading, item
+        return Plan.of_reading(image, reading, text), reading, item

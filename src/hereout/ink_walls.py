@@ -58,6 +58,22 @@ WALL_STRIP = 0.007          # share of the image: the paper strip inside a doubl
 LEAF_INK = 0.6              # share of a chord on ink that makes it a door leaf
 EXIT_DOOR = 0.06            # share of the image: an exit gets a cut to a large open area this close
 BIG_AREA = 0.05             # share of the open area: a large open area
+FILL_DROP = 45              # grey levels below the paper: a fill, not paper
+FILL_WIDTH = 0.008          # share of the image: a fill is at least this wide (lines and text are not)
+FILL_MAX = 0.5              # fills over more of the open drawing than this are the floor, not fills
+FILL_GAP = 0.009            # share of the image: a narrower paper gap between two fills is closed
+FILL_AREA = 0.0004          # share of the image: a smaller dark patch is a mark (an arrow head), not a fill
+GREEN_TINT = 3              # Lab a* steps below the paper: a green tint
+PAPER_LOOK = 0.08           # share of the image: the window that finds the local paper tone
+OUT_TOUCH = 0.01            # share of the image: an open area that touches the edge of the drawing this long, with no wall,
+OUT_SHARE = 0.25            # and along this share of its border, is outside the building
+EXIT_OFF = 0.1              # share of the image: an exit farther than this from every drawing is not on the plan
+MINOR_DRAWING = 0.3         # share of the largest footprint: a smaller one is a minor drawing
+EXIT_MOVE = 0.1             # share of the image: an exit outside the building moves to the building this close
+OUT_DEPTH = 0.15            # share of the image: the deepest that an area beyond the exits goes from the edge of the drawing
+ROOM_MIN = 0.0004           # share of the image: a closed area this large is a room and gets a door
+ROOM_WIDTH = 0.025          # share of the image: the mean width of a room that gets a door
+ROOM_DOOR = 0.025           # share of the image: the thickest wall that such a door goes through
 
 _ocr = None
 _ocr_lock = threading.Lock()
@@ -318,8 +334,9 @@ def footprints(walls: np.ndarray, plan_box=None) -> np.ndarray | None:
     return fp > 0 if fp.any() else None
 
 
-def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.ndarray, np.ndarray]:
-    """The hard walls (with the outside of the drawings) and the soft lines.
+def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.ndarray, np.ndarray, list]:
+    """The hard walls (with the outside of the drawings), the soft lines, and
+    the exits as placed on the drawing (place_exits; None for a dropped exit).
     exits: (x, y) points; the paper just around each exit stays open, because
     an exit mark often sits just outside the outer wall, at its door."""
     side = max(img.shape[:2])
@@ -331,24 +348,274 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0
     grow = lambda m: cv2.dilate(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     box_out = outside_box(ink.shape, plan_box)
-    hard = grow(core) | box_out
+    base = grow(core) | box_out
+    fill = fills(img, plan_box, boxes, exits)
+    hard = base | fill
     soft = grow(ink) & ~hard
+    placed = [(float(x), float(y)) for x, y in exits]
     fp = footprints(hard | soft, plan_box)
+    # Fills over most of the open drawing are the floor itself (a plan
+    # behind tinted glass on white paper): the plan has no fills.
+    if fill.any() and fp is not None:
+        open_ = fp & ~base
+        if (fill & open_).sum() > FILL_MAX * max(1, open_.sum()):
+            hard = base
+            soft = grow(ink) & ~hard
+            fp = footprints(hard | soft, plan_box)
     if fp is not None:
+        near_exit = np.zeros(ink.shape, np.uint8)
+        for x, y in placed:
+            cv2.circle(near_exit, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
+        out = outside_areas(hard | soft | ~fp, ~fp & ~box_out, near_exit > 0)
+        out |= beyond_exits(hard | soft | ~fp | out, fp, placed)
+        placed = place_exits(placed, fp, hard | ~fp | out)
         disc = np.zeros(ink.shape, np.uint8)
-        for x, y in exits:
+        for x, y in (p for p in placed if p is not None):
             cv2.circle(disc, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
-        fp |= disc > 0
-        hard |= ~fp
-        soft &= fp
+        hard |= (~fp | out) & (disc == 0)
+        soft &= ~hard
     cut = np.zeros(ink.shape, np.uint8)
     width = max(3, int(DOOR_CUT * side))
     for (cx, cy), e in door_openings(thin, core, ink):
         cv2.line(cut, (round(cx), round(cy)), (round(e[0]), round(e[1])), 1, width)
     opened = (cut > 0) & ~box_out
     hard, soft = hard & ~opened, soft & ~opened & ~hard
-    door = exit_doors(hard, exits)
-    return hard & ~door, soft & ~door
+    kept = [p for p in placed if p is not None]
+    hard &= ~exit_doors(hard, kept)
+    hard &= ~room_doors(hard, kept, None if fp is None else ~fp | box_out)
+    return hard, soft & ~hard, placed
+
+
+def fills(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> np.ndarray:
+    """Grey areas that are much darker than the paper around them and wider
+    than a line: track beds, shafts, solid walls. A route never crosses them.
+    Coloured areas are not fills: those are signs and marked zones. Some
+    plans draw the floor itself in grey on a light sign: when most exits
+    stand on the dark tone, that tone is the floor, and the plan has no fills."""
+    side = max(img.shape[:2])
+    grey = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # The paper tone on a small copy: the windows are wide, and the tone changes slowly.
+    f = 8
+    small = cv2.resize(cv2.dilate(grey, np.ones((f, f), np.uint8)), (max(1, grey.shape[1] // f), max(1, grey.shape[0] // f)),
+                       interpolation=cv2.INTER_NEAREST)
+    k = max(3, int(PAPER_LOOK * side / f)) | 1
+    paper = cv2.resize(cv2.GaussianBlur(cv2.dilate(small, np.ones((k, k), np.uint8)), (k, k), 0),
+                       (grey.shape[1], grey.shape[0]), interpolation=cv2.INTER_LINEAR)
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    bright = grey >= np.percentile(grey, 70)
+    # A green tint is a printed route band (ISO 7010 green), not a fill.
+    green = lab[..., 1].astype(np.int16) < np.median(lab[..., 1][bright]) - GREEN_TINT
+    dark = (paper.astype(np.int16) - grey > FILL_DROP) & (_chroma(img) <= CHROMA) & ~green
+    for bx in boxes or []:
+        p = np.int32(bx)
+        x0, y0 = p.min(0) - TEXT_PAD
+        x1, y1 = p.max(0) + TEXT_PAD
+        dark[max(0, y0):max(0, y1), max(0, x0):max(0, x1)] = False
+    w = max(3, int(FILL_WIDTH * side)) | 1
+    solid = cv2.morphologyEx(dark.astype(np.uint8), cv2.MORPH_OPEN,
+                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (w, w)))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(solid, connectivity=8)
+    big = st[:, cv2.CC_STAT_AREA] >= FILL_AREA * solid.size
+    big[0] = False
+    out = big[lab]
+    # A thin paper ribbon between two fills (the border of a printed panel)
+    # is not a way: it goes with the fills.
+    g = max(3, int(FILL_GAP * side)) | 1
+    out = cv2.morphologyEx(out.astype(np.uint8), cv2.MORPH_CLOSE,
+                           cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (g, g))) > 0
+    out &= ~outside_box(img.shape, plan_box)
+    r = max(3, int(EXIT_ROOM * side))
+    on_fill = 0
+    for x, y in exits:
+        disc = np.zeros(out.shape, np.uint8)
+        cv2.circle(disc, (round(x), round(y)), r, 1, -1)
+        on_fill += dark[disc > 0].mean() > 0.5 if disc.any() else 0
+    if len(exits) and on_fill > len(exits) / 2:
+        return np.zeros(out.shape, bool)
+    return out
+
+
+def outside_areas(blocked: np.ndarray, edge: np.ndarray, keep: np.ndarray | None = None) -> np.ndarray:
+    """Open areas that touch the edge of the drawing with no line between:
+    the street, a forecourt, a margin of the sheet. A room has a line all
+    round (a wall, or a thin outline), so its open area never touches the edge itself.
+    edge: True outside the drawings (the plan box margin does not count).
+    keep: True round the exits; an area that touches it is the way to an
+    exit, and stays (its outer wall can be a thin line that the photo lost)."""
+    side = max(blocked.shape)
+    free = (~blocked).astype(np.uint8)
+    n, lab = cv2.connectedComponents(free, connectivity=4)
+    k = np.ones((3, 3), np.uint8)
+    border = (cv2.erode(free, k) == 0) & (free > 0)
+    touch = border & (cv2.dilate(edge.astype(np.uint8), k) > 0)
+    t = np.bincount(lab[touch], minlength=n)
+    b = np.bincount(lab[border], minlength=n)
+    out = (t >= OUT_TOUCH * side) & (t >= OUT_SHARE * np.maximum(b, 1))
+    out[0] = False
+    if keep is not None:
+        out[np.unique(lab[keep])] = False
+    return out[lab]
+
+
+def beyond_exits(blocked: np.ndarray, inside: np.ndarray, exits) -> np.ndarray:
+    """The open areas on the far side of the exits: a pavement, a forecourt,
+    a canopy. An exit is a door in the outer wall. Its outer side is the side
+    that is nearer to the edge of the drawing. An area that more exits have
+    on their outer side than on their inner side, and that stays near the
+    edge, is outside the building. The thin lines count as borders here, so a
+    door in the outer wall does not join the street to the hall.
+    inside: True on the drawings."""
+    side = max(blocked.shape)
+    h, w = blocked.shape
+    r = max(3, int(EXIT_ROOM * side))
+    cut = blocked.astype(np.uint8)
+    for x, y in (p for p in exits if p is not None):
+        cv2.circle(cut, (round(x), round(y)), r, 1, -1)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(1 - cut, connectivity=4)
+    depth = cv2.distanceTransform(cv2.copyMakeBorder(inside.astype(np.uint8), 1, 1, 1, 1, cv2.BORDER_CONSTANT, value=0),
+                                  cv2.DIST_L2, 5)[1:-1, 1:-1]
+    far = OUT_DEPTH * side
+    gap = max(3, r // 4)   # the areas just past the cut round each exit
+    votes = np.zeros(n, int)
+    for x, y in (p for p in exits if p is not None):
+        cx, cy = round(x), round(y)
+        if not (0 <= cx < w and 0 <= cy < h):
+            continue
+        rays = []
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            edge, comp = None, 0
+            for t in range(1, int(far) + 1):
+                px, py = cx + dx * t, cy + dy * t
+                if not (0 <= px < w and 0 <= py < h) or not inside[py, px]:
+                    edge = t
+                    break
+                if not comp and r < t <= r + gap and lab[py, px]:
+                    comp = lab[py, px]
+            rays.append((edge if edge is not None else np.inf, comp))
+        k = int(np.argmin([e for e, _ in rays]))
+        if not np.isfinite(rays[k][0]):
+            continue
+        outer, inner = rays[k][1], rays[k ^ 1][1]
+        # The building is the larger side. A stair exit inside a platform has
+        # the small stair box on one side and the platform on the other.
+        if outer and inner and outer != inner:
+            votes[inner] -= 1
+            if st[inner, cv2.CC_STAT_AREA] >= st[outer, cv2.CC_STAT_AREA]:
+                votes[outer] += 1
+    votes[0] = 0
+    out = votes > 0
+    free = st[1:, cv2.CC_STAT_AREA].sum()
+    for c in np.nonzero(out)[0]:
+        if st[c, cv2.CC_STAT_AREA] > 0.5 * free or depth[lab == c].max() > far:
+            out[c] = False
+    # The thin lines between two outside areas go with them.
+    return cv2.dilate(out[lab].astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+
+
+def place_exits(exits: list, fp: np.ndarray, blocked: np.ndarray) -> list:
+    """Each exit, or None when it is not on any drawing (a text panel, a
+    legend). An exit on an open area outside the building moves to the
+    nearest open point of the building. At least one exit stays."""
+    side = max(fp.shape)
+    h, w = fp.shape
+    near = cv2.distanceTransform((~fp).astype(np.uint8), cv2.DIST_L2, 5)
+    inside = (~blocked).astype(np.uint8)
+    to_in = cv2.distanceTransform(1 - inside, cv2.DIST_L2, 5)
+    out = []
+    for x, y in exits:
+        cx, cy = min(w - 1, max(0, round(x))), min(h - 1, max(0, round(y)))
+        if near[cy, cx] > EXIT_OFF * side:
+            out.append(None)
+        elif to_in[cy, cx] > EXIT_ROOM * side and to_in[cy, cx] <= EXIT_MOVE * side:
+            r = int(to_in[cy, cx]) + 2
+            y0, x0 = max(0, cy - r), max(0, cx - r)
+            ys, xs = np.nonzero(inside[y0:cy + r + 1, x0:cx + r + 1])
+            i = int(np.argmin((xs + x0 - cx) ** 2 + (ys + y0 - cy) ** 2))
+            out.append((float(xs[i] + x0), float(ys[i] + y0)))
+        else:
+            out.append((x, y))
+    # A lone exit on a small drawing apart from the main one is a sign on a
+    # text panel (its boxes close into a footprint), not a second building.
+    n, lab, st, _ = cv2.connectedComponentsWithStats(fp.astype(np.uint8), connectivity=8)
+    if n > 2:
+        # Each exit goes with the footprint it is on, or the nearest one.
+        _, nearest = cv2.distanceTransformWithLabels((~fp).astype(np.uint8), cv2.DIST_L2, 5,
+                                                     labelType=cv2.DIST_LABEL_PIXEL)
+        ys, xs = np.nonzero(fp)
+        order = np.zeros(nearest.max() + 1, np.int32)
+        order[nearest[ys, xs]] = lab[ys, xs]
+        where = [order[nearest[min(h - 1, max(0, round(p[1]))), min(w - 1, max(0, round(p[0])))]] if p else 0
+                 for p in out]
+        count = np.bincount(where, minlength=n)
+        main = st[1:, cv2.CC_STAT_AREA].max()
+        for i, c in enumerate(where):
+            if c and count[c] == 1 and st[c, cv2.CC_STAT_AREA] < MINOR_DRAWING * main and count[1:].sum() > 1:
+                out[i] = None
+    if exits and all(p is None for p in out):
+        return [(float(x), float(y)) for x, y in exits]
+    return out
+
+
+def room_doors(hard: np.ndarray, exits, edge: np.ndarray | None) -> np.ndarray:
+    """A door into each closed room. Every room of a building has a door, but
+    a door drawn as a thin line, or covered by a sign, reads as wall. A room
+    that no exit reaches gets a cut through the thinnest wall to an area that
+    an exit reaches, then the next rooms, until no room is left or the walls
+    are too thick. edge: True outside the drawings; a cut never goes there."""
+    side = max(hard.shape)
+    out = np.zeros(hard.shape, np.uint8)
+    if not len(exits):
+        return out > 0
+    k = max(3, int(np.ceil(side / GRID_SIDE)) * 2 + 1)
+    width = max(k + 2, int(DOOR_CUT * side))
+    free = cv2.erode((~hard).astype(np.uint8), np.ones((k, k), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(free, connectivity=4)
+    reached = np.zeros(n, bool)
+    h, w = hard.shape
+    r = max(3, int(EXIT_ROOM * side))
+    for x, y in exits:
+        cx, cy = int(round(x)), int(round(y))
+        win = lab[max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1]
+        reached[np.unique(win)] = True
+    reached[0] = False
+    # A room is wide; a thin strip (the margin between a drawing and its
+    # frame, the paper inside a double wall) is not, and gets no door.
+    wide = st[:, cv2.CC_STAT_AREA] / np.maximum(1, np.maximum(st[:, cv2.CC_STAT_WIDTH], st[:, cv2.CC_STAT_HEIGHT]))
+    room = (st[:, cv2.CC_STAT_AREA] >= ROOM_MIN * h * w) & (wide >= ROOM_WIDTH * side)
+    room[0] = False
+    reach = ROOM_DOOR * side + k
+    for _ in range(64):
+        todo = np.nonzero(room & ~reached)[0]
+        if not len(todo) or not reached.any():
+            break
+        dist = cv2.distanceTransform((~reached[lab]).astype(np.uint8), cv2.DIST_L2, 5)
+        opened = False
+        for c in todo:
+            bx, by, bw, bh = st[c, :4]
+            d = np.where(lab[by:by + bh, bx:bx + bw] == c, dist[by:by + bh, bx:bx + bw], np.inf)
+            i = int(np.argmin(d))
+            if d.flat[i] > reach:
+                continue
+            py, px = divmod(i, bw)
+            py, px = py + by, px + bx
+            rr = int(d.flat[i]) + 2
+            y0, x0 = max(0, py - rr), max(0, px - rr)
+            ys, xs = np.nonzero(reached[lab[y0:py + rr + 1, x0:px + rr + 1]])
+            j = int(np.argmin((xs + x0 - px) ** 2 + (ys + y0 - py) ** 2))
+            qx, qy = int(xs[j] + x0), int(ys[j] + y0)
+            m = width + 1
+            wx0, wy0 = max(0, min(px, qx) - m), max(0, min(py, qy) - m)
+            wx1, wy1 = min(w, max(px, qx) + m + 1), min(h, max(py, qy) + m + 1)
+            line = np.zeros((wy1 - wy0, wx1 - wx0), np.uint8)
+            cv2.line(line, (px - wx0, py - wy0), (qx - wx0, qy - wy0), 1, width)
+            if edge is not None and (edge[wy0:wy1, wx0:wx1] & (line > 0)).any():
+                continue
+            out[wy0:wy1, wx0:wx1] |= line
+            reached[c] = True
+            opened = True
+        if not opened:
+            break
+    return out > 0
 
 
 def exit_doors(hard: np.ndarray, exits) -> np.ndarray:
