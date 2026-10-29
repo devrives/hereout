@@ -52,7 +52,7 @@ sources:
   - 96 wall grids changed, by a median of 10 cells (106 at most).
   - The mean share of open floor with a way out is 0.9319 before and 0.9318 after. The largest drop is JP-commons_000383, from 0.817 to 0.796.
 - On JP-commons_000383 the new result stays the same with 60, 150 and 300 tries. The old result came from one set of random draws, so the number of tries stays at 60.
-- In the container image with one CPU and a model call of 15 s, the server adds 2.61 s on average to the call (median 2.88 s, 4.91 s at most). Before, it added 14.4 s.
+- The test in the container image used one CPU and a model call of 15 s. The server adds 2.61 s on average to the call (median 2.88 s, 4.91 s at most). Before, it added 14.4 s.
 - A 50-megapixel photo of 21 MB goes up as 1.7 MB. Before, the server refused it (the limit is 12 MB). The rotation from the photo data stays the same as on the server.
 - The page stops for about 0.6 s on a desktop during the resize of a 50-megapixel photo. The wait message and the disabled button show before the resize. A resize in a worker was not added.
 - The ux and a11y reviews found no violations.
