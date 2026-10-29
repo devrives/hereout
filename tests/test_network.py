@@ -117,3 +117,54 @@ def test_small_rooms_join_at_their_door():
     assert not any(255 < y < 360 for _, y in ends)       # no line inside a small room
     assert any(470 < y < 740 for _, y in ends)           # a line into the hall
     assert any(380 <= y <= 440 for _, y in ends)         # the corridor line
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_second_exit_is_another_door():
+    """A corridor with an exit at each end and a second mark next to the left
+    one. From a spot left of the middle the nearest exit is on the left; the
+    second exit is the right one, not the mark beside the first."""
+    import numpy as np
+    from hereout.route import grid_payload
+    walls = np.ones((400, 1600), bool)
+    walls[150:250, 50:1550] = False
+    case = {"grid": grid_payload(walls), "exits": [[60, 200], [75, 215], [1540, 200]], "start": [600, 200]}
+    js = r"""
+const R = require(process.argv[1]);
+let input = ""; process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const c = JSON.parse(input), g = c.grid;
+  const f = new R.Field(R.decodeGrid(g), g.w, g.h, g.scale, c.exits, [], null, g.axes);
+  const main = f.wayRoute(c.start).exitIndex;
+  process.stdout.write(JSON.stringify({ main, other: f.otherExit(c.start, main), costs: f.exitCosts(c.start) }));
+});"""
+    out = json.loads(subprocess.run([NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                    input=json.dumps(case), capture_output=True, text=True, check=True).stdout)
+    assert out["main"] in (0, 1)
+    assert out["other"] == 2
+    assert all(c is not None and c < 1e9 for c in out["costs"])
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_second_exit_avoids_the_first_door():
+    """A corridor with exits A (left end) and B (a side door next to A) and C
+    (right end). From the middle-left the nearest exit is A. The second exit
+    is not reached through the door of A: C, by the corridor to the right."""
+    import numpy as np
+    from hereout.route import grid_payload
+    walls = np.ones((400, 1600), bool)
+    walls[150:250, 50:1550] = False                     # the corridor
+    walls[60:150, 40:100] = False                       # a passage up to B, from beside the door of A
+    case = {"grid": grid_payload(walls), "exits": [[60, 165], [70, 60], [1540, 200]], "start": [500, 200]}
+    js = r"""
+const R = require(process.argv[1]);
+let input = ""; process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const c = JSON.parse(input), g = c.grid;
+  const f = new R.Field(R.decodeGrid(g), g.w, g.h, g.scale, c.exits, [], null, g.axes);
+  process.stdout.write(JSON.stringify({ near: f.nearestExit(c.start), others: f.otherExits(c.start, 0) }));
+});"""
+    out = json.loads(subprocess.run([NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                    input=json.dumps(case), capture_output=True, text=True, check=True).stdout)
+    assert out["near"] == 0
+    assert out["others"][0] == 2

@@ -25,6 +25,10 @@ const STORE_KEY = "hereout:last";
 const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
 const MAP_ALPHA = 110;
 const ROUTE = "#1b5fd1";
+const ARROW_GAP = 12;   // plan units between two arrows on a way out
+const ARROW_SIZE = 1.1; // plan units: half the width of an arrow head
+const OTHER_TRIES = 3;  // exits tried for the second way out
+const ARROW_CLEAR = 2;  // plan units: no arrow this close to a route
 const WALL = "#7a818b";  // lighter than the ways out, so a way and a wall differ in more than hue
 const BLOCK = "#d3d6db";  // a filled area of the plan, in Routes only
 const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contrast over a photo
@@ -109,24 +113,48 @@ const FINDING = "Finding the route…";
 // way out gets its message at once.
 function findRoute() {
   view.route = null;
+  view.backup = null;
   view.steps = [];
   view.error = null;
   view.pending = false;
   if (!state.start || !state.exits.length) return;
-  const k = state.exitChoice;
+  const f = view.field, start = state.start;
+  // The ways out lead to a chosen exit too. Where they do not, the grid
+  // route of a field to that exit is the answer.
+  const to = (k) => f.wayRoute(start, k) || view.toExit(k).route(start);
+  let main;
   try {
-    // The ways out lead to a chosen exit too. Where they do not, the grid
-    // route of a field to that exit is the answer.
-    const r = k >= 0 ? view.field.wayRoute(state.start, k) || view.toExit(k).route(state.start)
-                     : view.field.wayRoute(state.start);
-    if (view.field.waitForNetwork && !view.field._network) { view.pending = true; return; }
-    const exitIndex = k >= 0 ? k : r.exitIndex;
-    view.route = { points: r.points, exitIndex };
-    view.steps = R.directions(r.points, state.width, state.height);
+    const k = state.exitChoice;
+    const r = k >= 0 ? to(k) : f.wayRoute(start);
+    if (f.waitForNetwork && !f._network) { view.pending = true; return; }
+    main = { points: r.points, exitIndex: k >= 0 ? k : r.exitIndex };
+    // "Nearest" is by the cost of the way, as for the second exit below; the
+    // map lines can lead a spot to an exit a little farther away.
+    const near = k >= 0 ? -1 : f.nearestExit(start);
+    if (near >= 0 && near !== main.exitIndex) main = { points: to(near).points, exitIndex: near };
   } catch (e) {
     if (!(e instanceof R.NoRoute)) throw e;
     view.error = e.message;
+    return;
   }
+  // A second way out, in case the first exit is blocked: the nearest other
+  // exit whose way does not pass the door of the first one.
+  const door = f.doorRadius() / 2, { x: mx, y: my } = state.exits[main.exitIndex];
+  const passes = (pts) => pts.slice(1, -1).some(([x, y]) => Math.hypot(x - mx, y - my) < door);
+  let backup = null;
+  for (const k of f.otherExits(start, main.exitIndex).slice(0, OTHER_TRIES)) {
+    let r;
+    try { r = to(k); } catch (e) { if (!(e instanceof R.NoRoute)) throw e; continue; }
+    const b = { points: r.points, exitIndex: k };
+    if (!backup) backup = b;
+    if (!passes(r.points)) { backup = b; break; }
+  }
+  // The solid route is the shorter one, so "nearest" stays true on the plan.
+  const len = (pts) => pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0);
+  if (backup && state.exitChoice < 0 && len(backup.points) < len(main.points)) [main, backup] = [backup, main];
+  view.route = main;
+  view.backup = backup;
+  view.steps = R.directions(main.points, state.width, state.height);
 }
 
 // The escape map: colour by the cost to the nearest exit, and the ways out
@@ -227,10 +255,60 @@ function draw() {
   }
   const unit = Math.max(state.width, state.height) / 160;
   if (!photoOnly) {
-    if (showMap && view.reachable) ctx.drawImage(mapLayer(), 0, 0);
+    if (showMap && view.reachable) {
+      ctx.drawImage(mapLayer(), 0, 0);
+      drawArrows(unit);
+    }
     drawMarks(unit);
   }
   if (cursor && keyboard && document.activeElement === canvas) cross(cursor[0], cursor[1], unit * 4);
+}
+
+// Arrows toward the exits, as on a printed plan. Each line of the tree runs
+// toward its exit; a bridge between two exits and a join at the edge of a
+// wing go both ways, so they get none. Near the routes there are none: a
+// route to a chosen or a second exit can run against them.
+function drawArrows(unit) {
+  const f = view.field;
+  const net = f._network || (f.waitForNetwork ? null : f.network());
+  if (!net) return;
+  const routes = [view.route, view.backup].filter(Boolean).map((r) => r.points);
+  const clearOfRoutes = (x, y) => routes.every((pts) => pts.slice(1).every((q, i) =>
+    segmentGap([x, y], pts[i], q) > unit * ARROW_CLEAR));
+  // The heads are wider than the line and filled in its colour with a white
+  // edge, so their shape shows on a phone and over a photo.
+  const gap = unit * ARROW_GAP;
+  const s = unit * ARROW_SIZE;
+  ctx.fillStyle = WAY;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = unit * 0.3;
+  ctx.lineJoin = "miter";
+  ctx.beginPath();
+  for (const leg of net.legs) {
+    if (leg.bridge || leg.join) continue;
+    const dx = leg.b[0] - leg.a[0], dy = leg.b[1] - leg.a[1];
+    const len = Math.hypot(dx, dy);
+    if (len < gap * 0.6) continue;
+    const ux = dx / len, uy = dy / len;
+    for (let t = len % gap / 2 || gap / 2; t < len; t += gap) {
+      const x = leg.a[0] + ux * (t + s / 2), y = leg.a[1] + uy * (t + s / 2);
+      if (!clearOfRoutes(x, y)) continue;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - ux * s * 1.4 - uy * s, y - uy * s * 1.4 + ux * s);
+      ctx.lineTo(x - ux * s * 1.4 + uy * s, y - uy * s * 1.4 - ux * s);
+      ctx.closePath();
+    }
+  }
+  ctx.stroke();
+  ctx.fill();
+}
+
+// The distance from point p to segment a-b.
+function segmentGap(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const n = dx * dx + dy * dy;
+  const t = n ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / n)) : 0;
+  return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
 }
 
 function drawMarks(unit) {
@@ -244,6 +322,26 @@ function drawMarks(unit) {
     const e = state.exits[0];
     const near = here && Math.hypot(e.x - here[0], e.y - here[1]) < unit * 14;
     label("EXIT", e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
+  }
+
+  // The second way out: dashed, under the route, so the route stays on top
+  // where the two share a corridor.
+  const alt = view.backup && view.backup.points;
+  if (alt && alt.length > 1) {
+    ctx.lineJoin = ctx.lineCap = "round";
+    for (const [color, width, dash] of [["#ffffff", unit * 1.5, []], [ROUTE, unit * 0.8, [unit * 1.6, unit * 1.2]]]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      ctx.moveTo(alt[0][0], alt[0][1]);
+      for (const p of alt.slice(1)) ctx.lineTo(p[0], p[1]);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Its exit goes over the dashed line again, so its number shows.
+    const b = state.exits[view.backup.exitIndex];
+    exitMark(b.x, b.y, unit * 2.2, view.backup.exitIndex + 1, false);
   }
 
   // The route and YOU go over the exits, so a short route stays visible.
@@ -405,7 +503,9 @@ function select(i) {
 // Model labels are often all "Exit", so the number tells the exits apart.
 function exitName(i) {
   const l = (state.exits[i].label || "").trim();
-  return !l || /^exit$/i.test(l) ? `Exit ${i + 1}` : `${l} (${i + 1})`;
+  if (!l || /^exit$/i.test(l)) return `Exit ${i + 1}`;
+  // A label that already has the number ("Exit 4") needs it only once.
+  return new RegExp(`(^|\\D)${i + 1}(\\D|$)`).test(l) ? l : `${l} (${i + 1})`;
 }
 
 // One button for each exit, in number order, so the route can go to another
@@ -434,7 +534,7 @@ function showExits() {
         $("exits").children[i].focus();
         return;
       }
-      sayPlan(view.route ? `Route to ${exitName(i)}. Check it against the plan.`
+      sayPlan(view.route ? `Route to ${exitName(i)}.${otherWay()} Check it against the plan.`
                          : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
       (view.route ? $("steps") : $("exits").children[i]).focus();
     });
@@ -469,6 +569,7 @@ function update() {
   findRoute();
   draw();
   showSteps();
+  showBackup();
   showExits();
   $("found-exits").hidden = !state.exitsMarked || !state.foundExits.length;
   // With no start, the status line gives the same instruction.
@@ -486,6 +587,10 @@ function showLegend() {
   // space, so the text under the plan does not move when they come.
   $("legend-way").style.visibility = view.field.waitForNetwork && !view.field._network ? "hidden" : "";
   $("legend-wall").hidden = !routesOnly;
+  // The item keeps its space while two exits can give a second way, so the
+  // text under the plan does not move after a tap.
+  $("legend-other").hidden = state.exits.length < 2;
+  $("legend-other").style.visibility = view.backup ? "" : "hidden";
 }
 
 // The walls come from the photo, so the messages say what HereOut read,
@@ -522,10 +627,26 @@ function explain(how = "tap") {
   } else if (how === "exit" || state.exitsMarked) {
     sayPlan("Route to the exit you marked. Check it against the plan.");
   } else if (state.exitChoice >= 0) {
-    sayPlan(`Route to ${exitName(state.exitChoice)}. Check it against the plan.`);
+    sayPlan(`Route to ${exitName(state.exitChoice)}.${otherWay()} Check it against the plan.`);
   } else {
-    sayPlan("Route from the spot you chose to the nearest exit. Check it against the plan.");
+    sayPlan(`Route from the spot you chose to the nearest exit, ${exitName(view.route.exitIndex)}.${otherWay()} Check it against the plan.`);
   }
+}
+
+// The second way out, as words for the status line.
+function otherWay() {
+  if (!view.backup) return "";
+  return ` If it is blocked, use ${exitName(view.backup.exitIndex)}${photoOnly ? "" : ": the dashed line"}.`;
+}
+
+// The second way out under the steps too, where the eyes are after a tap
+// or after an exit button, with a button that shows its route.
+function showBackup() {
+  const b = view.backup;
+  $("backup").hidden = !b || !view.route;
+  if ($("backup").hidden) return;
+  $("backup-text").textContent = `If ${exitName(view.route.exitIndex)} is blocked, use ${exitName(b.exitIndex)}${photoOnly ? "" : ": the dashed line"}.`;
+  $("backup-go").textContent = `Route to ${exitName(b.exitIndex)}`;
 }
 
 // Photo only and Routes only change what is under the marks, so at most one is on.
@@ -601,6 +722,11 @@ function place(x, y) {
   else if (state.exits.length) setStart(x, y);
   else sayPlan('Mark an exit first: tap "Mark the exit".');
 }
+
+// The button of the second way out does what its exit button does.
+$("backup-go").addEventListener("click", () => {
+  if (view.backup) $("exits").children[view.backup.exitIndex]?.click();
+});
 
 // Undo "Mark the exit": the exits from the reading come back.
 $("found-exits").addEventListener("click", () => {
@@ -885,6 +1011,7 @@ $("speak").addEventListener("click", () => {
   if (speaking) { stopSpeaking(); return; }
   speechSynthesis.cancel();
   const lines = ["Check this route against the plan.", ...view.steps.map((s) => s.text)];
+  if (view.backup) lines.push(`If ${exitName(view.route.exitIndex)} is blocked, use ${exitName(view.backup.exitIndex)}.`);
   lines.forEach((text, i) => {
     const u = new SpeechSynthesisUtterance(text);
     if (i > 0) u.onstart = () => select(i - 1);

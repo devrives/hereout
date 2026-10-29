@@ -13,6 +13,10 @@ const HereOutRoute = (() => {
   const CHAMFER_A = 0.955, CHAMFER_B = 1.3693;
   const FAR = 1e9;
   const SQRT2 = Math.SQRT2;
+  const ALONG_TILT = 0.035;   // radians (2 degrees): a leg this close to a wall direction runs along the walls
+  const ALONG_MARGIN = 0.05;
+  const LOCAL_LONGER = 1.15;  // a way along the local walls may be this much longer than the way it replaces  // share of the length: a smaller difference in alongWalls is a tie
+  const EXIT_APART = 0.05;  // share of the grid: two exits closer than this are one door for the second exit
   const NEIGHBOURS = [[-1, 0, 1.0], [1, 0, 1.0], [0, -1, 1.0], [0, 1, 1.0],
                       [-1, -1, SQRT2], [-1, 1, SQRT2], [1, -1, SQRT2], [1, 1, SQRT2]];
   const SIMPLIFY_SHARE = 0.015;
@@ -154,7 +158,7 @@ const HereOutRoute = (() => {
       const dist = new Float64Array(n).fill(Infinity);
       const next = new Int32Array(n).fill(-1);
       const owner = new Int32Array(n).fill(-1);
-      Object.assign(this, { dist, next, owner });
+      Object.assign(this, { dist, next, owner, cost });
 
       const heap = new Heap();
       this.seeds = exits.map((e) => this.exitCells(e));
@@ -272,6 +276,80 @@ const HereOutRoute = (() => {
       return area;
     }
 
+    // The cost of the way from a start to each exit (Infinity where there is
+    // none): one Dijkstra from the start, with the moves and costs of the
+    // field. Browser only.
+    // avoid: [x, y, radius] in pixels, a disc that the ways may not enter
+    // (the area of an exit that is blocked).
+    exitCosts(start, avoid = null) {
+      const s = this.snap(start);
+      const out = this.exits.map(() => Infinity);
+      if (s === null) return out;
+      const { gw, gh, cost } = this;
+      let blocked = this.blocked;
+      if (avoid) {
+        blocked = Uint8Array.from(blocked);
+        const [ax, ay, ar] = avoid.map((v) => v * this.scale);
+        for (let r = Math.max(0, Math.floor(ay - ar)); r <= Math.min(gh - 1, Math.ceil(ay + ar)); r++) {
+          for (let c = Math.max(0, Math.floor(ax - ar)); c <= Math.min(gw - 1, Math.ceil(ax + ar)); c++) {
+            if ((c + 0.5 - ax) ** 2 + (r + 0.5 - ay) ** 2 <= ar * ar && r * gw + c !== s) blocked[r * gw + c] = 1;
+          }
+        }
+      }
+      const dist = new Float64Array(gw * gh).fill(Infinity);
+      const heap = new Heap();
+      dist[s] = 0;
+      heap.push(0, s);
+      while (heap.size) {
+        const [d, i] = heap.pop();
+        if (d > dist[i]) continue;
+        const r = Math.floor(i / gw), c = i - r * gw;
+        for (const [dr, dc, step] of NEIGHBOURS) {
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
+          const j = nr * gw + nc;
+          if (blocked[j]) continue;
+          if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+          const nd = d + step * cost[i];
+          if (nd < dist[j]) { dist[j] = nd; heap.push(nd, j); }
+        }
+      }
+      this.seeds.forEach((cells, k) => { for (const [g, e] of cells) out[k] = Math.min(out[k], dist[g] + e); });
+      return out;
+    }
+
+    // The radius in pixels of the area of one door: exits closer than this
+    // to each other are the same door twice.
+    doorRadius() {
+      return EXIT_APART * Math.max(this.gw, this.gh) / this.scale;
+    }
+
+    // The nearest exit by the cost of the way from a start, or -1.
+    nearestExit(start) {
+      const costs = this.exitCosts(start);
+      let best = -1;
+      costs.forEach((c, k) => { if (Number.isFinite(c) && (best < 0 || c < costs[best])) best = k; });
+      return best;
+    }
+
+    // Other exits for a start, nearest first, for the case that exit main is
+    // blocked: the ways to them may not pass the door of exit main, and an
+    // exit at that door is the same door. Empty when there is none.
+    otherExits(start, main) {
+      const apart = this.doorRadius();
+      const [mx, my] = this.exits[main];
+      const costs = this.exitCosts(start, Math.hypot(start[0] - mx, start[1] - my) > apart ? [mx, my, apart / 2] : null);
+      return costs.map((c, k) => [c, k])
+        .filter(([c, k]) => k !== main && Number.isFinite(c) && Math.hypot(this.exits[k][0] - mx, this.exits[k][1] - my) >= apart)
+        .sort((a, b) => a[0] - b[0]).map(([, k]) => k);
+    }
+
+    // The second exit for a start, or -1 (the nearest of otherExits).
+    otherExit(start, main) {
+      const others = this.otherExits(start, main);
+      return others.length ? others[0] : -1;
+    }
+
     // Is there a way from a start to exit k?
     reaches(start, k) {
       const s = this.snap(start);
@@ -303,8 +381,84 @@ const HereOutRoute = (() => {
       // While a worker makes the network (waitForNetwork), the grid route
       // is the answer.
       const net = this._network || (this.waitForNetwork ? null : this.network());
-      const r = net ? net.route(start, s, only) : null;
+      let r = net ? net.route(start, s, only) : null;
+      // With a wing at an angle, the way can also go along the wing's own
+      // directions. The way that follows the walls of the part it is in over
+      // more of its length is the one the map shows; then the fewer corners.
+      if (r && this.wing) {
+        if (!this._wingNet) this._wingNet = new Network(this, this.wing.axes);
+        const w = this._wingNet.route(start, s, only);
+        if (w && (only < 0 ? w.exitIndex === r.exitIndex : true)) {
+          const a = this.alongWalls(w.points), b = this.alongWalls(r.points);
+          if (a > b + ALONG_MARGIN || (a > b - ALONG_MARGIN && w.points.length < r.points.length)) r = w;
+        }
+      }
+      if (r && this.wing) r = { ...r, points: this.squareLocal(r.points) };
       return r || (only < 0 ? this.route(start) : null);
+    }
+
+    // The tilt of the walls at a pixel point: the wing's or the rest's.
+    tiltAt([x, y]) {
+      const [r, c] = this.toCell([x, y]);
+      return this.wing && this.wing.mask[r * this.gw + c] ? this.wing.axes[0] : this.axes[0];
+    }
+
+    // Is the straight line between two pixel points clear of walls?
+    clearPx(p, q) {
+      const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) * this.scale * 3) + 1;
+      for (let k = 0; k <= n; k++) {
+        const [r, c] = this.toCell([p[0] + (q[0] - p[0]) * k / n, p[1] + (q[1] - p[1]) * k / n]);
+        if (this.blocked[r * this.gw + c]) return false;
+      }
+      return true;
+    }
+
+    // A way that crosses from the wing to the rest follows the walls of one
+    // part only. In each part, from each corner, go to the farthest later
+    // corner in the same part that one straight line or one right angle
+    // along the walls of that part reaches, clear of walls and not much
+    // longer than the way it replaces. The ends stay.
+    squareLocal(pts) {
+      const out = [pts[0]];
+      const run = (i, j) => pts.slice(i + 1, j + 1).reduce((a, q, k) => a + dist(q, pts[i + k]), 0);
+      let i = 0;
+      while (i < pts.length - 1) {
+        const tilt = this.tiltAt(pts[i]);
+        const u = [Math.cos(tilt), Math.sin(tilt)], v = [-u[1], u[0]];
+        let best = i + 1, via = null;
+        for (let j = pts.length - 1; j > i + 1; j--) {
+          if (this.tiltAt(pts[j]) !== tilt) continue;
+          const d = [pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]];
+          const a = d[0] * u[0] + d[1] * u[1], b = d[0] * v[0] + d[1] * v[1];
+          if (Math.abs(a) + Math.abs(b) > run(i, j) * LOCAL_LONGER) continue;
+          const straight = Math.min(Math.abs(a), Math.abs(b)) < 1e-6 * Math.max(1, Math.abs(a) + Math.abs(b));
+          const corners = straight ? [null] : [[pts[i][0] + u[0] * a, pts[i][1] + u[1] * a], [pts[i][0] + v[0] * b, pts[i][1] + v[1] * b]];
+          const ok = corners.find((c) => (c ? this.clearPx(pts[i], c) && this.clearPx(c, pts[j]) && this.tiltAt(c) === tilt
+                                            : this.clearPx(pts[i], pts[j])));
+          if (ok !== undefined) { best = j; via = ok; break; }
+        }
+        if (via) out.push(via);
+        out.push(pts[best]);
+        i = best;
+      }
+      return out;
+    }
+
+    // The share of the length of a way whose legs run along the walls of the
+    // part of the plan they are in: the wing (wing.axes) or the rest (axes).
+    alongWalls(pts) {
+      let along = 0, total = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        const len = Math.hypot(x1 - x0, y1 - y0);
+        if (!len) continue;
+        const tilt = this.tiltAt([(x0 + x1) / 2, (y0 + y1) / 2]);
+        let d = (Math.atan2(y1 - y0, x1 - x0) - tilt) % (Math.PI / 2);
+        if (d < 0) d += Math.PI / 2;
+        if (Math.min(d, Math.PI / 2 - d) < ALONG_TILT) along += len;
+        total += len;
+      }
+      return total ? along / total : 1;
     }
   }
 
@@ -412,7 +566,7 @@ const HereOutRoute = (() => {
         });
         if (best >= 0) {
           used.add(best);
-          legs.push({ a: w.p, b: mainEnds[best].p, flow: Math.max(w.flow, mainEnds[best].flow) });
+          legs.push({ a: w.p, b: mainEnds[best].p, flow: Math.max(w.flow, mainEnds[best].flow), join: true });
         }
       }
       return legs;
@@ -943,16 +1097,21 @@ const HereOutRoute = (() => {
       for (let q = t.tnext[cells[cells.length - 1]]; q >= 0; q = t.tnext[q]) cells.push(q);
       const end = cells[cells.length - 1];
       const k = t.towner[end];
-      // Corners only: where the way turns.
+      // Corners only: where the way turns. A point where another line of
+      // the map joins stays, so the route keeps to the lines of the map. The
+      // map shows the tree of all exits; the joins of the tree of one exit
+      // are not on it, so a route to one exit keeps none.
+      const join = (q) => only < 0 && t.joins[q] === 1;
       const keep = cells.filter((q, j) => j === 0 || j === cells.length - 1 ||
-        q - cells[j - 1] !== cells[j + 1] - q || t.joins[q] === 1);
-      // A point where another line of the map joins stays, so the route
-      // keeps to the lines of the map.
-      const [cs, fs] = this.squareUp(keep, keep.map((q, j) => j === 0 || j === keep.length - 1 || t.joins[q] === 1));
+        q - cells[j - 1] !== cells[j + 1] - q || join(q));
+      const [cs, fs] = this.squareUp(keep, keep.map((q, j) => j === 0 || j === keep.length - 1 || join(q)));
       const corners = this.unstair(cs.map((q) => this.middle(q)), fs);
       const pts = [[start[0], start[1]], ...corners.slice(1, -1).map((q) => this.toPx(q))];
       pts.push(...this.toExit(end, k, cells.length > 1 ? cells[cells.length - 2] : -1));
-      const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6);
+      // A point on a straight line between its two neighbours is not a corner.
+      const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6)
+        .filter((q, j, a) => j === 0 || j === a.length - 1 ||
+          Math.abs((q[0] - a[j - 1][0]) * (a[j + 1][1] - q[1]) - (q[1] - a[j - 1][1]) * (a[j + 1][0] - q[0])) > 1e-6);
       if (out.length === 1) out.push([...this.field.exits[k]]);
       return { points: out, exitIndex: k, onNetwork: true };
     }
