@@ -3,7 +3,10 @@
 import cv2
 import numpy as np
 
-from hereout.ink_walls import beyond_exits, door_arcs, footprints, ink_walls, place_exits, room_doors, split_strokes
+from hereout import ink_walls as iw
+from hereout.ink_walls import (beyond_exits, door_arcs, footprints, ink_walls, outdoor_areas, place_exits, room_doors,
+                                split_strokes)
+from hereout.photo_map import is_photo_map
 from hereout.legend import drop_legend_exits
 from hereout.route import Field, NoRoute, blocked_grid, soft_grid
 
@@ -77,6 +80,20 @@ def test_paper_between_two_drawings_is_closed():
     assert not fp[250, 500] and not fp[10, 10]
 
 
+def test_legend_with_a_heading_tab_is_found():
+    """A legend frame with a heading tab on its top edge and a divider from
+    its left edge: each outline has more than four corners. The frame is
+    full, so it is still a legend."""
+    img = np.full((800, 1000, 3), PAPER, np.uint8)
+    cv2.rectangle(img, (40, 40), (600, 760), BLACK, 6)
+    cv2.rectangle(img, (660, 300), (960, 700), BLACK, 3)
+    cv2.rectangle(img, (740, 270), (900, 300), BLACK, 3)   # the heading tab
+    cv2.line(img, (660, 500), (820, 500), BLACK, 3)        # the divider
+    text = [[[700, y], [900, y], [900, y + 20], [700, y + 20]] for y in range(330, 650, 70)]
+    exits = [{"x": 600, "y": 400, "label": "A"}, {"x": 720, "y": 360, "label": "B"}]
+    assert [e["label"] for e in drop_legend_exits(img, text, exits, plan_box=(40, 40, 600, 760))] == ["A"]
+
+
 def test_legend_exit_is_dropped():
     img = np.full((800, 1000, 3), PAPER, np.uint8)
     cv2.rectangle(img, (40, 40), (600, 760), BLACK, 6)    # the floor drawing
@@ -108,6 +125,30 @@ def test_exit_off_the_drawing_is_dropped():
     ring[150:350, 600:850] = False
     ring[200:300, 650:800] = True
     assert place_exits([(300, 200), (700, 250)], ring, ~ring)[1] is not None
+
+
+def test_word_for_outside_closes_its_area(monkeypatch):
+    """A building with a roof area beside the hall. The OCR reads "Dachfläche"
+    in the roof area: that area is outside, the hall is not."""
+    blocked = np.zeros((600, 1000), bool)
+    blocked[:, :20] = blocked[:, -20:] = blocked[:20, :] = blocked[-20:, :] = True
+    blocked[:, 650:654] = True          # the line between the hall and the roof
+    boxes = [[[300, 290], [400, 290], [400, 310], [300, 310]], [[700, 290], [880, 290], [880, 310], [700, 310]]]
+    monkeypatch.setattr(iw, "read_texts", lambda crops: ["Dachfläche" if c.shape[1] > 150 else "Gastraum" for c in crops])
+    img = np.full((600, 1000, 3), PAPER, np.uint8)
+    out = outdoor_areas(img, blocked, boxes)
+    assert out[100, 800] and not out[100, 300]
+
+
+def test_photo_map_is_found():
+    """An aerial photo (fine coloured detail everywhere) is a photo map; a
+    drawn plan on paper is not."""
+    rng = np.random.default_rng(0)
+    base = cv2.resize(rng.integers(0, 255, (60, 80, 3), dtype=np.uint8), (800, 600), interpolation=cv2.INTER_CUBIC)
+    noise = rng.normal(0, 6, base.shape)
+    photo = np.clip(base.astype(float) + noise, 0, 255).astype(np.uint8)
+    assert is_photo_map(photo)
+    assert not is_photo_map(room_with_door())
 
 
 def test_exit_on_the_street_moves_to_the_building():

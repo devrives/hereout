@@ -17,6 +17,7 @@ let selected = -1;    // the step shown on the plan, or -1
 let showMap = true;
 let photoOnly = false;
 let routesOnly = false; // the routes on the walls HereOut read, with no photo
+let addExit = false;    // the next exit the user marks joins the others (explain, NO_EXIT_HERE)
 const canSpeak = "speechSynthesis" in window;
 $("shoot").hidden = false;  // without JS the photo button would do nothing
 const STORE_KEY = "hereout:last";
@@ -28,6 +29,7 @@ const ROUTE = "#1b5fd1";
 const ARROW_GAP = 12;   // plan units between two arrows on a way out
 const ARROW_SIZE = 1.1; // plan units: half the width of an arrow head
 const OTHER_TRIES = 3;  // exits tried for the second way out
+const FLOOR_SHARE = 0.05; // an open area with this share of the open cells is a floor, not a pocket of paper
 const ARROW_CLEAR = 2;  // plan units: no arrow this close to a route
 const WALL = "#7a818b";  // lighter than the ways out, so a way and a wall differ in more than hue
 const BLOCK = "#d3d6db";  // a filled area of the plan, in Routes only
@@ -36,7 +38,20 @@ const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contra
 // Two status lines: one by the photo button for loading, one under the plan
 // for what happens on the plan, so the answer to a tap is in view.
 function say(text) { $("status").textContent = text; }
-function sayPlan(text) { $("plan-status").textContent = text; }
+// The same text again is no change, and a screen reader stays silent: an
+// Enter with no answer sounds like a dead key. Empty the line first, and set
+// the text in a later task.
+let sayAgain = 0;
+function sayPlan(text) {
+  const el = $("plan-status");
+  clearTimeout(sayAgain);
+  if (text && el.textContent === text) {
+    el.textContent = "";
+    sayAgain = setTimeout(() => { el.textContent = text; }, 100);
+  } else {
+    el.textContent = text;
+  }
+}
 
 // Error bodies from a proxy may not be JSON, and a 422 detail is a list.
 async function errorText(r, fallback) {
@@ -85,8 +100,8 @@ function makeNetwork(field) {
     update();
     if (exitAt >= 0) $("exits").children[exitAt]?.focus();
     // The status said "Finding the route…": now it names the route.
-    // With no start, the instruction is already there: do not read it again.
-    if (state.start) explain(view.pendingHow || undefined);
+    // Any other status is already right: do not read it again.
+    if (state.start && view.pendingHow) explain(view.pendingHow);
     view.pendingHow = null;
   };
   networkReady = ready;
@@ -504,8 +519,9 @@ function select(i) {
 function exitName(i) {
   const l = (state.exits[i].label || "").trim();
   if (!l || /^exit$/i.test(l)) return `Exit ${i + 1}`;
-  // A label that already has the number ("Exit 4") needs it only once.
-  return new RegExp(`(^|\\D)${i + 1}(\\D|$)`).test(l) ? l : `${l} (${i + 1})`;
+  // A label that already has the number ("Exit 4") needs it only once. Else the
+  // number comes first, so it matches the mark on the plan.
+  return new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? l : `Exit ${i + 1}: ${l}`;
 }
 
 // One button for each exit, in number order, so the route can go to another
@@ -556,7 +572,7 @@ function showCredit() {
     a.rel = "noopener";
     return a;
   };
-  const changes = [...(c.changes || []), "marks, escape map and route drawn on top"].join(", ");
+  const changes = [...(c.changes || []), state.photo_map ? "exit marks drawn on top" : "marks, escape map and route drawn on top"].join(", ");
   box.append(`Sample plan. Photo: “${c.title}” by ${c.author}, `,
              link(c.licence, c.licence_url), ", ", link("source", c.source_url),
              `. Changes: ${changes}.`,
@@ -573,7 +589,7 @@ function update() {
   showExits();
   $("found-exits").hidden = !state.exitsMarked || !state.foundExits.length;
   // With no start, the status line gives the same instruction.
-  $("tap-text").hidden = !state.start;
+  $("tap-text").hidden = !state.start || marking;
   showLegend();
 }
 
@@ -596,16 +612,31 @@ function showLegend() {
 // The walls come from the photo, so the messages say what HereOut read,
 // not what the building is.
 const ROUTE_ERRORS = {
-  "start is inside a wall": "HereOut reads that spot as wall. Tap a spot in a corridor or a room.",
+  "start is inside a wall": "HereOut reads that spot as wall, or as outside the plan. Tap a spot in a corridor or a room.",
   "no open way to an exit": "HereOut found no way from that spot to an exit in this photo. Try a spot in a corridor.",
   "every exit is inside a wall": 'HereOut reads every exit as part of a wall. Tap "Mark the exit" and mark one in a doorway.',
 };
+// A sheet can show several floors, and the model can miss the exits of one.
+// The exit marked after this message is added to the others.
+const NO_EXIT_HERE = 'No exit that HereOut found is on this part of the plan. If it is another floor, tap "Mark the exit" and mark the exit or the stairs of that floor. The other exits stay.';
+// Walls found in an aerial photo are roofs and trees (photo_map.py). The
+// exits are only marks on the photo, so the text names them.
+function photoMapText() {
+  const n = state.exits.length;
+  const names = state.exits.map((e, i) => exitName(i)).join(", ");
+  return `This is a photo map. HereOut marks ${n === 1 ? "the exit" : `${n} exits`} (${names}), but draws no routes over a photo. ` +
+         'Follow the route printed on the map. "Larger plan" shows it bigger.';
+}
+
 // how: "tap" (a start the user chose) or "exit" (an exit the user marked).
 function explain(how = "tap") {
+  addExit = false;
   if (!state.exits.length) {
     sayPlan(state.model_error
       ? 'Could not read the plan. Tap "Mark the exit" and mark it, then tap where you are.'
       : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
+  } else if (state.photo_map) {
+    sayPlan(photoMapText());
   } else if (!state.start && how === "exit") {
     sayPlan(view.reachable ? "Exit marked. Now tap where you are on the plan."
                            : "HereOut reads that exit as wall. Mark it in a doorway.");
@@ -622,9 +653,13 @@ function explain(how = "tap") {
   } else if (view.error && how === "exit") {
     sayPlan(`HereOut found no way to the exit you marked. Mark it at a doorway${
       state.foundExits.length ? ", or use the exits HereOut found" : ""}.`);
+  } else if (view.error === "no open way to an exit" && view.field.areaShare(state.start) >= FLOOR_SHARE) {
+    sayPlan(NO_EXIT_HERE);
+    addExit = true;
+    return;
   } else if (view.error) {
     sayPlan(ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
-  } else if (how === "exit" || state.exitsMarked) {
+  } else if (state.exits[view.route.exitIndex].marked) {
     sayPlan("Route to the exit you marked. Check it against the plan.");
   } else if (state.exitChoice >= 0) {
     sayPlan(`Route to ${exitName(state.exitChoice)}.${otherWay()} Check it against the plan.`);
@@ -676,16 +711,21 @@ $("show-routes").addEventListener("click", () => {
 function startMarking() {
   marking = true;
   $("fix").textContent = "Cancel";
+  $("fix-hint").textContent = addExit
+    ? "Tap the exit or the stairs of this floor on the plan. The other exits stay."
+    : "Tap the exit on the plan. HereOut then routes to that exit only.";
   $("fix-hint").hidden = false;
+  $("tap-text").hidden = true;
   hints();
   if (photoOnly) setPhotoOnly(false);
-  sayPlan("Tap the exit on the plan.");
+  sayPlan(addExit ? "Tap the exit or the stairs of this floor on the plan." : "Tap the exit on the plan.");
 }
 
 function stopMarking() {
   marking = false;
   $("fix").textContent = "Mark the exit";
   $("fix-hint").hidden = true;
+  if (state) $("tap-text").hidden = !state.start;
   hints();
 }
 
@@ -696,10 +736,12 @@ $("fix").addEventListener("click", (ev) => {
   if (ev.detail === 0) canvas.focus();
 });
 
-// The user's exit takes the place of the exits the model found.
+// The user's exit takes the place of the exits the model found. After a tap
+// on a floor with no exit (addExit), it is added: the exits of the other floors stay.
 function setExit(x, y) {
   stopMarking();
-  state.exits = [{ x: Math.round(x), y: Math.round(y), label: "" }];
+  const mark = { x: Math.round(x), y: Math.round(y), label: "", marked: true };
+  state.exits = addExit ? [...state.exits, mark] : [mark];
   state.exitsMarked = true;
   state.exitChoice = -1;
   buildField();
@@ -719,6 +761,7 @@ function setStart(x, y) {
 
 function place(x, y) {
   if (marking) setExit(x, y);
+  else if (state.photo_map && state.exits.length) sayPlan(photoMapText());
   else if (state.exits.length) setStart(x, y);
   else sayPlan('Mark an exit first: tap "Mark the exit".');
 }
@@ -741,6 +784,11 @@ $("found-exits").addEventListener("click", () => {
 });
 
 function hints() {
+  if (state && state.photo_map) {
+    $("kbd-hint").textContent = "Arrow keys move the marker, Shift moves it faster. The marker names the closest exit.";
+    canvas.setAttribute("aria-label", "Plan, a photo map. HereOut marks the exits only. Move the marker with the arrow keys to hear the closest exit.");
+    return;
+  }
   $("kbd-hint").textContent = marking
     ? "Arrow keys move the marker, Shift moves it faster. Enter places the exit. Escape cancels."
     : "Arrow keys move the marker, Shift moves it faster. Enter starts the route there.";
@@ -751,6 +799,10 @@ function hints() {
 
 function showPlan(answer, focusResult, push) {
   state = answer;
+  // A photo map has no routes, so the controls for routes and walls go.
+  const map = !!state.photo_map;
+  if (map) routesOnly = false;
+  $("show-map").hidden = $("show-routes").hidden = $("fix").hidden = $("legend-route").hidden = map;
   if (state.start === undefined) state.start = null;
   if (state.exitChoice === undefined) state.exitChoice = -1;
   if (state.foundExits === undefined) state.foundExits = state.exits.map((e) => ({ ...e }));

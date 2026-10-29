@@ -16,6 +16,8 @@ from .walls import _ink
 
 MIN_AREA, MAX_AREA = 0.02, 0.4   # share of the image
 FRAME_FILL = 0.85      # the convex hull fills this share of the bounding box: a frame, not a blob
+SQUARE_FILL = 0.95     # a frame this full can have more corners: a heading tab or a joined line bends its outline
+MAX_CORNERS = 12
 MIN_TEXTS = 4
 MIN_COLUMN = 3         # text lines that share a left edge
 COLUMN_TOL = 0.01      # share of the image width
@@ -33,9 +35,11 @@ def legend_boxes(img: np.ndarray, text: list, plan_box=None) -> list[tuple[int, 
         x, y, bw, bh = cv2.boundingRect(c)
         if not (MIN_AREA * area <= bw * bh <= MAX_AREA * area):
             continue
-        if cv2.contourArea(cv2.convexHull(c)) < FRAME_FILL * bw * bh:
+        fill = cv2.contourArea(cv2.convexHull(c))
+        if fill < FRAME_FILL * bw * bh:
             continue
-        if len(cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True)) != 4:
+        corners = len(cv2.approxPolyDP(c, 0.02 * cv2.arcLength(c, True), True))
+        if corners != 4 and not (fill >= SQUARE_FILL * bw * bh and corners <= MAX_CORNERS):
             continue
         inside = [b for b in boxes if x < b[:, 0].mean() < x + bw and y < b[:, 1].mean() < y + bh]
         if len(inside) < MIN_TEXTS:

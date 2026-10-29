@@ -168,3 +168,30 @@ process.stdin.on("end", () => {
                                     input=json.dumps(case), capture_output=True, text=True, check=True).stdout)
     assert out["near"] == 0
     assert out["others"][0] == 2
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_area_share_tells_a_floor_from_a_pocket():
+    """Two floors on one sheet and a small pocket: a spot on the floor with no
+    exit is in a large open area, a spot in the pocket in a small one."""
+    import numpy as np
+    from hereout.route import grid_payload
+    walls = np.ones((800, 1600), bool)
+    walls[100:350, 100:1500] = False    # the floor with the exit
+    walls[450:700, 100:1300] = False    # the floor with no exit
+    walls[450:500, 1400:1450] = False   # a pocket of paper
+    case = {"grid": grid_payload(walls), "exits": [[110, 200]], "spots": [[700, 575], [1425, 475], [1580, 790]]}
+    js = r"""
+const R = require(process.argv[1]);
+let input = ""; process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const c = JSON.parse(input), g = c.grid;
+  const f = new R.Field(R.decodeGrid(g), g.w, g.h, g.scale, c.exits, [], null, g.axes);
+  process.stdout.write(JSON.stringify(c.spots.map((s) => f.areaShare(s))));
+});"""
+    floor, pocket, wall = json.loads(subprocess.run(
+        [NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+        input=json.dumps(case), capture_output=True, text=True, check=True).stdout)
+    assert 0.3 < floor < 0.6
+    assert 0 < pocket < 0.05
+    assert wall == 0

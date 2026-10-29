@@ -211,6 +211,31 @@ const HereOutRoute = (() => {
       return best;
     }
 
+    // The share of all open cells in the open area of a point, or 0 when the
+    // point is in a wall. A pocket of paper is small; a floor of the plan
+    // with no exit on it is large.
+    areaShare(xy) {
+      const s = this.snap(xy);
+      if (s === null) return 0;
+      const { gw, gh, blocked } = this;
+      const seen = new Uint8Array(gw * gh);
+      const stack = [s];
+      seen[s] = 1;
+      let size = 0;
+      while (stack.length) {
+        const i = stack.pop();
+        size++;
+        const r = Math.floor(i / gw), c = i - r * gw;
+        for (const [rr, cc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]]) {
+          const j = rr * gw + cc;
+          if (rr >= 0 && rr < gh && cc >= 0 && cc < gw && !blocked[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+        }
+      }
+      let open = 0;
+      for (let i = 0; i < gw * gh; i++) if (!blocked[i]) open++;
+      return size / Math.max(1, open);
+    }
+
     // The open cells that an exit reaches at once, with their distance in
     // cells, as in route.py: on each side of the line the exit is on, so no
     // hole is cut in the wall. Else the nearest open cell.

@@ -27,6 +27,7 @@ closed, so a way never crosses the paper between two drawings or around one.
 
 from __future__ import annotations
 
+import re
 import threading
 
 import cv2
@@ -74,8 +75,24 @@ OUT_DEPTH = 0.15            # share of the image: the deepest that an area beyon
 ROOM_MIN = 0.0004           # share of the image: a closed area this large is a room and gets a door
 ROOM_WIDTH = 0.025          # share of the image: the mean width of a room that gets a door
 ROOM_DOOR = 0.025           # share of the image: the thickest wall that such a door goes through
+OUTDOOR_MIN = 0.004         # share of the image: a smaller open area is a room, and its word is a name
+OUTDOOR_MAX = 0.4           # share of the open drawing: a larger area is the building, joined to the word by a gap
+OUTDOOR_READS = 3           # the widest text lines of each area that are read: the area name is a wide line
+
+# Words that name an open area outside the building: a roof, a yard, a
+# street, a car park. Short words match whole; the others match at the start
+# of a word ("Dachfläche", "Parkplatz"). "Terrace" is not here: a terrace is
+# often a way out. The OCR model reads Latin script and Chinese characters.
+OUTDOOR_WORDS = re.compile(
+    r"\b(?:rue|cour|hof|dak|patio|calle|rua|yard|lawn)\b"
+    r"|\b(?:dach|stra(?:ss|ß)e|street|road|alley|parking|car ?park|courtyard|garden|roof|playground|sidewalk"
+    r"|innenhof|garten|parkplatz|gasse|jardin|jardim|toiture|cortile|giardino|parcheggio|strada|tetto"
+    r"|azotea|telhado|estacionamient|estacionament|aparcamient|straat|tuin|binnenplaats)"
+    r"|屋顶|屋頂|屋上|道路|马路|馬路|停车场|停車場|駐車場|庭院|中庭|花园|花園|庭園|天台",
+    re.IGNORECASE)
 
 _ocr = None
+_rec = None
 _ocr_lock = threading.Lock()
 
 
@@ -91,6 +108,20 @@ def text_boxes(img: np.ndarray) -> list[list[list[int]]]:
     if r.boxes is None:
         return []
     return np.asarray(r.boxes).round().astype(int).tolist()
+
+
+def read_texts(crops: list[np.ndarray]) -> list[str]:
+    """The text of each crop of one text line (RapidOCR recognition, no detection)."""
+    global _rec
+    out = []
+    with _ocr_lock:
+        if _rec is None:
+            from rapidocr import RapidOCR
+            _rec = RapidOCR(params={"Global.use_cls": False, "Global.log_level": "error"})
+        for c in crops:
+            r = _rec(c, use_det=False, use_cls=False, use_rec=True)
+            out.append(r.txts[0] if r.txts else "")
+    return out
 
 
 def _chroma(img: np.ndarray) -> np.ndarray:
@@ -344,6 +375,7 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
     exits: (x, y) points; the paper just around each exit stays open, because
     an exit mark often sits just outside the outer wall, at its door."""
     side = max(img.shape[:2])
+    boxes = text_boxes(img) if boxes is None else boxes
     ink = drawn_ink(img, plan_box, boxes)
     core, thin = split_strokes(ink, plan_box)
     # A wall drawn as two thin lines has a strip of paper inside it: close it.
@@ -372,6 +404,7 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
             cv2.circle(near_exit, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
         out = outside_areas(hard | soft | ~fp, ~fp & ~box_out, near_exit > 0)
         out |= beyond_exits(hard | soft | ~fp | out, fp, placed)
+        out |= outdoor_areas(img, hard | soft | ~fp | out, boxes)
         placed = place_exits(placed, fp, hard | ~fp | out)
         disc = np.zeros(ink.shape, np.uint8)
         for x, y in (p for p in placed if p is not None):
@@ -514,6 +547,35 @@ def beyond_exits(blocked: np.ndarray, inside: np.ndarray, exits) -> np.ndarray:
             out[c] = False
     # The thin lines between two outside areas go with them.
     return cv2.dilate(out[lab].astype(np.uint8), np.ones((5, 5), np.uint8)) > 0
+
+
+def outdoor_areas(img: np.ndarray, blocked: np.ndarray, boxes) -> np.ndarray:
+    """Open areas that a word names as outside: "Dachfläche" on a roof,
+    "STREET" on a street inside the site outline. Only the widest text lines
+    in large open areas are read, so the reading stays short."""
+    h, w = blocked.shape
+    n, lab, st, _ = cv2.connectedComponentsWithStats((~blocked).astype(np.uint8), connectivity=4)
+    area = st[:, cv2.CC_STAT_AREA]
+    total = area[1:].sum()
+    lines: dict[int, list] = {}
+    for bx in boxes or []:
+        p = np.int32(bx)
+        x0, y0 = np.maximum(p.min(0), 0)
+        x1, y1 = p.max(0)
+        cx, cy = min(w - 1, (x0 + x1) // 2), min(h - 1, (y0 + y1) // 2)
+        c = lab[cy, cx]
+        if c and OUTDOOR_MIN * h * w <= area[c] <= OUTDOOR_MAX * total and x1 > x0 and y1 > y0:
+            lines.setdefault(c, []).append((x0, y0, x1, y1))
+    crops, owners = [], []
+    for c, found in lines.items():
+        for x0, y0, x1, y1 in sorted(found, key=lambda b: b[0] - b[2])[:OUTDOOR_READS]:
+            crops.append(img[y0:y1, x0:x1])
+            owners.append(c)
+    out = np.zeros(n, bool)
+    for c, t in zip(owners, read_texts(crops)):
+        if OUTDOOR_WORDS.search(t):
+            out[c] = True
+    return out[lab]
 
 
 def place_exits(exits: list, fp: np.ndarray, blocked: np.ndarray) -> list:

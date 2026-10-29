@@ -37,6 +37,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from hereout.photo_map import is_photo_map
 from hereout.pipeline import Plan, decode_photo, prepare, read_marks
 from hereout.reader import ModelClient, Reading
 from hereout.route import Field, blocked_grid, soft_grid
@@ -89,6 +90,8 @@ def route_result(image_path: Path, reading: Reading) -> dict:
     if not reading.exits:
         return {"route_found": False, "route_error": "no exits", "open_with_way": 0.0}
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    if is_photo_map(image, reading.plan_box):
+        return {"route_found": False, "route_error": "photo map", "open_with_way": 0.0}
     plan = Plan.of(image, reading.plan_box)
     blocked, scale = blocked_grid(plan.walls)
     field = Field(blocked, scale, [(e["x"], e["y"]) for e in reading.exits], soft=soft_grid(plan.soft, blocked))
