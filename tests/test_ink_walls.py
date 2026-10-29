@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from hereout import ink_walls as iw
-from hereout.ink_walls import (beyond_exits, door_arcs, footprints, ink_walls, outdoor_areas, place_exits, room_doors,
+from hereout.ink_walls import (beyond_exits, door_arcs, footprints, ink_walls, legend_exits, outdoor_areas, place_exits, room_doors,
                                 split_strokes)
 from hereout.photo_map import is_photo_map
 from hereout.legend import drop_legend_exits
@@ -134,10 +134,24 @@ def test_word_for_outside_closes_its_area(monkeypatch):
     blocked[:, :20] = blocked[:, -20:] = blocked[:20, :] = blocked[-20:, :] = True
     blocked[:, 650:654] = True          # the line between the hall and the roof
     boxes = [[[300, 290], [400, 290], [400, 310], [300, 310]], [[700, 290], [880, 290], [880, 310], [700, 310]]]
-    monkeypatch.setattr(iw, "read_texts", lambda crops: ["Dachfläche" if c.shape[1] > 150 else "Gastraum" for c in crops])
+    monkeypatch.setattr(iw, "read_texts", lambda crops, lang=None: ["Dachfläche" if c.shape[1] > 150 else "Gastraum" for c in crops])
     img = np.full((600, 1000, 3), PAPER, np.uint8)
     out = outdoor_areas(img, blocked, boxes)
     assert out[100, 800] and not out[100, 300]
+
+
+def test_exit_at_a_legend_heading_goes(monkeypatch):
+    """An exit off the building next to "Legende:" is the sign of the legend.
+    An exit in the building next to the same heading is a real exit."""
+    fp = np.zeros((600, 1000), bool)
+    fp[50:400, 50:950] = True
+    heading = [[100, 430], [220, 430], [220, 455], [100, 455]]
+    monkeypatch.setattr(iw, "read_texts", lambda crops, lang=None: ["Legende:" for c in crops])
+    img = np.full((600, 1000, 3), PAPER, np.uint8)
+    assert legend_exits(img, [(500, 300), (90, 425), (150, 395)], fp, [heading]) == {1}
+    # Only the eslav model reads the Cyrillic heading.
+    monkeypatch.setattr(iw, "read_texts", lambda crops, lang=None: ["УСЛОВНЫЕ ОБОЗНАЧЕНИЯ" if lang else "YCNOBHBIE" for c in crops])
+    assert legend_exits(img, [(500, 300), (90, 425)], fp, [heading]) == {1}
 
 
 def test_photo_map_is_found():

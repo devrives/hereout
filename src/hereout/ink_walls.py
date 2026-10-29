@@ -78,6 +78,8 @@ ROOM_DOOR = 0.025           # share of the image: the thickest wall that such a 
 OUTDOOR_MIN = 0.004         # share of the image: a smaller open area is a room, and its word is a name
 OUTDOOR_MAX = 0.4           # share of the open drawing: a larger area is the building, joined to the word by a gap
 OUTDOOR_READS = 3           # the widest text lines of each area that are read: the area name is a wide line
+LEGEND_NEAR = 3             # text heights: a legend heading this close to an exit off the building
+LEGEND_NEAR_MIN = 0.02      # share of the image: the least distance that counts as close
 
 # Words that name an open area outside the building: a roof, a yard, a
 # street, a car park. Short words match whole; the others match at the start
@@ -92,7 +94,7 @@ OUTDOOR_WORDS = re.compile(
     re.IGNORECASE)
 
 _ocr = None
-_rec = None
+_rec: dict = {}
 _ocr_lock = threading.Lock()
 # One thread: the server container has one CPU, and more threads than CPUs
 # made text detection 2.7 times slower there (4.9 s against 1.8 s).
@@ -114,16 +116,22 @@ def text_boxes(img: np.ndarray) -> list[list[list[int]]]:
     return np.asarray(r.boxes).round().astype(int).tolist()
 
 
-def read_texts(crops: list[np.ndarray]) -> list[str]:
-    """The text of each crop of one text line (RapidOCR recognition, no detection)."""
-    global _rec
+def read_texts(crops: list[np.ndarray], lang: str | None = None) -> list[str]:
+    """The text of each crop of one text line (RapidOCR recognition, no
+    detection). lang "eslav" reads Cyrillic (Russian, Ukrainian, Belarusian),
+    which the default model does not read."""
     out = []
     with _ocr_lock:
-        if _rec is None:
+        if lang not in _rec:
             from rapidocr import RapidOCR
-            _rec = RapidOCR(params={"Global.use_cls": False, "Global.log_level": "error", **ONE_THREAD})
+            from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
+            params = {"Global.use_cls": False, "Global.log_level": "error", **ONE_THREAD}
+            if lang:
+                params |= {"Rec.lang_type": LangRec(lang), "Rec.ocr_version": OCRVersion.PPOCRV5,
+                           "Rec.model_type": ModelType.MOBILE}
+            _rec[lang] = RapidOCR(params=params)
         for c in crops:
-            r = _rec(c, use_det=False, use_cls=False, use_rec=True)
+            r = _rec[lang](c, use_det=False, use_cls=False, use_rec=True)
             out.append(r.txts[0] if r.txts else "")
     return out
 
@@ -403,6 +411,12 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=()) -> tuple[np.
             soft = grow(ink) & ~hard
             fp = footprints(hard | soft, plan_box)
     if fp is not None:
+        legend = legend_exits(img, placed, fp, boxes)
+        if legend and len(legend) < len(placed):
+            live = [p for i, p in enumerate(placed) if i not in legend]
+            hard, soft, live = ink_walls(img, plan_box, boxes, live)
+            it = iter(live)
+            return hard, soft, [None if i in legend else next(it) for i in range(len(placed))]
         near_exit = np.zeros(ink.shape, np.uint8)
         for x, y in placed:
             cv2.circle(near_exit, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
@@ -580,6 +594,39 @@ def outdoor_areas(img: np.ndarray, blocked: np.ndarray, boxes) -> np.ndarray:
         if OUTDOOR_WORDS.search(t):
             out[c] = True
     return out[lab]
+
+
+# A heading of a legend with no frame: "Legende:", "LEGEND", "圖例".
+LEGEND_WORDS = re.compile(r"legend|l[eé]gende|leyenda|leggenda|легенд|условн|凡例|图例|圖例|범례|zeichenerkl", re.I)
+
+
+def legend_exits(img: np.ndarray, exits: list, fp: np.ndarray, boxes) -> set[int]:
+    """The exits off the building with a legend heading next to them: the
+    model marked the sign of the legend. Only the text lines near those
+    exits are read. A framed legend is found before (legend.py)."""
+    h, w = fp.shape
+    near_min = LEGEND_NEAR_MIN * max(h, w)
+    crops, owners = [], []
+    for i, (x, y) in enumerate(exits):
+        cx, cy = min(w - 1, max(0, round(x))), min(h - 1, max(0, round(y)))
+        if fp[cy, cx]:
+            continue
+        for bx in boxes or []:
+            p = np.int32(bx)
+            x0, y0 = np.maximum(p.min(0), 0)
+            x1, y1 = p.max(0)
+            dx, dy = max(x0 - x, 0, x - x1), max(y0 - y, 0, y - y1)
+            if x1 > x0 and y1 > y0 and np.hypot(dx, dy) <= max(LEGEND_NEAR * (y1 - y0), near_min):
+                crops.append(img[y0:y1, x0:x1])
+                owners.append(i)
+    if not crops:
+        return set()
+    # The default model reads Latin and CJK text, and "eslav" a Cyrillic heading.
+    found = set()
+    for t, u, i in zip(read_texts(crops), read_texts(crops, "eslav"), owners):
+        if LEGEND_WORDS.search(t) or LEGEND_WORDS.search(u):
+            found.add(i)
+    return found
 
 
 def place_exits(exits: list, fp: np.ndarray, blocked: np.ndarray) -> list:

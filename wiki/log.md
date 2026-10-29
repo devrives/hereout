@@ -200,3 +200,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Created `decisions/weak-plan-types.md`: photo maps, outdoor words, floors with no exit, legend frames, the new read of 30 plans.
 - Updated `decisions/outside-and-closed-rooms.md`: a link to the fixes.
 - Source: the owner words of 2026-10-29, commit 6d5f2fb on `ortho-net`, the gallery run, the ux and a11y reviews.
+
+## [2026-10-29] ingest | Deploy and the remaining weak cases
+
+- Updated `decisions/weak-plan-types.md`: accepted; the merge to main, the gallery speed, legend headings, the tests that were not kept, the open limits.
+- Updated `index.md`: the new summary.
+- Source: the owner words of 2026-10-29, commits ef7ebe6 and 1fd3209, the gallery run.
