@@ -3,10 +3,11 @@ type: decision
 title: Draw the ways out as one tree of level and upright lines
 status: proposed
 updated: 2026-10-29
-checked: 6920028
+checked: 828f6e4
 sources:
   - owner:2026-10-29
   - commit:6920028
+  - commit:828f6e4
 ---
 # Draw the ways out as one tree of level and upright lines
 
@@ -32,3 +33,14 @@ sources:
 - A route from a tap is level and upright too. The tests check both.
 - Errors of the walls stay. Lines go outside the building where the outline is open (PT-commons_000107, JP-commons_000365). On RU-commons_000346 the walls close most rooms, so it has almost no lines.
 - The owner gets a page of the 14 plans at `/review/`: the current service next to the new lines. The decision waits for the result.
+
+## Second round
+
+- The owner asked for more refinement (2026-10-29). Commit 828f6e4 on `ortho-net` holds these changes:
+  - A line that serves only one room stops a short way into the room, as the stub at a door of a printed plan.
+  - A turn costs 30 cells of way, and a tree cell costs 0.25 of its way to the exit.
+  - Corners between two joins become one straight line or one right angle when that has fewer turns and stays as far from the walls.
+  - A staircase of four or more short legs becomes one straight line when that line is clear. This is the way along a wing at an angle.
+  - The two main directions differ by 10 degrees at most. The direction with more wall edges leads.
+- On 38 plans the small steps went from 156 to 47, and the turns from 602 to 377. No line crosses a hard wall.
+- A wing at an angle (CN-commons_000279) still has stubs on the main directions. The wall errors of the first round stay.

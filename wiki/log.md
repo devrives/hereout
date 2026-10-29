@@ -166,3 +166,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Created `decisions/orthogonal-way-tree.md`: the owner verdict on the A/B page and the new tree of lines on branch `ortho-net`.
 - Updated `decisions/wall-method-tests.md`: the owner verdict on the A/B page.
 - Source: the owner words of 2026-10-29, commit 6920028.
+
+## [2026-10-29] ingest | Way lines, second round
+
+- Updated `decisions/orthogonal-way-tree.md`: the second round of refinement (commit 828f6e4) and its numbers.
+- Source: the owner words of 2026-10-29, commit 828f6e4.
