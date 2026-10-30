@@ -1,7 +1,7 @@
 ---
 type: component
 title: Sample gallery
-updated: 2026-10-29
+updated: 2026-10-30
 checked: 0cb938d
 sources:
   - src/hereout/gallery.py
@@ -33,6 +33,7 @@ The gallery lets a person without a plan nearby try HereOut on real posted plans
   - The file name holds a key: a hash of the server code (`src/hereout/*.py`), the item and the plan image.
   - The server sends a saved answer only when its key matches. After a change of the code or the gallery, the server finds the walls again until the next run of the script.
   - The script makes no model call. It deletes the answers with an old key.
+  - The plan image of each answer is a WebP file beside it, with the same name. The page loads it by URL, so the edge and the browsers keep it (see [Fast first tap and smaller sample plans](../decisions/page-speed.md)).
 - `scripts/summarize_set.py` counts the results and draws contact sheets for a check by eye.
 - A route that the reader finds is not always the correct route. The gallery text does not claim accuracy.
 - `plan.py` rejects a sheet whose opposite sides differ much in length (ratio below 0.72). In the photo set, every false sheet had a ratio of 0.71 or less. `run_set.py --refresh` finds the saved results that a change of `plan.py` makes old, with no model call. It also finds the route again from each saved reading with the current wall and route code.

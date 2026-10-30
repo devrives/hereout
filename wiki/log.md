@@ -249,3 +249,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/page-layout-a.md`: the logo goes to the start page, and a photo plan comes back only in its own history entry.
 - Source: the owner request of 2026-10-30 to check the page for problems, and a code review of the page.
+
+## [2026-10-30] ingest | Fast first tap and smaller sample plans
+
+- Added `decisions/page-speed.md`: the times, the trees in the worker, the faster loops, the WebP images and the cache time.
+- Updated `components/gallery.md`: the WebP file beside each saved answer.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-30, the browser measurements, the output check on the gallery plans, the code, ux and a11y reviews.

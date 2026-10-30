@@ -5,7 +5,7 @@ Usage:
 
 Finding the walls of a plan takes 5 to 11 s on the server's one CPU. This
 script finds them for every plan and writes answers/<id>.<key>.json in the
-gallery folder. The key is a hash of the server code, the item and the plan
+gallery folder, with the plan image beside it as <id>.<key>.webp. The key is a hash of the server code, the item and the plan
 image, so the server uses a saved answer only when nothing changed since. Run
 it again after a change of src/hereout/ or of the gallery. It skips a plan
 with a current answer and deletes answers for an old key. It makes no model
@@ -28,16 +28,22 @@ gallery: Gallery | None = None
 
 def load(folder: str) -> None:
     global gallery
-    gallery = Gallery(Path(folder))
+    # The review set is served under /review/ (app.py), so its image URLs start there.
+    review = Path(folder).resolve().parts[-2:] == ("review", "gallery")
+    gallery = Gallery(Path(folder), "/review/gallery/thumbs" if review else "/gallery/thumbs")
 
 
 def save(pid: str) -> tuple[str, float]:
     t = time.monotonic()
     path = gallery.answer_path(pid)
-    out = gallery.answer(pid)
-    if out is None:
+    found = gallery.answer_to_save(pid)
+    if found is None:
         return pid, -1.0
+    out, image = found
+    # The image first: the server sends an answer only when its image is there.
     tmp = path.with_suffix(".tmp")
+    tmp.write_bytes(image)
+    os.replace(tmp, path.with_suffix(".webp"))
     tmp.write_text(json.dumps(out, separators=(",", ":")))
     os.replace(tmp, path)
     return pid, time.monotonic() - t
@@ -52,10 +58,12 @@ def main() -> None:
     folder = args.gallery / "answers"
     folder.mkdir(exist_ok=True)
     current = {gallery.answer_path(pid) for pid in gallery.items}
-    for p in folder.glob("*.json"):
+    current |= {p.with_suffix(".webp") for p in current}
+    for p in [*folder.glob("*.json"), *folder.glob("*.webp")]:
         if p not in current:
             p.unlink()
-    todo = [pid for pid in gallery.items if not gallery.answer_path(pid).exists()]
+    todo = [pid for pid in gallery.items
+            if not (gallery.answer_path(pid).exists() and gallery.answer_path(pid).with_suffix(".webp").exists())]
     print(f"{len(gallery.items)} plans, {len(todo)} to save", flush=True)
     with ProcessPoolExecutor(args.workers, initializer=load, initargs=(str(args.gallery),)) as pool:
         for i, (pid, sec) in enumerate(pool.map(save, todo), 1):

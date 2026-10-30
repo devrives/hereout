@@ -17,7 +17,7 @@ def test_network_lines_and_routes():
     out = json.loads(subprocess.run([NODE, str(RUNNER)], input=json.dumps(cs), capture_output=True,
                                     text=True, check=True).stdout)
     assert out[0]["legs"] > 0
-    assert all(a["waits"] and a["adopted"] for a in out)
+    assert all(a["waits"] and a["adopted"] and a["treesAdopted"] for a in out)
     n_routes = 0
     for c, a in zip(cs, out):
         assert a["legsClear"]
@@ -79,7 +79,7 @@ def test_wing_lines_follow_the_wing():
     case = {"grid": grid_payload(walls), "exits": [[1340, 550], [330 + 280 * math.sin(math.radians(25)), 330 - 280 * math.cos(math.radians(25))]]}
     out = json.loads(subprocess.run([NODE, str(Path(__file__).parent / "wing_check.js")], input=json.dumps(case),
                                     capture_output=True, text=True, check=True).stdout)
-    assert out["wing"] and out["adopted"]
+    assert out["wing"] and out["adopted"] and out["treesAdopted"]
 
     def square_to(leg, tilt):
         a = math.degrees(math.atan2(leg["b"][1] - leg["a"][1], leg["b"][0] - leg["a"][0]))

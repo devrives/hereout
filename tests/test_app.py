@@ -107,6 +107,12 @@ def test_page_and_robots():
     assert client.head("/").status_code == 200
     icon = client.get("/favicon.ico")
     assert icon.status_code == 200 and icon.content[:4] == b"\x00\x00\x01\x00"
+    # A file with its content hash is kept for a year; without it, the usual time.
+    assert "immutable" in client.get(re.search(r'/static/app\.js\?v=\w+', page)[0]).headers["cache-control"]
+    assert "cache-control" not in client.get("/static/app.js").headers
+    # An old hash gets the new file, but not for a year: a rollback must not find it.
+    assert "cache-control" not in client.get("/static/app.js?v=0123456789").headers
+    assert client.get("/static/fonts/plus-jakarta-sans-latin.woff2?v=0123456789").status_code == 200
 
 
 def make_gallery(tmp_path):
@@ -141,12 +147,35 @@ def test_saved_answer_is_sent(tmp_path):
     import json
     g = make_gallery(tmp_path)
     (tmp_path / "answers").mkdir()
-    g.answer_path("XX-test_1").write_text(json.dumps({"id": "g-XX-test_1", "saved": True}))
+    g.answer_path("XX-test_1").write_text(json.dumps({"id": "g-XX-test_1", "image": "data:image/jpeg;base64,", "saved": True}))
     assert TestClient(create_app(None, use_env=False, gallery=g)).post("/api/gallery/XX-test_1").json()["saved"]
     # A saved answer from other code is not used.
     g.code = "other"
     data = TestClient(create_app(None, use_env=False, gallery=g)).post("/api/gallery/XX-test_1").json()
     assert "saved" not in data and data["grid"]["bits"]
+
+
+def test_saved_answer_with_its_image(tmp_path):
+    import json
+    g = make_gallery(tmp_path)
+    (tmp_path / "answers").mkdir()
+    out, image = g.answer_to_save("XX-test_1")
+    path = g.answer_path("XX-test_1")
+    path.write_text(json.dumps(out))
+    client = TestClient(create_app(None, use_env=False, gallery=g))
+    # Without its image the saved answer is not used: the server finds the answer again.
+    assert client.post("/api/gallery/XX-test_1").json()["image"].startswith("data:image/jpeg")
+    path.with_suffix(".webp").write_bytes(image)
+    client = TestClient(create_app(None, use_env=False, gallery=g))  # the first one keeps the answer it found
+    data = client.post("/api/gallery/XX-test_1").json()
+    assert data["image"] == f"/gallery/answers/{path.stem}.webp" and data["grid"]["bits"]
+    r = client.get(data["image"])
+    assert r.status_code == 200 and r.headers["content-type"] == "image/webp" and r.content[8:12] == b"WEBP"
+    assert "immutable" in r.headers["cache-control"]
+    # An answer with the image URL of another set is not sent.
+    path.write_text(json.dumps({**out, "image": f"/review/gallery/answers/{path.stem}.webp"}))
+    client = TestClient(create_app(None, use_env=False, gallery=g))
+    assert client.post("/api/gallery/XX-test_1").json()["image"].startswith("data:image/jpeg")
 
 
 def test_review_pages(tmp_path):

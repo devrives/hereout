@@ -19,6 +19,10 @@ const HereOutRoute = (() => {
   const EXIT_APART = 0.05;  // share of the grid: two exits closer than this are one door for the second exit
   const NEIGHBOURS = [[-1, 0, 1.0], [1, 0, 1.0], [0, -1, 1.0], [0, 1, 1.0],
                       [-1, -1, SQRT2], [-1, 1, SQRT2], [1, -1, SQRT2], [1, 1, SQRT2]];
+  // The same moves as typed arrays, for the loops that run on every cell.
+  const N_DR = Int8Array.from(NEIGHBOURS, (q) => q[0]);
+  const N_DC = Int8Array.from(NEIGHBOURS, (q) => q[1]);
+  const N_STEP = Float64Array.from(NEIGHBOURS, (q) => q[2]);
   const SIMPLIFY_SHARE = 0.015;
   const MIN_LEG_SHARE = 0.03;
 
@@ -33,39 +37,41 @@ const HereOutRoute = (() => {
     return blocked;
   }
 
-  // A binary heap of [cost, cell], smallest cost first, then smallest cell,
-  // the order of Python tuples in heapq.
+  // A binary heap of cells by cost in typed arrays, smallest cost first, then
+  // smallest cell, the order of Python tuples in heapq. No two entries are
+  // the same pair, so it pops in the same order as heapq.
+  // pop() gives the cell and leaves its cost in topCost.
   class Heap {
-    constructor() { this.d = []; this.i = []; }
-    get size() { return this.d.length; }
-    less(a, b) { return this.d[a] < this.d[b] || (this.d[a] === this.d[b] && this.i[a] < this.i[b]); }
-    swap(a, b) {
-      [this.d[a], this.d[b]] = [this.d[b], this.d[a]];
-      [this.i[a], this.i[b]] = [this.i[b], this.i[a]];
-    }
+    constructor(size = 1024) { this.d = new Float64Array(size); this.i = new Int32Array(size); this.size = 0; this.topCost = 0; }
     push(d, i) {
-      this.d.push(d); this.i.push(i);
-      let k = this.d.length - 1;
+      if (this.size === this.d.length) {
+        const d2 = new Float64Array(this.size * 2), i2 = new Int32Array(this.size * 2);
+        d2.set(this.d); i2.set(this.i); this.d = d2; this.i = i2;
+      }
+      const D = this.d, I = this.i;
+      let k = this.size++;
       while (k > 0) {
         const p = (k - 1) >> 1;
-        if (!this.less(k, p)) break;
-        this.swap(k, p); k = p;
+        if (D[p] < d || (D[p] === d && I[p] < i)) break;
+        D[k] = D[p]; I[k] = I[p]; k = p;
       }
+      D[k] = d; I[k] = i;
     }
     pop() {
-      const top = [this.d[0], this.i[0]];
-      const last = this.d.length - 1;
-      this.swap(0, last);
-      this.d.pop(); this.i.pop();
+      const D = this.d, I = this.i;
+      const top = I[0];
+      this.topCost = D[0];
+      const n = --this.size;
+      const d = D[n], i = I[n];
       let k = 0;
       for (;;) {
-        const l = 2 * k + 1, r = l + 1;
-        let m = k;
-        if (l < this.d.length && this.less(l, m)) m = l;
-        if (r < this.d.length && this.less(r, m)) m = r;
-        if (m === k) break;
-        this.swap(k, m); k = m;
+        let c = 2 * k + 1;
+        if (c >= n) break;
+        if (c + 1 < n && (D[c + 1] < D[c] || (D[c + 1] === D[c] && I[c + 1] < I[c]))) c++;
+        if (D[c] > d || (D[c] === d && I[c] > i)) break;
+        D[k] = D[c]; I[k] = I[c]; k = c;
       }
+      D[k] = d; I[k] = i;
       return top;
     }
   }
@@ -79,28 +85,30 @@ const HereOutRoute = (() => {
         const d2 = new Float64Array(this.size * 2), i2 = new Int32Array(this.size * 2);
         d2.set(this.d); i2.set(this.i); this.d = d2; this.i = i2;
       }
+      const D = this.d, I = this.i;
       let k = this.size++;
       while (k > 0) {
         const p = (k - 1) >> 1;
-        if (this.d[p] <= d) break;
-        this.d[k] = this.d[p]; this.i[k] = this.i[p]; k = p;
+        if (D[p] <= d) break;
+        D[k] = D[p]; I[k] = I[p]; k = p;
       }
-      this.d[k] = d; this.i[k] = i;
+      D[k] = d; I[k] = i;
     }
     pop() {
-      const top = this.i[0];
-      this.topCost = this.d[0];
+      const D = this.d, I = this.i;
+      const top = I[0];
+      this.topCost = D[0];
       const n = --this.size;
-      const d = this.d[n], i = this.i[n];
+      const d = D[n], i = I[n];
       let k = 0;
       for (;;) {
         let c = 2 * k + 1;
         if (c >= n) break;
-        if (c + 1 < n && this.d[c + 1] < this.d[c]) c++;
-        if (this.d[c] >= d) break;
-        this.d[k] = this.d[c]; this.i[k] = this.i[c]; k = c;
+        if (c + 1 < n && D[c + 1] < D[c]) c++;
+        if (D[c] >= d) break;
+        D[k] = D[c]; I[k] = I[c]; k = c;
       }
-      this.d[k] = d; this.i[k] = i;
+      D[k] = d; I[k] = i;
       return top;
     }
   }
@@ -108,22 +116,25 @@ const HereOutRoute = (() => {
   function wallDistance(blocked, gw, gh) {
     const d = new Float64Array(gw * gh);
     for (let i = 0; i < d.length; i++) d[i] = blocked[i] ? 0 : FAR;
-    const fwd = [[0, -1, CHAMFER_A], [-1, -1, CHAMFER_B], [-1, 0, CHAMFER_A], [-1, 1, CHAMFER_B]];
-    const back = [[0, 1, CHAMFER_A], [1, 1, CHAMFER_B], [1, 0, CHAMFER_A], [1, -1, CHAMFER_B]];
-    const pass = (r, c, mask) => {
+    // The moves of each pass (rows, then columns) and their weights: the
+    // first pass looks at the cells it passed, the second the other way.
+    const fwdR = Int8Array.of(0, -1, -1, -1), fwdC = Int8Array.of(-1, -1, 0, 1);
+    const backR = Int8Array.of(0, 1, 1, 1), backC = Int8Array.of(1, 1, 0, -1);
+    const weight = Float64Array.of(CHAMFER_A, CHAMFER_B, CHAMFER_A, CHAMFER_B);
+    const pass = (r, c, mdr, mdc) => {
       const i = r * gw + c;
       let best = d[i];
-      for (const [dr, dc, w] of mask) {
-        const nr = r + dr, nc = c + dc;
+      for (let q = 0; q < 4; q++) {
+        const nr = r + mdr[q], nc = c + mdc[q];
         if (nr >= 0 && nr < gh && nc >= 0 && nc < gw) {
-          const v = d[nr * gw + nc] + w;
+          const v = d[nr * gw + nc] + weight[q];
           if (v < best) best = v;
         }
       }
       d[i] = best;
     };
-    for (let r = 0; r < gh; r++) for (let c = 0; c < gw; c++) pass(r, c, fwd);
-    for (let r = gh - 1; r >= 0; r--) for (let c = gw - 1; c >= 0; c--) pass(r, c, back);
+    for (let r = 0; r < gh; r++) for (let c = 0; c < gw; c++) pass(r, c, fwdR, fwdC);
+    for (let r = gh - 1; r >= 0; r--) for (let c = gw - 1; c >= 0; c--) pass(r, c, backR, backC);
     return d;
   }
 
@@ -166,18 +177,18 @@ const HereOutRoute = (() => {
         for (const [g, d] of cells) if (d < dist[g]) { dist[g] = d; owner[g] = k; heap.push(d, g); }
       });
       while (heap.size) {
-        const [d, i] = heap.pop();
+        const i = heap.pop(), d = heap.topCost;
         if (d > dist[i]) continue;
         const r = Math.floor(i / gw), c = i - r * gw;
         const stepCost = cost[i];
-        for (const [dr, dc, step] of NEIGHBOURS) {
-          const nr = r + dr, nc = c + dc;
+        for (let q = 0; q < 8; q++) {
+          const nr = r + N_DR[q], nc = c + N_DC[q];
           if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
           const j = nr * gw + nc;
           if (blocked[j]) continue;
           // No corner cutting through the gap between two diagonal walls.
-          if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
-          const nd = d + step * stepCost;
+          if (q >= 4 && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+          const nd = d + N_STEP[q] * stepCost;
           if (nd < dist[j]) { dist[j] = nd; next[j] = i; owner[j] = owner[i]; heap.push(nd, j); }
         }
       }
@@ -277,22 +288,24 @@ const HereOutRoute = (() => {
       if (this._areas) return this._areas;
       const { gw, gh, blocked } = this;
       const area = new Int32Array(gw * gh).fill(-1);
+      const todo = new Int32Array(gw * gh);  // each cell goes on it once
       let n = 0;
       for (let s = 0; s < area.length; s++) {
         if (blocked[s] || area[s] >= 0) continue;
-        const todo = [s];
+        let top = 0;
+        todo[top++] = s;
         area[s] = n;
-        while (todo.length) {
-          const i = todo.pop();
+        while (top) {
+          const i = todo[--top];
           const r = Math.floor(i / gw), c = i - r * gw;
-          for (const [dr, dc] of NEIGHBOURS) {
-            const nr = r + dr, nc = c + dc;
+          for (let q = 0; q < 8; q++) {
+            const nr = r + N_DR[q], nc = c + N_DC[q];
             if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
             const j = nr * gw + nc;
             if (blocked[j] || area[j] >= 0) continue;
-            if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+            if (q >= 4 && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
             area[j] = n;
-            todo.push(j);
+            todo[top++] = j;
           }
         }
         n++;
@@ -326,16 +339,16 @@ const HereOutRoute = (() => {
       dist[s] = 0;
       heap.push(0, s);
       while (heap.size) {
-        const [d, i] = heap.pop();
+        const i = heap.pop(), d = heap.topCost;
         if (d > dist[i]) continue;
         const r = Math.floor(i / gw), c = i - r * gw;
-        for (const [dr, dc, step] of NEIGHBOURS) {
-          const nr = r + dr, nc = c + dc;
+        for (let q = 0; q < 8; q++) {
+          const nr = r + N_DR[q], nc = c + N_DC[q];
           if (nr < 0 || nr >= gh || nc < 0 || nc >= gw) continue;
           const j = nr * gw + nc;
           if (blocked[j]) continue;
-          if (dr && dc && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
-          const nd = d + step * cost[i];
+          if (q >= 4 && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+          const nd = d + N_STEP[q] * cost[i];
           if (nd < dist[j]) { dist[j] = nd; heap.push(nd, j); }
         }
       }
@@ -394,6 +407,24 @@ const HereOutRoute = (() => {
       this._network = Network.fromData(this, data);
     }
 
+    // The network along the directions of the wing. Browser only.
+    wingNetwork() {
+      if (!this._wingNet) this._wingNet = new Network(this, this.wing.axes);
+      return this._wingNet;
+    }
+
+    // Use a wing network that a worker made. One made here already stays.
+    adoptWingNetwork(data) {
+      if (!this._wingNet) this._wingNet = Network.fromData(this, data);
+    }
+
+    // Use a tree to exit only that a worker made (Network.treeData), in
+    // the network, or in the wing network when wing is true.
+    adoptTree(only, data, wing = false) {
+      const net = wing ? this._wingNet : this._network;
+      if (net && !net.trees.has(only)) net.trees.set(only, data);
+    }
+
     // A route along the ways out to the nearest exit, or to exit only when
     // only is 0 or more. Null when the network has no way to that exit (then
     // the grid route of a field to that exit is the answer). Browser only.
@@ -411,8 +442,7 @@ const HereOutRoute = (() => {
       // directions. The way that follows the walls of the part it is in over
       // more of its length is the one the map shows; then the fewer corners.
       if (r && this.wing) {
-        if (!this._wingNet) this._wingNet = new Network(this, this.wing.axes);
-        const w = this._wingNet.route(start, s, only);
+        const w = this.wingNetwork().route(start, s, only);
         if (w && (only < 0 ? w.exitIndex === r.exitIndex : true)) {
           const a = this.alongWalls(w.points), b = this.alongWalls(r.points);
           if (a > b + ALONG_MARGIN || (a > b - ALONG_MARGIN && w.points.length < r.points.length)) r = w;
@@ -523,6 +553,14 @@ const HereOutRoute = (() => {
   const STAIR_RUN = 0.08;       // share of the frame: a shorter staircase stays in steps (a slanted line is for a long slanted corridor)
   const PASS_STEPS = 8;         // points on the line of one move that must be clear of walls
   const DR = [0, 1, 0, -1], DC = [1, 0, -1, 0];  // the four moves: right, down, left, up
+
+  // The move of the state of cell i with the least cost in a tree (the
+  // first on a tie), or -1 when every state of the cell costs Infinity.
+  function bestMove(dist, i) {
+    let bs = 4 * i;
+    for (let m = 1; m < 4; m++) if (dist[4 * i + m] < dist[bs]) bs = 4 * i + m;
+    return Number.isFinite(dist[bs]) ? bs & 3 : -1;
+  }
 
   class Network {
     // axes: the directions of the frame; a second network along the
@@ -709,6 +747,27 @@ const HereOutRoute = (() => {
       const t = this.tree(-1);
       return { axes: this.axes, room: this.room, open: this.open, pass: this.pass, wd: this.wd, cost: this.cost, src: this.src,
                middles: [...this.middles], sources: this.sources, exitSeeds: this.exitSeeds, tree: t };
+    }
+
+    // A tree to exit only as plain data for postMessage: only what route()
+    // reads, one byte for each value. best: for each cell, the move of its
+    // state with the least cost, or -1 when no state of the cell has a way.
+    // prevMove: the move of the state before (its cell is one step back
+    // along the move of the state), or -1. nextMove: the move to the next
+    // cell of the tree, or -1. The owner of each tree cell is exit only.
+    treeData(only) {
+      const t = this.tree(only);
+      const fw = this.fw, n = fw * this.fh;
+      const best = new Int8Array(n), nextMove = new Int8Array(n), prevMove = new Int8Array(4 * n);
+      const step = Int32Array.from(DR, (dr, m) => dr * fw + DC[m]);
+      const moveOf = new Map([...step].map((d, m) => [d, m]));
+      for (let i = 0; i < n; i++) {
+        best[i] = bestMove(t.dist, i);
+        const to = t.tnext[i];
+        nextMove[i] = to < 0 ? -1 : moveOf.get(to - i);
+      }
+      for (let q = 0; q < 4 * n; q++) prevMove[q] = t.prev[q] < 0 ? -1 : t.prev[q] & 3;
+      return { only, best, prevMove, nextMove, step };
     }
 
     static fromData(field, d) {
@@ -1114,14 +1173,19 @@ const HereOutRoute = (() => {
       let i = this.openNear(start);
       if (i < 0) i = this.openNear(this.field.toPx(s));
       if (i < 0) return null;
-      let bs = -1;
-      for (let m = 0; m < 4; m++) if (bs < 0 || t.dist[4 * i + m] < t.dist[bs]) bs = 4 * i + m;
-      if (!Number.isFinite(t.dist[bs])) return null;
+      const m = t.best ? t.best[i] : bestMove(t.dist, i);
+      if (m < 0) return null;
+      const bs = 4 * i + m;
+      // A tree from a worker (treeData) has moves in place of cell numbers.
+      const before = t.best
+        ? (q) => (t.prevMove[q] < 0 ? -1 : 4 * ((q >> 2) - t.step[q & 3]) + t.prevMove[q])
+        : (q) => t.prev[q];
+      const after = t.best ? (c) => (t.nextMove[c] < 0 ? -1 : c + t.step[t.nextMove[c]]) : (c) => t.tnext[c];
       const cells = [];
-      for (let q = bs; q >= 0; q = t.prev[q]) cells.push(q >> 2);
-      for (let q = t.tnext[cells[cells.length - 1]]; q >= 0; q = t.tnext[q]) cells.push(q);
+      for (let q = bs; q >= 0; q = before(q)) cells.push(q >> 2);
+      for (let q = after(cells[cells.length - 1]); q >= 0; q = after(q)) cells.push(q);
       const end = cells[cells.length - 1];
-      const k = t.towner[end];
+      const k = t.best ? t.only : t.towner[end];
       // Corners only: where the way turns. A point where another line of
       // the map joins stays, so the route keeps to the lines of the map. The
       // map shows the tree of all exits; the joins of the tree of one exit

@@ -20,9 +20,19 @@ process.stdin.on("end", () => {
     const waits = c.starts.every((s) => ask(copy, s) === (() => { try { return JSON.stringify(f.route(s)); } catch (e) { return e.message; } })());
     copy.adoptNetwork(structuredClone(net.toData()));
     const adopted = copy.network().legs.length === net.legs.length && c.starts.every((s) => ask(copy, s) === ask(f, s));
+    // With the trees to single exits that the worker sends, a route to each exit is the same too.
+    const maker = new R.Field(R.decodeGrid(c.grid), c.grid.w, c.grid.h, c.grid.scale, c.exits, c.clear);
+    const sent = new R.Field(R.decodeGrid(c.grid), c.grid.w, c.grid.h, c.grid.scale, c.exits, c.clear);
+    sent.waitForNetwork = true;
+    sent.adoptNetwork(structuredClone(maker.network().toData()));
+    c.exits.forEach((_, k) => sent.adoptTree(k, structuredClone(maker.network().treeData(k))));
+    const askTo = (g, s, k) => { try { return JSON.stringify(g.wayRoute(s, k)); } catch (e) { return e.message; } };
+    const treesAdopted = c.exits.every((_, k) => sent._network.trees.get(k).best) &&
+      c.starts.every((s) => c.exits.every((_, k) => askTo(sent, s, k) === askTo(f, s, k)));
     return {
       waits,
       adopted,
+      treesAdopted,
       legs: net.legs.length,
       legsClear: net.legs.filter((l) => !l.exit).every((l) => clear(l.a, l.b)),
       // With no tilt, every line of the map is level or upright.

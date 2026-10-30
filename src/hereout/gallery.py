@@ -20,6 +20,7 @@ from .pipeline import Plan, answer
 from .reader import Reading
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+PLAN_WEBP_QUALITY = 80  # half the bytes of the JPEG in the answer; the marks and the text stay sharp
 
 
 def code_hash() -> str:
@@ -34,6 +35,7 @@ class Gallery:
     def __init__(self, folder: Path, thumbs_url: str = "/gallery/thumbs"):
         self.folder = folder
         self.thumbs_url = thumbs_url
+        self.answers_url = thumbs_url.rsplit("/", 1)[0] + "/answers"
         self.code = code_hash()
         self.items: dict[str, dict] = {}
         for p in sorted((folder / "items").glob("*.json")):
@@ -85,13 +87,31 @@ class Gallery:
 
     def answer(self, pid: str) -> dict | None:
         """The answer for a gallery plan, found now: the walls take seconds."""
+        found = self._answer(pid)
+        return found and found[0]
+
+    def _answer(self, pid: str) -> tuple[dict, Plan] | None:
         found = self.open(pid)
         if found is None:
             return None
         plan, reading, item = found
         out = answer(f"g-{pid}", plan, reading, None)
         out["credit"] = item["credit"]
-        return out
+        return out, plan
+
+    def answer_to_save(self, pid: str) -> tuple[dict, bytes] | None:
+        """The answer to save, and its plan image as WebP apart from it. The
+        answer has the URL of the image: the edge and the browsers keep the
+        image, and the answer is small."""
+        found = self._answer(pid)
+        if found is None:
+            return None
+        out, plan = found
+        ok, buf = cv2.imencode(".webp", plan.image, [cv2.IMWRITE_WEBP_QUALITY, PLAN_WEBP_QUALITY])
+        if not ok:
+            return None
+        out["image"] = f"{self.answers_url}/{self.answer_path(pid).stem}.webp"
+        return out, buf.tobytes()
 
     def answer_path(self, pid: str) -> Path:
         """Where the saved answer for the current code, item and image goes."""
@@ -104,7 +124,15 @@ class Gallery:
         """The saved answer as JSON, or None when there is none for the current code."""
         if pid not in self.items:
             return None
+        path = self.answer_path(pid)
         try:
-            return self.answer_path(pid).read_bytes()
+            data = path.read_bytes()
         except OSError:
             return None
+        # The image is in the answer, or it is the file beside it, at the URL of this gallery.
+        image = json.loads(data).get("image", "")
+        if image.startswith("data:image/"):
+            return data
+        if image == f"{self.answers_url}/{path.stem}.webp" and path.with_suffix(".webp").exists():
+            return data
+        return None

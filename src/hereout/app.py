@@ -10,6 +10,7 @@ memory for a few minutes only. Nothing is written to disk.
 from __future__ import annotations
 
 import hashlib
+import mimetypes
 import os
 import re
 import secrets
@@ -18,6 +19,7 @@ import time
 from collections import OrderedDict, defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
@@ -38,18 +40,43 @@ JOB_WORKERS = 4         # the model calls wait on the network, the wall pass on 
 JOB_KEEP = 10 * 60      # seconds a job and its answer stay in memory
 JOBS_HELD = 64
 NO_STORE = {"Cache-Control": "no-store"}
+mimetypes.add_type("image/webp", ".webp")  # the slim image has no mime.types
+LONG_CACHE = "public, max-age=31536000, immutable"
+
+
+def static_digest(name: str) -> str:
+    return hashlib.sha256((WEB / name).read_bytes()).hexdigest()[:10]
 
 
 def index_html() -> str:
     """index.html with a content hash on each /static/ file.
 
-    The edge and the browsers keep static files for hours. A new hash makes
-    them load the new file, so a page never runs with an old script.
+    The edge and the browsers keep a file with its hash for a year. A new hash
+    makes them load the new file, so a page never runs with an old script.
     """
     def versioned(m: re.Match) -> str:
-        digest = hashlib.sha256((WEB / m.group(2)).read_bytes()).hexdigest()[:10]
-        return f'{m.group(1)}/static/{m.group(2)}?v={digest}"'
+        return f'{m.group(1)}/static/{m.group(2)}?v={static_digest(m.group(2))}"'
     return re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / "index.html").read_text())
+
+
+class LongCache(StaticFiles):
+    """Files whose URL changes with their content: the edge and the browsers
+    keep them for a year. With versioned, only a URL whose ?v= is the hash of
+    the file now (index_html). A page from before a deploy can ask for an old
+    hash: the new file must not stay under that URL."""
+
+    def __init__(self, *args, versioned: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.versioned = versioned
+
+    def file_response(self, full_path, stat_result, scope, status_code=200):
+        response = super().file_response(full_path, stat_result, scope, status_code)
+        if self.versioned:
+            v = parse_qs(scope.get("query_string", b"").decode("latin-1")).get("v", [""])[0]
+            if not v or v != static_digest(str(Path(full_path).relative_to(WEB))):
+                return response
+        response.headers["Cache-Control"] = LONG_CACHE
+        return response
 
 
 class RateLimit:
@@ -215,9 +242,12 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
                 opened.popitem(last=False)
         return out
 
-    app.mount("/static", StaticFiles(directory=WEB), name="static")
+    app.mount("/static", LongCache(directory=WEB, versioned=True), name="static")
     if gallery:
         app.mount("/gallery/thumbs", StaticFiles(directory=gallery.folder / "thumbs"), name="thumbs")
+        # The plan images of the saved answers: their names carry the key of the answer.
+        if (gallery.folder / "answers").is_dir():
+            app.mount("/gallery/answers", LongCache(directory=gallery.folder / "answers"), name="answers")
         # Review pages for the owner, written outside the repository by test scripts.
         # robots.txt keeps them out of search.
         if (gallery.folder / "review").is_dir():

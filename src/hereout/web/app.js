@@ -91,17 +91,58 @@ function buildField() {
            toExit: (i) => { if (!single.has(i)) single.set(i, make([exitPoints()[i]])); return single.get(i); } };
   view.reachable = field.owner.some((o) => o >= 0);
   if (view.reachable) makeNetwork(field);
+  else stopWorker();  // no ways out to make: the trees of the plan before are not wanted
 }
 
 // The ways out take about a second to make on a phone, so a worker makes
 // them. Until they come, routes follow the grid field and the map has no
-// lines. Without a worker, the page makes them itself.
+// lines. Without a worker, the page makes them itself. After the ways out,
+// the worker makes the trees to single exits that a tap needs (route.js
+// treeData); a tap before they come makes the trees it needs itself.
 let worker = null;
+let workerBusy = false;   // the worker still makes trees for a job
 let networkJob = 0;
 let networkReady = null;  // the callback of the newest job
+let networkField = null;  // the field of the newest job
 let networkTimer = 0;
 const NETWORK_WAIT = 15000;  // ms: a worker with no answer by then is stopped (a phone can kill it for memory)
 const scriptUrl = (sel) => { const el = document.querySelector(sel); return el && (el.src || el.href); };
+
+// The page waited for the worker: show the route now.
+function updateAfterWait() {
+  const exitAt = [...$("exits").children].indexOf(document.activeElement);
+  update();
+  if (exitAt >= 0) $("exits").children[exitAt]?.focus();
+  // The status said "Finding the route…": now it names the route.
+  // Any other status is already right: do not read it again.
+  if (state.start && view.pendingHow) explain(view.pendingHow);
+  view.pendingHow = null;
+}
+
+// The trees to single exits that a route from start needs and the worker
+// has not sent yet, as { ks, wing }, or null. Only while the worker makes
+// them: then the page waits for them, and does not stop to make them too.
+function treesToWait(f, start) {
+  if (!workerBusy || networkField !== f || !f._network) return null;
+  const k = state.exitChoice;
+  const m = k >= 0 ? k : f.nearestExit(start);
+  if (m < 0) return null;
+  const ks = [m, ...f.otherExits(start, m).slice(0, OTHER_TRIES)];
+  const has = (net, i) => net && net.trees.has(i);
+  const missing = ks.filter((i) => !has(f._network, i) || (f.wing && !has(f._wingNet, i)));
+  if (f.wing && !f._wingNet) return { ks, wing: true };
+  return missing.length ? { ks: missing, wing: !!f.wing } : null;
+}
+
+// A tree came, or the worker is done: a route that waits for trees can go on.
+function treeCame() {
+  if (!state || !view || view.field !== networkField || !view.pending || !state.start) return;
+  if (!treesToWait(view.field, state.start)) updateAfterWait();
+}
+
+function stopWorker() {
+  if (worker && workerBusy) { worker.terminate(); worker = null; workerBusy = false; }
+}
 
 function makeNetwork(field) {
   const job = ++networkJob;
@@ -112,29 +153,41 @@ function makeNetwork(field) {
     if (data) field.adoptNetwork(data);
     else field.waitForNetwork = false;
     view.layer = null;
-    const exitAt = [...$("exits").children].indexOf(document.activeElement);
-    update();
-    if (exitAt >= 0) $("exits").children[exitAt]?.focus();
-    // The status said "Finding the route…": now it names the route.
-    // Any other status is already right: do not read it again.
-    if (state.start && view.pendingHow) explain(view.pendingHow);
-    view.pendingHow = null;
+    updateAfterWait();
   };
   networkReady = ready;
+  networkField = field;
   try {
+    stopWorker();  // a worker busy with the trees of an old plan: the new plan must not wait
     if (!worker) {
-      worker = new Worker(scriptUrl("#network-worker"));
-      worker.onmessage = (ev) => { if (ev.data.id === networkJob && networkReady) networkReady(ev.data.data); };
-      worker.onerror = (ev) => { ev.preventDefault(); worker = null; if (networkReady) networkReady(null); };
+      const w = worker = new Worker(scriptUrl("#network-worker"));
+      worker.onmessage = (ev) => {
+        const m = ev.data;
+        if (m.id !== networkJob) return;
+        if (m.done) workerBusy = false;
+        else if (m.data) { if (networkReady) networkReady(m.data); return; }
+        else if (m.wingData) networkField.adoptWingNetwork(m.wingData);
+        else if (m.tree) networkField.adoptTree(m.k, m.tree, m.wing);
+        treeCame();
+      };
+      worker.onerror = (ev) => {
+        ev.preventDefault();
+        if (worker !== w) return;  // an error of a worker that a new job stopped
+        worker = null;
+        workerBusy = false;
+        if (networkReady) networkReady(null);
+      };
     }
     clearTimeout(networkTimer);
     networkTimer = setTimeout(() => {
       if (job !== networkJob) return;
       worker?.terminate();
       worker = null;
+      workerBusy = false;
       ready(null);
     }, NETWORK_WAIT);
     const g = state.grid;
+    workerBusy = true;
     worker.postMessage({ id: job, routeUrl: scriptUrl('script[src*="/static/route.js"]'),
                          grid: { w: g.w, h: g.h, scale: g.scale, bits: g.bits, soft: g.soft, axes: g.axes,
                                  wing: g.wing, wing_axes: g.wing_axes }, exits: exitPoints() });
@@ -157,6 +210,13 @@ function findRoute() {
   view.pending = false;
   if (!state.start || !state.exits.length) return;
   const f = view.field, start = state.start;
+  // While the worker makes the trees this start needs, wait for them.
+  const need = treesToWait(f, start);
+  if (need) {
+    view.pending = true;
+    worker.postMessage({ id: networkJob, need: need.ks, wing: need.wing });
+    return;
+  }
   // The ways out lead to a chosen exit too. Where they do not, the grid
   // route of a field to that exit is the answer.
   const to = (k) => f.wayRoute(start, k) || view.toExit(k).route(start);
@@ -851,15 +911,16 @@ function hints() {
 
 // The old plan stays in state, with its map, until the image of the new plan
 // is there: a tap or a late worker answer in that time never mixes the two.
+const askedAgain = new Set();  // samples whose image did not load, asked for again
 function showPlan(answer, focusResult, push) {
   // Take the focus before the controls of the old plan hide, so it never falls to the page body.
   if (focusResult && !$("result").hidden) $("result-head").focus({ preventScroll: true });
   if (answer.start === undefined) answer.start = null;
   if (answer.exitChoice === undefined) answer.exitChoice = -1;
   if (answer.foundExits === undefined) answer.foundExits = answer.exits.map((e) => ({ ...e }));
-  say("");
-  $("status").style.removeProperty("min-height");
-  sayPlan("");  // the same instruction for the next plan is then a change, and is read
+  // The status lines change when the plan opens: a wait text stays while
+  // the image loads, and an image that does not load says so on one line only.
+  const wasMarking = marking;
   stopSpeaking();
   stopMarking();
   cursor = null;
@@ -870,10 +931,18 @@ function showPlan(answer, focusResult, push) {
   next.onerror = () => {
     dropOpening();
     forget(answer);
+    // A sample kept in the tab from before a deploy can name an image that
+    // the server no longer has: ask the server for the sample once.
+    const gid = sampleId(answer.id);
+    if (gid && !answer.image.startsWith("data:") && !askedAgain.has(gid)) {
+      askedAgain.add(gid);
+      openSample(gid, push);
+      return;
+    }
     // A new answer that does not open leaves the old plan open. Back or Forward
     // to a plan that does not open shows the start page, as the address says.
     if (state && push) {
-      explain();  // the status line of the old plan again
+      if (wasMarking) explain();  // the line asked for a tap on the exit; the old plan is open again
       if (focusResult) $("result").scrollIntoView({ block: "start" });
     } else {
       closePlan();
@@ -884,6 +953,9 @@ function showPlan(answer, focusResult, push) {
   };
   next.onload = () => {
     dropOpening();
+    // A plan that opens while the server reads a photo says that the photo comes later.
+    say(upload ? STILL_TEXT : "");
+    $("status").style.removeProperty("min-height");
     img = next;
     state = answer;
     // A photo map has no routes, so the controls for routes and walls go.
@@ -920,6 +992,7 @@ function closePlan() {
   ++networkJob;
   networkReady = null;
   clearTimeout(networkTimer);
+  stopWorker();
   stopSpeaking();
   stopMarking();
   state = null;
@@ -1001,7 +1074,6 @@ async function loadPlan(request, waitText, push) {
   if (n !== planSeq) return;
   showPlan(answer, true, push);
   showBusy();
-  if (upload) say(STILL_TEXT);
 }
 
 // A phone photo has up to 50 megapixels. The server works on 1600 pixels at
