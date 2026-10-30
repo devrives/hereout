@@ -64,3 +64,4 @@ sources:
 
 - A sample plan is now an answer of 3 KB and an image of 139 KB on average (compressed): half the bytes. A second open of the same sample loads the image from the edge or from the browser.
 - The saved answers changed their key. After a deploy, `scripts/save_answers.py` runs again (see [Sample gallery](../components/gallery.md)).
+- A route that waited for the network and then for its trees lost its status. After a reload with a start, the status line stayed at "Finding the route…" (ux review, 2026-10-30). The page now keeps the status for the second wait.

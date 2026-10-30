@@ -111,12 +111,14 @@ const scriptUrl = (sel) => { const el = document.querySelector(sel); return el &
 // The page waited for the worker: show the route now.
 function updateAfterWait() {
   const exitAt = [...$("exits").children].indexOf(document.activeElement);
+  // The status said "Finding the route…": now it names the route. A route
+  // that still waits (the trees after the network) keeps it for later.
+  // Any other status is already right: do not read it again.
+  const how = view.pendingHow;
+  view.pendingHow = null;
   update();
   if (exitAt >= 0) $("exits").children[exitAt]?.focus();
-  // The status said "Finding the route…": now it names the route.
-  // Any other status is already right: do not read it again.
-  if (state.start && view.pendingHow) explain(view.pendingHow);
-  view.pendingHow = null;
+  if (state.start && how) explain(how);
 }
 
 // The trees to single exits that a route from start needs and the worker

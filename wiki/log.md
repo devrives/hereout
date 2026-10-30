@@ -263,3 +263,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/orthogonal-way-tree.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-30, the measure on the gallery plans, the code and the tests.
+
+## [2026-10-30] ingest | Status after a reload with a start
+
+- Updated `decisions/page-speed.md`: the status line after the second wait.
+- Source: the ux review of 2026-10-30, the reload check on the live site.
