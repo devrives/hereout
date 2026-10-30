@@ -1,4 +1,5 @@
 import re
+import time
 
 import cv2
 from fastapi.testclient import TestClient
@@ -25,10 +26,23 @@ def upload(client, img):
     return client.post("/api/plan", files={"photo": ("p.png", buf.tobytes(), "image/png")})
 
 
+def read(client, img):
+    """Upload a photo and ask for its answer until it is ready, as the page does."""
+    r = upload(client, img)
+    assert r.status_code == 202
+    for _ in range(600):
+        a = client.get(f"/api/plan/{r.json()['job']}")
+        if a.status_code != 202:
+            assert a.headers["cache-control"] == "no-store"
+            return a
+        time.sleep(0.05)
+    raise AssertionError("no answer")
+
+
 def test_plan_with_marks_gets_a_route():
     img, here, exit_ = draw_plan()
     client = TestClient(create_app(FakeReader([exit_]), use_env=False))
-    r = upload(client, img)
+    r = read(client, img)
     assert r.status_code == 200
     data = r.json()
     assert data["image"].startswith("data:image/jpeg;base64,")
@@ -42,10 +56,25 @@ def test_plan_with_marks_gets_a_route():
 def test_no_model_still_sends_the_grid():
     img, here, exit_ = draw_plan()
     client = TestClient(create_app(None, use_env=False))
-    data = upload(client, img).json()
+    data = read(client, img).json()
     assert data["exits"] == [] and data["model_error"] == "model not configured"
     # Marks the user places by hand are routed on the same grid.
     assert field_from_payload(data["grid"], [exit_]).route(here).exit_index == 0
+
+
+def test_unknown_job():
+    client = TestClient(create_app(None, use_env=False))
+    assert client.get("/api/plan/nope").status_code == 404
+
+
+def test_failed_job_gives_an_error():
+    class Broken:
+        def read_plan(self, img):
+            raise RuntimeError("bug")
+
+    img, _, _ = draw_plan()
+    r = read(TestClient(create_app(Broken(), use_env=False)), img)
+    assert r.status_code == 500 and "another photo" in r.json()["detail"]
 
 
 def test_bad_upload():
@@ -58,7 +87,7 @@ def test_sealed_start_has_no_route():
     img, here, exit_ = draw_plan()
     cv2.line(img, (400, 130), (400, 190), (20, 20, 20), 8)  # close the door
     client = TestClient(create_app(None, use_env=False))
-    data = upload(client, img).json()
+    data = read(client, img).json()
     try:
         field_from_payload(data["grid"], [exit_]).route(here)
     except NoRoute as e:

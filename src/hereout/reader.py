@@ -16,6 +16,7 @@ import json
 import os
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -70,6 +71,12 @@ ZOOM_MAX_MOVE = 0.07   # a larger move is not used
 MAX_IMAGES = 8         # Baseten refuses a request with more images
 ZOOM_PER_SHEET = 4
 ZOOM_MAX = (MAX_IMAGES - 1) * ZOOM_PER_SHEET
+# The zoom call only moves exits a little. After a slow main call the user waits
+# for the plan, so no zoom call (wiki/decisions/slow-reads.md).
+ZOOM_SKIP_AFTER = 45.0  # seconds of the main call
+ZOOM_TIMEOUT = 60.0
+CALL_TIMEOUT = 120.0
+MAIN_TRIES = 2  # a timeout or a 5xx answer gets one more try
 
 ZOOM_PROMPT = """Image 1 is a photo of a posted evacuation plan (fire escape plan). The other images are sheets of zoomed parts of image 1, up to four on each sheet, each with its number in a black box. Each zoomed part is centred on a proposed final exit, marked with a small magenta cross.
 A final exit is the end of an escape route on this floor: a door in the outer wall of the building, or the door of a protected staircase. Escape arrows end there. When an exit sign stands at that door, the sign marks it. A final exit is never on the street, the pavement, the paper outside the building or the legend, and never in the middle of an arrow or a corridor.
@@ -242,7 +249,7 @@ class ModelClient:
         self.ledger = ledger
         self.prices = prices or Prices()
         self.http = httpx.Client(
-            timeout=httpx.Timeout(120.0, connect=10.0),
+            timeout=httpx.Timeout(CALL_TIMEOUT, connect=10.0),
             headers={"Authorization": f"Api-Key {api_key}", "User-Agent": USER_AGENT},
             transport=transport,
         )
@@ -259,7 +266,7 @@ class ModelClient:
         effort = os.environ.get("HEREOUT_EFFORT", DEFAULT_EFFORT) or None
         return cls(key, ledger, os.environ.get("HEREOUT_MODEL", DEFAULT_MODEL), prices, effort=effort)
 
-    def _ask(self, prompt: str, *imgs: np.ndarray) -> tuple[str, float, dict]:
+    def _ask(self, prompt: str, *imgs: np.ndarray, timeout: float = CALL_TIMEOUT) -> tuple[str, float, dict]:
         """One call with one or more images. Returns the answer text, its cost and usage."""
         images = [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image(i)}"}} for i in imgs]
         # Worst case: a large prompt for each image plus every output token.
@@ -275,7 +282,7 @@ class ModelClient:
                 "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, *images]}],
             }
             try:
-                r = self.http.post(API_URL, json=body)
+                r = self.http.post(API_URL, json=body, timeout=httpx.Timeout(timeout, connect=10.0))
             except httpx.HTTPError as e:
                 # A timeout can still be billed, so count the worst case.
                 actual = reserve
@@ -297,10 +304,19 @@ class ModelClient:
 
     def read_plan(self, img: np.ndarray, refine: bool = True) -> Reading:
         h, w = img.shape[:2]
-        text, cost, usage = self._ask(PROMPT, img)
+        for attempt in range(MAIN_TRIES):
+            start = time.monotonic()
+            try:
+                text, cost, usage = self._ask(PROMPT, img)
+                break
+            except ModelError as e:
+                again = str(e).startswith("request failed") or str(e).startswith("model API status 5")
+                if not again or attempt == MAIN_TRIES - 1:
+                    raise
+        took = time.monotonic() - start
         reading = parse_answer(text, w, h)
         reading.cost_usd, reading.usage = cost, usage
-        if not refine:
+        if not refine or took > ZOOM_SKIP_AFTER:
             return reading
         suspects = suspect_exits(img, reading.exits)
         if suspects:
@@ -325,7 +341,7 @@ class ModelClient:
                            max(8, side // 14), max(1, side // 120))
             crops.append((c, x0, y0))
         sheets, where = zoom_sheets([c for c, _, _ in crops])
-        text, cost, _ = self._ask(ZOOM_PROMPT, img, *sheets)
+        text, cost, _ = self._ask(ZOOM_PROMPT, img, *sheets, timeout=ZOOM_TIMEOUT)
         m = re.search(r"\{.*\}", text or "", re.S)
         try:
             answers = {int(a["n"]): a for a in json.loads(m.group(0)).get("exits", [])} if m else {}

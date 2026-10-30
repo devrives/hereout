@@ -21,6 +21,7 @@ let addExit = false;    // the next exit the user marks joins the others (explai
 const canSpeak = "speechSynthesis" in window;
 $("shoot").hidden = false;  // without JS the photo button would do nothing
 const STORE_KEY = "hereout:last";
+const PHOTO_KEY = "hereout:photo";  // the plan of the last photo, so Back after a sample finds it
 
 // Map colours: green near an exit, yellow far from one.
 const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
@@ -60,7 +61,11 @@ async function errorText(r, fallback) {
 }
 
 function remember() {
-  try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage full or blocked */ }
+  try {
+    const json = JSON.stringify(state);
+    sessionStorage.setItem(STORE_KEY, json);
+    if (!sampleId(state.id)) sessionStorage.setItem(PHOTO_KEY, json);
+  } catch (e) { /* storage full or blocked */ }
 }
 
 const exitPoints = () => state.exits.map((e) => [e.x, e.y]);
@@ -798,6 +803,8 @@ function hints() {
 }
 
 function showPlan(answer, focusResult, push) {
+  // Take the focus before the controls of the old plan hide, so it never falls to the page body.
+  if (focusResult && !$("result").hidden) $("result-head").focus({ preventScroll: true });
   state = answer;
   // A photo map has no routes, so the controls for routes and walls go.
   const map = !!state.photo_map;
@@ -807,6 +814,7 @@ function showPlan(answer, focusResult, push) {
   if (state.exitChoice === undefined) state.exitChoice = -1;
   if (state.foundExits === undefined) state.foundExits = state.exits.map((e) => ({ ...e }));
   say("");
+  $("status").style.removeProperty("min-height");
   sayPlan("");  // the same instruction for the next plan is then a change, and is read
   stopMarking();
   cursor = null;
@@ -827,12 +835,49 @@ function showPlan(answer, focusResult, push) {
   img.src = state.image;
 }
 
-// Load a plan from an upload or the gallery. Only the newest request wins.
+// The photo button waits while a sample plan loads or the server reads a photo.
+// aria-disabled, not disabled, so that the button keeps the keyboard focus.
+let loading = 0;       // the number of the sample plan that loads, or 0
+let upload = null;     // {start, job} of the photo that the server reads
+let readyPlan = null;  // the answer for that photo, when the user did not wait for it
+function showBusy() {
+  const bar = $("upload-bar");
+  const inFlow = bar.offsetHeight;  // the room the bar takes in the page now
+  $("photo").setAttribute("aria-disabled", String(!!loading || !!upload));
+  $("reading").hidden = !upload;
+  $("ready").hidden = !readyPlan;
+  // With a plan open, the bar stays at the foot of the screen, where it is in view.
+  // The live status line says the same as the note, so the note is only seen.
+  const float = !!readyPlan || (!!upload && !!state);
+  // The bar keeps its place in the page when it starts to float, so nothing under it jumps.
+  if (float && !bar.classList.contains("float")) $("upload-slot").style.setProperty("min-height", `${inFlow}px`);
+  if (!float) $("upload-slot").style.removeProperty("min-height");
+  bar.classList.toggle("float", float);
+  $("reading-note").hidden = !(float && upload && !readyPlan);
+  barRoom();
+  // A control in focus near the foot of the screen moves up out from under the bar.
+  const a = document.activeElement;
+  if (float && a && a !== document.body && a.getBoundingClientRect().bottom > bar.getBoundingClientRect().top) {
+    a.scrollIntoView({ block: "nearest" });
+  }
+}
+// The page keeps room at its foot for the floating bar, as high as the bar is.
+function barRoom() {
+  const bar = $("upload-bar");
+  document.documentElement.style.setProperty("--bar-room", `${bar.classList.contains("float") ? bar.offsetHeight : 0}px`);
+}
+new ResizeObserver(barRoom).observe($("upload-bar"));
+$("photo").addEventListener("click", (ev) => {
+  if ($("photo").getAttribute("aria-disabled") === "true") ev.preventDefault();
+});
+
+// Load a sample plan. Only the newest request wins.
 async function loadPlan(request, waitText, push) {
   const n = ++planSeq;
   stopSpeaking();
   if (marking) stopMarking();
-  $("photo").disabled = true;
+  loading = n;
+  showBusy();
   say(waitText);
   let answer;
   try {
@@ -843,15 +888,13 @@ async function loadPlan(request, waitText, push) {
     if (n === planSeq) say("Could not open the plan. Check the connection and try again.");
     return;
   } finally {
-    if (n === planSeq) {
-      $("photo").disabled = false;
-      // Disabling the input took its focus away.
-      if (document.activeElement === document.body) $("photo").focus();
-    }
+    if (loading === n) { loading = 0; showBusy(); }
   }
   if (n !== planSeq) return;
   showPlan(answer, true, push);
   remember();
+  showBusy();
+  if (upload) say(STILL_TEXT);
 }
 
 // A phone photo has up to 50 megapixels. The server works on 1600 pixels at
@@ -892,15 +935,145 @@ async function smallPhoto(file) {
   }
 }
 
+// The upload starts a job on the server, and the page asks for its answer.
+// A slow model answer takes minutes, longer than a proxy keeps one request open.
+// The job is kept for the tab, so a reload asks again for the same answer.
+const JOB_KEY = "hereout:job";
+const ASK_EVERY = 2000;
+const GIVE_UP_AFTER = 6 * 60 * 1000;  // the server tries a slow model call twice, 2 minutes each
+const WAIT_TEXT = "Reading your photo. This takes 15 seconds to a minute, sometimes more. The photo button works again when it is done.";
+const STILL_TEXT = 'HereOut still reads your photo. When it is ready, choose "Show the plan of your photo".';
+const LOST_TEXT = "The connection is lost. HereOut asks again when it is back.";
+const OFFLINE_TEXT = "Could not reach HereOut. Check the connection and send the photo again.";
+// What the status line says after a long wait: [after ms, text].
+const WAIT_NEWS = [
+  [60 * 1000, "Still reading your photo. A slow answer can take a few minutes. The photo button works again when it is done."],
+  [4 * 60 * 1000, "This takes longer than usual. HereOut stops at 6 minutes. The photo button works again when it is done."],
+];
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+function keepJob(job) {
+  try {
+    if (job) sessionStorage.setItem(JOB_KEY, JSON.stringify(job));
+    else sessionStorage.removeItem(JOB_KEY);
+  } catch (e) { /* storage blocked: a reload loses the wait */ }
+}
+
+// Ask for the answer of one job until it is done. A lost connection, a rate
+// limit or a proxy error is not the answer: ask again.
+async function askForAnswer(job) {
+  const age = () => Date.now() - job.start;
+  let told = WAIT_NEWS.filter(([after]) => age() > after).length;
+  let lost = false;
+  while (age() < GIVE_UP_AFTER) {
+    await sleep(ASK_EVERY);
+    let a = null;
+    try {
+      a = await fetch(`/api/plan/${encodeURIComponent(job.job)}`, { cache: "no-store" });
+    } catch (e) { /* no connection */ }
+    const failed = !a || a.status === 429 || a.status >= 502;
+    if (a && a.status !== 202 && !failed) return a;
+    if (failed && !lost) say(LOST_TEXT);
+    else if (!failed && lost) say(told ? WAIT_NEWS[told - 1][1] : WAIT_TEXT);
+    lost = failed;
+    while (told < WAIT_NEWS.length && age() > WAIT_NEWS[told][0]) {
+      if (!lost) say(WAIT_NEWS[told][1]);
+      told++;
+    }
+  }
+  if (lost) return null;
+  return new Response(JSON.stringify({ detail: "the plan took too long to read; try again" }), { status: 504 });
+}
+
+// file: a new photo; job: a job of this tab from before a reload.
+async function readPhoto(file, job) {
+  stopSpeaking();
+  if (marking) stopMarking();
+  // After a reload, a plan that is already open stays: the answer gets the button.
+  const n = file ? ++planSeq : (state || loading ? -1 : planSeq);
+  const mine = job || { start: Date.now(), job: null };
+  // The plan that this photo replaces, if the user only waits in it: a photo plan, not a sample.
+  const replaces = state && !sampleId(state.id) ? state : null;
+  upload = mine;
+  readyPlan = null;
+  showBusy();
+  say(job ? "Reading your photo again after the reload. The photo button works again when it is done." : WAIT_TEXT);
+  let r = null;
+  try {
+    if (file) {
+      keepJob(mine);  // a reload before the job id comes knows that the photo did not get there
+      const body = new FormData();
+      body.append("photo", await smallPhoto(file), "photo.jpg");
+      r = await fetch("/api/plan", { method: "POST", body });
+      if (r.status === 202) mine.job = (await r.json()).job;
+    }
+    if (mine.job) {
+      keepJob(mine);
+      r = await askForAnswer(mine);
+    }
+  } catch (e) {
+    r = null;
+  }
+  keepJob(null);
+  // One change of the bar for each answer, so the page under it moves once at most.
+  const done = () => { if (upload === mine) upload = null; };
+  if (!r || !r.ok) {
+    done();
+    showBusy();
+    say(r ? `Could not read the photo: ${await errorText(r, "try again")}.` : OFFLINE_TEXT);
+    return;
+  }
+  let answer;
+  try {
+    answer = await r.json();
+  } catch (e) {
+    done();
+    showBusy();
+    say(OFFLINE_TEXT);
+    return;
+  }
+  // Show the plan at once only when the user still waits for it: at the photo
+  // button, or in the photo plan it replaces, untouched since the upload.
+  const a = document.activeElement;
+  const waiting = a === document.body || a === $("photo") ||
+    ($("result").contains(a) && state === replaces && !!replaces && touched < mine.start);
+  if (n === planSeq && !loading && waiting) {
+    done();
+    showBusy();
+    showPlan(answer, true, true);
+    remember();
+  } else {
+    readyPlan = answer;
+    done();
+    // The ready text is shorter than the wait text: keep the height of the line, so the page under it stays.
+    $("status").style.setProperty("min-height", `${$("status").offsetHeight}px`);
+    showBusy();
+    say('The plan of your photo is ready. Choose "Show the plan of your photo" to open it.');
+  }
+}
+
+// The last tap or key in the plan: a user who works in the plan does not wait for the photo.
+let touched = 0;
+for (const type of ["pointerdown", "keydown"]) $("result").addEventListener(type, () => { touched = Date.now(); });
+
+$("ready").addEventListener("click", () => {
+  if (!readyPlan) return;
+  ++planSeq;
+  // The focus leaves the button before it hides; the plan heading takes it on load.
+  if ($("result").hidden) $("photo").focus();
+  showPlan(readyPlan, true, true);
+  remember();
+  readyPlan = null;
+  // The bar goes a moment later, so the second tap of a double tap does not hit
+  // what was under it. Its room in the page goes now, before the plan shows.
+  $("upload-slot").style.removeProperty("min-height");
+  setTimeout(showBusy, 500);
+});
+
 $("photo").addEventListener("change", (ev) => {
   const file = ev.target.files[0];
   ev.target.value = "";  // so the same file can be picked again
-  if (!file) return;
-  loadPlan(async () => {
-    const body = new FormData();
-    body.append("photo", await smallPhoto(file), "photo.jpg");
-    return fetch("/api/plan", { method: "POST", body });
-  }, "Reading the plan. This takes about 15 seconds. The button works again when it is done.");
+  if (file) readPhoto(file);
 });
 
 // Gallery of open-licensed plan photos with saved readings.
@@ -1113,22 +1286,38 @@ $("speak").addEventListener("click", () => {
   $("speak").textContent = "Stop reading";
 });
 
-function lastPlan() {
+function lastPlan(key = STORE_KEY) {
   try {
-    const last = JSON.parse(sessionStorage.getItem(STORE_KEY) || "null");
+    const last = JSON.parse(sessionStorage.getItem(key) || "null");
     return last && last.image && last.grid ? last : null;
   } catch (e) { return null; /* storage blocked */ }
 }
 
 // A link with ?sample=<id> opens that sample. After a reload of the same
 // sample, the start and the exits the user set come back.
-function openFromAddress() {
+function openFromAddress(ev) {
   const gid = new URL(location.href).searchParams.get("sample");
   const last = lastPlan();
-  if (gid && last && last.id === `g-${gid}`) showPlan(last);
+  const photo = lastPlan(PHOTO_KEY);
+  // Back or Forward: the focus goes to the plan that comes in.
+  const focus = !!ev;
+  // A plan from the address is newer than a photo that the server still reads.
+  if (gid && last && last.id === `g-${gid}`) { ++planSeq; showPlan(last, focus); }
   else if (gid) openSample(gid);
-  else if (last && !sampleId(last.id)) showPlan(last);
-  else if (state) { state = null; $("result").hidden = true; markOpenSample(); }
+  else if (photo) { ++planSeq; showPlan(photo, focus); }
+  else if (state) {
+    if (ev) $("photo").focus();
+    state = null;
+    $("result").hidden = true;
+    markOpenSample();
+  }
+  showBusy();
 }
 window.addEventListener("popstate", openFromAddress);
 openFromAddress();
+try {
+  const job = JSON.parse(sessionStorage.getItem(JOB_KEY) || "null");
+  sessionStorage.removeItem(JOB_KEY);
+  if (job && job.job && Date.now() - job.start < GIVE_UP_AFTER) readPhoto(null, job);
+  else if (job && !job.job) say("The reload stopped the upload of your photo. Send the photo again.");
+} catch (e) { /* storage blocked */ }

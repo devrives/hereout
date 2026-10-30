@@ -1,8 +1,10 @@
 """HereOut web server.
 
 The server flattens the photo, asks the model for the marks and sends the
-wall grid. The browser finds every route from that grid, so the server keeps
-nothing after it answers. Nothing is written to disk.
+wall grid. The browser finds every route from that grid. A model call can take
+minutes, and the proxy in front stops a request after about 100 s, so an upload
+starts a job and the page asks for its answer. The server keeps the answer in
+memory for a few minutes only. Nothing is written to disk.
 """
 
 from __future__ import annotations
@@ -10,14 +12,16 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import secrets
 import threading
 import time
 from collections import OrderedDict, defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .gallery import Gallery
@@ -30,6 +34,10 @@ MAX_UPLOAD = 12 * 1024 * 1024
 READS_PER_WINDOW = 12
 OPENED_PLANS = 24
 READ_WINDOW = 10 * 60
+JOB_WORKERS = 4         # the model calls wait on the network, the wall pass on the one CPU
+JOB_KEEP = 10 * 60      # seconds a job and its answer stay in memory
+JOBS_HELD = 64
+NO_STORE = {"Cache-Control": "no-store"}
 
 
 def index_html() -> str:
@@ -66,6 +74,45 @@ def client_ip(request: Request) -> str:
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
 
 
+class Jobs:
+    """Uploads in work, by a random id. The answer stays until the page gets it
+    or JOB_KEEP runs out. The oldest jobs go when more than JOBS_HELD are held."""
+
+    def __init__(self, workers: int = JOB_WORKERS):
+        self._pool = ThreadPoolExecutor(workers, thread_name_prefix="plan")
+        self._jobs: OrderedDict[str, dict] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def start(self, work) -> str:
+        jid = secrets.token_urlsafe(16)
+        now = time.monotonic()
+        with self._lock:
+            for k in [k for k, j in self._jobs.items() if now - j["at"] > JOB_KEEP]:
+                del self._jobs[k]
+            while len(self._jobs) >= JOBS_HELD:
+                self._jobs.popitem(last=False)
+            self._jobs[jid] = {"at": now, "answer": None}
+        self._pool.submit(self._run, jid, work)
+        return jid
+
+    def _run(self, jid: str, work) -> None:
+        try:
+            out = work()
+        except Exception:  # one bad photo must not leave the page waiting
+            out = {"error": "could not read this photo; try another photo"}
+        with self._lock:
+            if jid in self._jobs:
+                self._jobs[jid]["answer"] = out
+
+    def get(self, jid: str) -> tuple[bool, dict | None]:
+        """(known, answer). The answer is None while the job works."""
+        with self._lock:
+            j = self._jobs.get(jid)
+            if j is None or time.monotonic() - j["at"] > JOB_KEEP:
+                return False, None
+            return True, j["answer"]
+
+
 def create_app(client: ModelClient | None = None, use_env: bool = True,
                gallery: Gallery | None = None) -> FastAPI:
     if client is None and use_env:
@@ -77,6 +124,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         # Load the text models now, not in the first request (seconds on one CPU).
         threading.Thread(target=warm_text_models, daemon=True).start()
     reads = RateLimit(READS_PER_WINDOW, READ_WINDOW)
+    jobs = Jobs()
     page = index_html()
 
     @app.api_route("/", methods=["GET", "HEAD"])
@@ -100,13 +148,28 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
             plan = await run_in_threadpool(lambda: prepare(decode_photo(data)))
         except BadPhoto as e:
             raise HTTPException(400, str(e))
-        if reads.allow(client_ip(request)):
-            # The model call takes 15 to 60 seconds; keep the event loop free.
-            reading, err = await run_in_threadpool(read_marks, plan, client)
-        else:
-            await run_in_threadpool(plan.no_reading)
-            reading, err = None, "too many photos; mark the plan by hand"
-        return await run_in_threadpool(answer, None, plan, reading, err)
+        allowed = reads.allow(client_ip(request))
+
+        def work() -> dict:
+            if allowed:
+                reading, err = read_marks(plan, client)
+            else:
+                plan.no_reading()
+                reading, err = None, "too many photos; mark the plan by hand"
+            return answer(None, plan, reading, err)
+
+        return JSONResponse({"job": jobs.start(work)}, status_code=202, headers=NO_STORE)
+
+    @app.get("/api/plan/{jid}")
+    def plan_answer(jid: str):
+        known, out = jobs.get(jid)
+        if not known:
+            raise HTTPException(404, "the server no longer has this photo; send it again")
+        if out is None:
+            return JSONResponse({"working": True}, status_code=202, headers=NO_STORE)
+        if "error" in out:
+            raise HTTPException(500, out["error"], headers=NO_STORE)
+        return JSONResponse(out, headers=NO_STORE)
 
     # A review set read with code under test, opened with "?set=review". It is a gallery
     # folder inside review/, so its thumbnails come from the /review/ mount.

@@ -229,3 +229,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `timelines/photo-set-tests.md`: the set of 28 photos, the result, the times and the check by eye.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-29, the run in `_workspace/hereout-holdout/`.
+
+## [2026-10-30] ingest | Upload as a job; no zoom call after a slow main call
+
+- Added `decisions/slow-reads.md`: the job flow, the second try of the main call, the zoom skip.
+- Updated `components/plan-reader.md`: the server keeps an answer in memory for 10 minutes at most.
+- Updated `timelines/photo-set-tests.md` and `index.md`.
+- Source: the owner words of 2026-10-30, the code and the tests.

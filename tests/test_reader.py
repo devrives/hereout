@@ -85,7 +85,35 @@ def test_timeout_counts_worst_case(tmp_path):
     client, ledger = make_client(tmp_path, handler)
     with pytest.raises(ModelError):
         client.read_plan(np.zeros((50, 50, 3), np.uint8))
-    assert ledger.snapshot()["spent_usd"] > 0
+    # A timeout gets one more try; each try counts the worst case.
+    assert ledger.snapshot()["calls"] == 2 and ledger.snapshot()["spent_usd"] > 0
+
+
+def test_main_call_tried_again_after_a_timeout(tmp_path):
+    asked = []
+
+    def handler(request):
+        asked.append(1)
+        if len(asked) == 1:
+            raise httpx.ReadTimeout("slow")
+        return httpx.Response(200, json=answer('{"final_exits": [{"x": 500, "y": 500}]}'))
+
+    client, _ = make_client(tmp_path, handler)
+    assert len(client.read_plan(np.zeros((50, 50, 3), np.uint8), refine=False).exits) == 1
+    assert len(asked) == 2
+
+
+def test_bad_request_is_not_tried_again(tmp_path):
+    asked = []
+
+    def handler(request):
+        asked.append(1)
+        return httpx.Response(400)
+
+    client, _ = make_client(tmp_path, handler)
+    with pytest.raises(ModelError):
+        client.read_plan(np.zeros((50, 50, 3), np.uint8))
+    assert len(asked) == 1
 
 
 def test_contributor_model_refused(tmp_path):
@@ -124,6 +152,22 @@ def test_zoom_moves_and_drops_suspect_exits(tmp_path):
     assert asked == [1, 2]
     assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(100, 100), (320, 200)]
     assert ledger.snapshot()["calls"] == 2
+
+
+def test_no_zoom_after_a_slow_main_call(tmp_path, monkeypatch):
+    import hereout.reader as reader
+    first = '{"final_exits": [{"x": 750, "y": 667}]}'  # a suspect exit
+    asked = []
+
+    def handler(request):
+        asked.append(1)
+        return httpx.Response(200, json=answer(first))
+
+    clock = iter([0.0, reader.ZOOM_SKIP_AFTER + 1])
+    monkeypatch.setattr(reader.time, "monotonic", lambda: next(clock))
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert len(asked) == 1 and len(reading.exits) == 1
 
 
 def test_zoom_ignores_a_large_move(tmp_path):
