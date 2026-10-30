@@ -593,7 +593,7 @@ function showCredit() {
     return a;
   };
   const changes = [...(c.changes || []), state.photo_map ? "exit marks drawn on top" : "marks, escape map and route drawn on top"].join(", ");
-  box.append(`Sample plan. Photo: “${c.title}” by ${c.author}, `,
+  box.append(`Sample plan. Photo: “${quoted(c.title)}” by ${c.author}, `,
              link(c.licence, c.licence_url), ", ", link("source", c.source_url),
              `. Changes: ${changes}.`,
              c.share_alike ? " The changed image is shared under the same licence." : "",
@@ -1156,10 +1156,15 @@ $("back-to-samples").addEventListener("click", () => {
   if (tile) { tile.scrollIntoView({ block: "center" }); tile.focus({ preventScroll: true }); }
 });
 
+// A title in quotes keeps its own quotes as single marks: “‘Parade formation’ exhibition”.
+function quoted(title) {
+  return title.replace(/"([^"]*)"/g, "‘$1’");
+}
+
 function creditLine(c) {
   const li = document.createElement("li");
   const a = (text, href) => { const e = document.createElement("a"); e.href = href; e.textContent = text; e.rel = "noopener"; return e; };
-  li.append(`“${c.title}” by ${c.author}, `);
+  li.append(`“${quoted(c.title)}” by ${c.author}, `);
   li.append(c.licence_url ? a(c.licence, c.licence_url) : c.licence, ", ", a("source", c.source_url));
   return li;
 }

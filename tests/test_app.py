@@ -105,6 +105,8 @@ def test_page_and_robots():
     assert 'href="/static/style.css?v=' in page
     assert "Disallow: /" in client.get("/robots.txt").text
     assert client.head("/").status_code == 200
+    icon = client.get("/favicon.ico")
+    assert icon.status_code == 200 and icon.content[:4] == b"\x00\x00\x01\x00"
 
 
 def make_gallery(tmp_path):

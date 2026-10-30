@@ -208,6 +208,8 @@ button.sample[aria-current="true"] { border-color: var(--accent); box-shadow: 0 
 .credits li { margin: 6px 0; }
 ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
 /* The result heading is not visible, so its focus ring goes around the plan. */
+/* The plan opens right under the header, so a scroll to it keeps the header in view. */
+.result { scroll-margin-top: 140px; }
 #result-head:focus-visible + .plan-col { outline: 2px solid var(--muted); outline-offset: 4px; border-radius: 4px; }
 ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 

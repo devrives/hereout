@@ -21,7 +21,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .gallery import Gallery
@@ -134,6 +134,10 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
     @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)
     def robots():
         return "User-agent: *\nDisallow: /\n"
+
+    @app.api_route("/favicon.ico", methods=["GET", "HEAD"])
+    def favicon():
+        return FileResponse(WEB / "favicon.ico", media_type="image/x-icon")
 
     @app.api_route("/api/health", methods=["GET", "HEAD"])
     def health():
