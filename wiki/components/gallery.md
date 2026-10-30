@@ -43,7 +43,7 @@ The first full run was on 2026-10-27:
 
 | Item | Value |
 |---|---|
-| Photos | 203 (24 countries, and 2 photos with no known country) |
+| Photos | 203 (24 countries and regions, and 2 photos with no known country) |
 | Route found | 187 |
 | No open way to an exit | 15 |
 | No "you are here" mark | 1 |

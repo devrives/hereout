@@ -1,20 +1,41 @@
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("/static/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+}
+/* The colours of the logo (hub wiki, meta-hackathon-2026: logo round 5). */
 :root {
-  --bg: #fbfbf8;
-  --fg: #16201a;
-  --muted: #56615a;
-  --accent: #0a7d3b;
+  --bg: #f3f5f2;
+  --card: #ffffff;
+  --fg: #10201a;
+  --muted: #55625b;
+  --accent: #0b7a4b;
   --accent-fg: #ffffff;
-  --line: #d9ded9;
+  --line: #d5ddd8;
+  --soft: #e4e9e5;
+  --logo-wall: #173a31;
+  --logo-route: #0e9f6e;
+  --logo-dot: #f0563a;
+  --exit: #0a7d3b;   /* the exit marks on the plan (app.js exitMark) */
+  --route: #1b5fd1;  /* the route on the plan (app.js ROUTE) */
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #111613;
-    --fg: #eef2ee;
-    --muted: #a9b4ac;
-    --accent: #3fcf7b;
+    --bg: #0e1a16;
+    --card: #15231e;
+    --fg: #eef4f0;
+    --muted: #a9b8b0;
+    --accent: #3ddc97;
     --accent-fg: #06210f;
-    --line: #2b342e;
+    --line: #2b3b34;
+    --soft: #22312b;
+    --logo-wall: #8faaa0;
+    --logo-route: #3ddc97;
+    --logo-dot: #ff7a59;
+    --route: #6f9cf0;
   }
 }
 * { box-sizing: border-box; }
@@ -24,32 +45,67 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 17px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 17px/1.5 "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-header, main { max-width: 760px; margin: 0 auto; padding: 0 16px; }
-header { padding-top: 24px; }
-h1 { margin: 0; font-size: 1.8rem; color: var(--accent); }
-header p { margin: 4px 0 20px; color: var(--muted); }
-h2 { font-size: 1.15rem; margin: 24px 0 8px; }
+h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
+h2 { font-size: 1.2rem; margin: 0 0 8px; }
+h3 { font-size: 1rem; margin: 20px 0 8px; }
+a { color: inherit; }
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-.shoot { display: block; }
-.shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.shoot span, button {
-  display: inline-block;
+/* Header: the logo, and a photo button while a plan is open. */
+.top { border-bottom: 1px solid var(--line); }
+.top-in { max-width: 1200px; margin: 0 auto; padding: 0 16px; min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--fg); min-height: 44px; }
+.brand:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; border-radius: 4px; }
+.logo { width: 32px; height: 31px; }
+.logo .lw { stroke: var(--logo-wall); }
+.logo .lr { stroke: var(--logo-route); }
+.logo .ld { fill: var(--logo-dot); }
+.word { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.word span { color: var(--accent); }
+body:not(.has-plan) .new-photo { display: none; }
+/* With a plan open, the start page text goes. Its h1 stays for a screen reader. */
+body.has-plan .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+body.has-plan .intro > :not(h1) { display: none; }
+/* While a plan from the address loads, the samples wait under it, so they do not jump down. */
+body.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
+.new-photo input, .shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+/* Buttons */
+.shoot span, .new-photo span, button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 48px;
-  padding: 12px 20px;
-  border-radius: 10px;
-  border: 0;
+  padding: 10px 18px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--card);
+  color: var(--fg);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
-.shoot span { display: block; text-align: center; background: var(--accent); color: var(--accent-fg); }
-.shoot input:focus-visible + span, button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
-button:disabled, .shoot input[aria-disabled="true"] + span { opacity: 0.55; cursor: progress; }
+.shoot span, .new-photo span, #ready { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.new-photo span { min-height: 44px; padding: 8px 14px; font-size: 0.95rem; }
+.shoot { display: block; }
+.shoot span { display: flex; width: 100%; min-height: 60px; font-size: 1.1rem; border-radius: 14px; }
+.shoot input:focus-visible + span, .new-photo input:focus-visible + span, button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[aria-disabled="true"] + span { opacity: 0.55; cursor: progress; }
+
+/* Page layout: one column on a phone. */
+.layout { max-width: 1200px; margin: 0 auto; padding: 0 16px 32px; }
+.intro h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.08; margin: 28px 0 12px; }
+.lead { margin: 0 0 20px; color: var(--muted); }
+.howto { list-style: none; margin: 20px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.howto li { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+.howto .n { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--soft); color: var(--accent); flex: none; }
+
+#status { min-height: 1.5em; margin: 12px 0; color: var(--muted); }
+#status:empty { margin: 8px 0; }
+body.has-plan #status { margin: 6px 0; }
 #reading { display: block; width: 100%; height: 6px; margin: 0 0 12px; accent-color: var(--accent); }
 #reading[hidden] { display: none; }
-#ready { margin: 0 0 12px; width: 100%; background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+#ready { margin: 0 0 12px; width: 100%; }
 /* With a plan open, the upload bar stays at the foot of the screen. */
 .upload-bar.float {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
@@ -58,72 +114,128 @@ button:disabled, .shoot input[aria-disabled="true"] + span { opacity: 0.55; curs
 }
 .upload-bar.float > * { max-width: 720px; margin: 0 auto; }
 .upload-bar.float #reading { display: none; }  /* the note says it; no motion beside the plan */
-.upload-bar.float #ready { display: block; margin: 0 auto; }
+.upload-bar.float #ready { display: flex; margin: 0 auto; }
 #reading-note { margin: 0 auto; }
 body { padding-bottom: var(--bar-room, 0px); }
 html { scroll-padding-bottom: var(--bar-room, 0px); }
 @media (prefers-reduced-motion: reduce) {
   #reading { display: none; }
 }
-button { background: transparent; color: var(--fg); border: 2px solid var(--line); }
 
-#status { min-height: 1.5em; color: var(--muted); }
-.stage { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+/* The plan and its controls */
+.view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.seg { display: flex; flex: 1 1 auto; min-width: min-content; gap: 2px; padding: 4px; border-radius: 12px; background: var(--soft); }
+/* On a narrow screen a label can take two lines; it never runs under the next button. */
+.seg button { flex: 1 1 auto; min-height: 44px; padding: 4px 6px; border: 0; border-radius: 9px; background: transparent; font-size: 0.85rem; line-height: 1.15; white-space: nowrap; color: var(--muted); }
+@media (max-width: 380px) { .seg { flex-basis: 0; } .seg button { flex-basis: 0; white-space: normal; } }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgb(16 32 26 / 0.25), inset 0 -3px 0 var(--accent); }
+.seg button:disabled { cursor: not-allowed; }
+.enlarge { flex: none; min-width: 52px; min-height: 52px; padding: 8px 12px; }
+.enlarge[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.enlarge-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.stage { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--card); }
 @media (max-width: 600px) {
   /* On a phone the plan uses the full width of the screen. */
   .stage { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
 }
 .stage.big { max-height: 80vh; overflow: auto; }
 .stage.big canvas { width: 220%; max-width: none; }
-canvas { display: block; width: 100%; height: auto; touch-action: manipulation; }
-.view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.view button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+canvas { display: block; width: 100%; height: auto; touch-action: manipulation; cursor: crosshair; }
 /* The ring goes around the plan, not over the photo, so it shows in both colour schemes. */
 canvas:focus-visible { outline: none; }
 .stage:has(> canvas:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
-canvas { cursor: crosshair; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 0; font-size: 0.9rem; color: var(--muted); }
+.stage:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 /* Swatches sit on white, as the marks sit on the paper of the plan. */
-.legend i { display: inline-block; width: 34px; height: 12px; border-radius: 3px; background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
+.legend i, .backup i { display: inline-block; flex: none; width: 30px; height: 12px; border-radius: 3px; background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
 .sw-field { background-image: linear-gradient(90deg, rgb(10 125 59 / 0.55), rgb(245 190 20 / 0.55)); }
 .sw-way { height: 12px !important; background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='12'%3E%3Crect x='0' y='4' width='34' height='4' fill='rgb(6,64,34)'/%3E%3Cpath d='M24 6 L15 1 L15 11 Z' fill='rgb(6,64,34)' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E") no-repeat !important; }
 .sw-wall { height: 3px !important; background-image: linear-gradient(#7a818b, #7a818b); }
 .sw-exit { width: 14px !important; height: 14px !important; background-image: linear-gradient(#0a7d3b, #0a7d3b); }
-.plan-status { margin: 8px 0 0; font-weight: 600; min-height: 1.5em; }
-#show-map:disabled { cursor: not-allowed; }
-#exits button[aria-pressed="true"] { border-color: #1b5fd1; box-shadow: inset 0 -4px 0 #1b5fd1; }
 .sw-route { height: 6px !important; background-image: linear-gradient(#1b5fd1, #1b5fd1); }
 .sw-other { height: 4px !important; background-image: repeating-linear-gradient(90deg, #1b5fd1 0 8px, transparent 8px 14px); }
-.hint { margin: 8px 0 0; }
-.backup { margin: 12px 0 0; }
+.hint { margin: 8px 0 0; font-size: 0.95rem; }
 #kbd-hint { color: var(--muted); }
 #kbd-hint::before { content: " "; }
-.fix { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
-#fix-hint { color: var(--muted); }
-.exits { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* The answer: the exit, the steps and what to do next. */
+.answer-col { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.card > :first-child { margin-top: 0; }
+.answer-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.answer-head p { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 52px; height: 52px; padding: 0 8px; border-radius: 8px; background: var(--exit); color: #ffffff; font-weight: 800; font-size: 1.6rem; }
+.kicker { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+#answer-name { font-size: 1.3rem; line-height: 1.25; }
+.plan-status { margin: 0; font-weight: 600; min-height: 1.5em; }
+.backup { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 10px; }
+.backup button { grid-column: 1 / -1; justify-self: start; min-height: 44px; padding: 6px 14px; }
+#steps-head { margin-top: 18px; }
+#steps-hint { margin: 0 0 8px; font-size: 0.9rem; }
+#steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+#steps li { counter-increment: step; display: flex; align-items: center; gap: 10px; margin: 0; min-height: 44px; }
+#steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--soft); font-size: 0.85rem; font-weight: 700; }
+button.step { display: block; flex: 1; width: 100%; text-align: left; font-weight: 500; padding: 8px 12px; min-height: 44px; }
+button.step[aria-pressed="true"] { border-color: #d9480f; box-shadow: inset 5px 0 0 #d9480f; padding-left: 16px; }
+.check { margin: 0 0 10px; font-size: 0.9rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.actions button { flex: 1 1 auto; }
+#fix-hint { margin: 10px 0 0; }
+#exits-wrap h3 { margin: 0 0 10px; }
+.exits { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
+/* One square for each exit, like its mark on the plan. The name is in the label. */
+.exits button { min-height: 44px; padding: 0 4px; border-radius: 8px; border: 0; background: var(--exit); color: #ffffff; font-size: 1.1rem; font-weight: 700; }
+.exits button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--route); }
+.exits button.dead { background: var(--card); color: var(--muted); border: 1.5px dashed var(--muted); }
+#exits-note { margin: 10px 0 0; font-size: 0.9rem; }
 .muted { color: var(--muted); margin: 0 0 12px; }
-.credit { color: var(--muted); font-size: 0.85rem; margin: 16px 0 0; }
-.credit a { color: inherit; }
+.credit { color: var(--muted); font-size: 0.85rem; margin: 0; }
+#back-to-samples { align-self: flex-start; }
+
+/* Samples */
 .gallery-wrap { margin: 28px 0 8px; }
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
-button.sample { padding: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; text-align: left; font-weight: 500; }
-button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--line); }
-button.sample span { padding: 6px 10px; font-size: 0.9rem; }
-button.step { display: block; width: 100%; text-align: left; font-weight: 500; padding: 10px 12px; min-height: 44px; }
-button.step[aria-pressed="true"] { border-color: #d9480f; box-shadow: inset 6px 0 0 #d9480f; padding-left: 18px; }
-ol { padding-left: 1.4em; }
-ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
-ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
-.stage:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
-.gallery { list-style: none; padding: 0; margin-top: 0; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 0 0 12px; padding: 0; list-style: none; }
 .gallery li { display: flex; }
 .gallery li > button { width: 100%; }
+button.sample { padding: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: stretch; text-align: left; font-weight: 600; border-width: 1px; }
+button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); }
+button.sample span { padding: 8px 10px; font-size: 0.9rem; }
 button.sample[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
 .credits { margin-top: 16px; color: var(--muted); font-size: 0.85rem; }
 .credits summary { cursor: pointer; min-height: 24px; color: var(--fg); font-size: 1rem; }
 .credits ul { padding-left: 1.2em; }
-.credits a { color: inherit; }
-#back-to-samples { margin-top: 12px; }
-#result-head { margin-top: 8px; }
-li { margin: 6px 0; }
+.credits li { margin: 6px 0; }
+ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
+/* The result heading is not visible, so its focus ring goes around the plan. */
+#result-head:focus-visible + .plan-col { outline: 2px solid var(--muted); outline-offset: 4px; border-radius: 4px; }
+ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
+
+@media (min-width: 600px) {
+  .enlarge-text { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .seg { flex: 0 1 auto; }
+  .seg button { padding: 6px 16px; font-size: 0.95rem; }
+  .view { justify-content: space-between; }
+}
+
+/* Wide screens: the start page in two columns (what HereOut does | samples),
+   and an open plan beside its answer. */
+@media (min-width: 960px) {
+  .top-in, .layout { padding-left: 48px; padding-right: 48px; }
+  .top-in { min-height: 72px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); column-gap: 56px; align-items: start;
+            grid-template-areas: "intro gallery" "status gallery" "result result"; }
+  .intro { grid-area: intro; }
+  .status-wrap { grid-area: status; }
+  .result { grid-area: result; }
+  .gallery-wrap { grid-area: gallery; }
+  .intro h1 { font-size: 3.1rem; margin-top: 56px; }
+  .lead { font-size: 1.15rem; max-width: 30em; }
+  .shoot span { display: inline-flex; width: auto; padding: 0 32px; }
+  .howto { margin-top: 28px; }
+  body:not(.has-plan) .gallery-wrap { margin-top: 56px; }
+  body:not(.has-plan) .gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.has-plan .layout { grid-template-areas: "status status" "result result" "gallery gallery"; }
+  .result { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: 28px; align-items: start; }
+  .answer-col { margin-top: 0; }
+}

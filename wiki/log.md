@@ -236,3 +236,11 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `components/plan-reader.md`: the server keeps an answer in memory for 10 minutes at most.
 - Updated `timelines/photo-set-tests.md` and `index.md`.
 - Source: the owner words of 2026-10-30, the code and the tests.
+
+## [2026-10-30] ingest | Page layout with the logo
+
+- Added `decisions/page-layout-a.md`: the owner chose direction A of three mockups.
+- Updated `index.md`.
+- Updated `decisions/orthogonal-way-tree.md`: no second exit when every other way passes the door of the first exit.
+- Updated `components/gallery.md`: countries and regions.
+- Source: the owner words of 2026-10-30, the page code and the fact check of the page.

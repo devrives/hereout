@@ -2,7 +2,7 @@
 type: decision
 title: Draw the ways out as one tree of level and upright lines
 status: proposed
-updated: 2026-10-29
+updated: 2026-10-30
 checked: 6913303
 sources:
   - owner:2026-10-29
@@ -71,6 +71,7 @@ sources:
 - The owner asked for the position of the user after the start points of the lines (2026-10-29). Commit 6913303 on `ortho-net` holds the change.
 - A tap starts the route at the tap, also inside a small room. The route goes out by the door to the nearest line, then along the line to the exit.
 - The first exit is the nearest exit by the cost of the way. A second exit shows as a dashed line, in case the first exit is blocked. Its way may not pass the door of the first exit. An exit at that door is the same door. The solid route is never the longer one.
+- When no other exit keeps clear of that door, the page shows no second exit. After a swap of the two routes, the check runs again for the new first exit. Before 2026-10-30, the page showed the first other exit in this case. A fact check found dashed lines next to the blocked exit in 5 of 244 test routes.
 - The status line, a line under the steps with a button, and the spoken steps name the second exit. A user who does not see the plan gets it from the text.
 - Filled arrow heads on the lines of the map point to the exits. No arrow shows near a drawn route, because a route to a chosen exit can run against them.
 - On a plan with a wing at an angle, a route follows the walls of each part that it crosses. On CN-commons_000279 the share of route length along the walls went from 0.85 to 0.95.

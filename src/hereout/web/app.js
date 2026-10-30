@@ -19,7 +19,11 @@ let photoOnly = false;
 let routesOnly = false; // the routes on the walls HereOut read, with no photo
 let addExit = false;    // the next exit the user marks joins the others (explain, NO_EXIT_HERE)
 const canSpeak = "speechSynthesis" in window;
-$("shoot").hidden = false;  // without JS the photo button would do nothing
+$("shoot").hidden = $("new-photo").hidden = false;  // without JS the photo buttons would do nothing
+// Two photo buttons: the big one on the start page, and one in the header while a plan is open.
+const PHOTOS = [$("photo"), $("photo-2")];
+// Below this width the answer is under the plan, so an answer can scroll the plan away.
+const narrow = () => matchMedia("(max-width: 959px)").matches;
 const STORE_KEY = "hereout:last";
 const PHOTO_KEY = "hereout:photo";  // the plan of the last photo, so Back after a sample finds it
 
@@ -158,20 +162,23 @@ function findRoute() {
     return;
   }
   // A second way out, in case the first exit is blocked: the nearest other
-  // exit whose way does not pass the door of the first one.
-  const door = f.doorRadius() / 2, { x: mx, y: my } = state.exits[main.exitIndex];
-  const passes = (pts) => pts.slice(1, -1).some(([x, y]) => Math.hypot(x - mx, y - my) < door);
+  // exit whose way does not pass the door of the first one. With no such
+  // exit there is no second way: "if it is blocked" must not lead past that door.
+  const door = f.doorRadius() / 2;
+  const passes = (pts, i) => pts.slice(1, -1).some(([x, y]) => Math.hypot(x - state.exits[i].x, y - state.exits[i].y) < door);
   let backup = null;
   for (const k of f.otherExits(start, main.exitIndex).slice(0, OTHER_TRIES)) {
     let r;
     try { r = to(k); } catch (e) { if (!(e instanceof R.NoRoute)) throw e; continue; }
-    const b = { points: r.points, exitIndex: k };
-    if (!backup) backup = b;
-    if (!passes(r.points)) { backup = b; break; }
+    if (!passes(r.points, main.exitIndex)) { backup = { points: r.points, exitIndex: k }; break; }
   }
   // The solid route is the shorter one, so "nearest" stays true on the plan.
+  // After a swap, the second way must keep clear of the door of the new first exit too.
   const len = (pts) => pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0);
-  if (backup && state.exitChoice < 0 && len(backup.points) < len(main.points)) [main, backup] = [backup, main];
+  if (backup && state.exitChoice < 0 && len(backup.points) < len(main.points)) {
+    [main, backup] = [backup, main];
+    if (passes(backup.points, main.exitIndex)) backup = null;
+  }
   view.route = main;
   view.backup = backup;
   view.steps = R.directions(main.points, state.width, state.height);
@@ -539,11 +546,16 @@ function showExits() {
   // A start that reaches no exit gets the message, not a list of dead buttons.
   const open = state.start ? state.exits.map((e, i) => view.field.reaches(state.start, i)) : [];
   $("exits-wrap").hidden = state.exits.length < 2 || !open.some(Boolean);
+  $("exits-note").hidden = !open.some((o) => !o);
   if ($("exits-wrap").hidden) return;
   state.exits.forEach((e, i) => {
     const b = document.createElement("button");
     b.type = "button";
-    b.textContent = open[i] ? exitName(i) : `${exitName(i)} · no way found`;
+    // The number, as on the plan. The name is in the label and the tooltip.
+    b.textContent = String(i + 1);
+    b.title = open[i] ? exitName(i) : `${exitName(i)}, no way found`;
+    b.setAttribute("aria-label", b.title);
+    b.classList.toggle("dead", !open[i]);
     b.setAttribute("aria-pressed", String(i === current));
     b.addEventListener("click", () => {
       state.exitChoice = i;
@@ -557,7 +569,10 @@ function showExits() {
       }
       sayPlan(view.route ? `Route to ${exitName(i)}.${otherWay()} Check it against the plan.`
                          : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
-      (view.route ? $("steps") : $("exits").children[i]).focus();
+      if (!view.route) { $("exits").children[i].focus(); return; }
+      // On a phone, the plan with the new route comes into view; the steps take the focus.
+      if (narrow()) $("stage").scrollIntoView({ block: "start" });
+      $("steps").focus({ preventScroll: narrow() });
     });
     box.append(b);
   });
@@ -585,6 +600,21 @@ function showCredit() {
              " This sample uses a saved model reading.");
 }
 
+// The head of the answer card: the exit of the route, by its number on the plan.
+// The live status line says the same in a sentence, for a screen reader.
+function showAnswer() {
+  const r = view.route;
+  const on = !!(r && state.start);
+  $("answer-head").hidden = $("answer-check").hidden = !on;
+  $("plan-status").classList.toggle("sr", on);
+  if (!on) return;
+  const i = r.exitIndex;
+  $("answer-num").textContent = String(i + 1);
+  $("answer-kind").textContent = state.exits[i].marked ? "The exit you marked"
+    : state.exitChoice >= 0 ? "The exit you chose" : "Nearest exit";
+  $("answer-name").textContent = exitName(i);
+}
+
 // Find the route again and show everything that depends on it.
 function update() {
   findRoute();
@@ -592,6 +622,7 @@ function update() {
   showSteps();
   showBackup();
   showExits();
+  showAnswer();
   $("found-exits").hidden = !state.exitsMarked || !state.foundExits.length;
   // With no start, the status line gives the same instruction.
   $("tap-text").hidden = !state.start || marking;
@@ -676,7 +707,7 @@ function explain(how = "tap") {
 // The second way out, as words for the status line.
 function otherWay() {
   if (!view.backup) return "";
-  return ` If it is blocked, use ${exitName(view.backup.exitIndex)}${photoOnly ? "" : ": the dashed line"}.`;
+  return ` If it is blocked, use ${exitName(view.backup.exitIndex)}${photoOnly ? "" : " (dashed line)"}.`;
 }
 
 // The second way out under the steps too, where the eyes are after a tap
@@ -685,8 +716,8 @@ function showBackup() {
   const b = view.backup;
   $("backup").hidden = !b || !view.route;
   if ($("backup").hidden) return;
-  $("backup-text").textContent = `If ${exitName(view.route.exitIndex)} is blocked, use ${exitName(b.exitIndex)}${photoOnly ? "" : ": the dashed line"}.`;
-  $("backup-go").textContent = `Route to ${exitName(b.exitIndex)}`;
+  $("backup-text").textContent = `If it is blocked, use ${exitName(b.exitIndex)}${photoOnly ? "" : " (dashed line)"}.`;
+  $("backup-go").textContent = `Route to Exit ${b.exitIndex + 1}`;
 }
 
 // Photo only and Routes only change what is under the marks, so at most one is on.
@@ -715,7 +746,7 @@ $("show-routes").addEventListener("click", () => {
 
 function startMarking() {
   marking = true;
-  $("fix").textContent = "Cancel";
+  $("fix-text").textContent = "Cancel";
   $("fix-hint").textContent = addExit
     ? "Tap the exit or the stairs of this floor on the plan. The other exits stay."
     : "Tap the exit on the plan. HereOut then routes to that exit only.";
@@ -728,7 +759,7 @@ function startMarking() {
 
 function stopMarking() {
   marking = false;
-  $("fix").textContent = "Mark the exit";
+  $("fix-text").textContent = "Mark the exit";
   $("fix-hint").hidden = true;
   if (state) $("tap-text").hidden = !state.start;
   hints();
@@ -739,6 +770,8 @@ $("fix").addEventListener("click", (ev) => {
   startMarking();
   // A click from Enter or Space has detail 0: go on with the keyboard.
   if (ev.detail === 0) canvas.focus();
+  // The exit is marked on the plan: on a phone it is above this button.
+  else if (narrow()) $("stage").scrollIntoView({ block: "nearest", behavior: "smooth" });
 });
 
 // The user's exit takes the place of the exits the model found. After a tap
@@ -821,6 +854,7 @@ function showPlan(answer, focusResult, push) {
   keyboard = false;
   img.onload = () => {
     $("result").hidden = false;
+    layout();
     buildField();
     showCredit();
     update();
@@ -843,7 +877,7 @@ let readyPlan = null;  // the answer for that photo, when the user did not wait 
 function showBusy() {
   const bar = $("upload-bar");
   const inFlow = bar.offsetHeight;  // the room the bar takes in the page now
-  $("photo").setAttribute("aria-disabled", String(!!loading || !!upload));
+  for (const p of PHOTOS) p.setAttribute("aria-disabled", String(!!loading || !!upload));
   $("reading").hidden = !upload;
   $("ready").hidden = !readyPlan;
   // With a plan open, the bar stays at the foot of the screen, where it is in view.
@@ -867,9 +901,14 @@ function barRoom() {
   document.documentElement.style.setProperty("--bar-room", `${bar.classList.contains("float") ? bar.offsetHeight : 0}px`);
 }
 new ResizeObserver(barRoom).observe($("upload-bar"));
-$("photo").addEventListener("click", (ev) => {
-  if ($("photo").getAttribute("aria-disabled") === "true") ev.preventDefault();
+for (const p of PHOTOS) p.addEventListener("click", (ev) => {
+  if (p.getAttribute("aria-disabled") === "true") ev.preventDefault();
 });
+
+// With a plan open, the start page text goes and the header has the photo button.
+function layout() {
+  document.body.classList.toggle("has-plan", !$("result").hidden);
+}
 
 // Load a sample plan. Only the newest request wins.
 async function loadPlan(request, waitText, push) {
@@ -882,10 +921,10 @@ async function loadPlan(request, waitText, push) {
   let answer;
   try {
     const r = await request();
-    if (!r.ok) { if (n === planSeq) say(`Could not open the plan: ${await errorText(r, "try again")}.`); return; }
+    if (!r.ok) { if (n === planSeq) { say(`Could not open the plan: ${await errorText(r, "try again")}.`); layout(); } return; }
     answer = await r.json();
   } catch (e) {
-    if (n === planSeq) say("Could not open the plan. Check the connection and try again.");
+    if (n === planSeq) { say("Could not open the plan. Check the connection and try again."); layout(); }
     return;
   } finally {
     if (loading === n) { loading = 0; showBusy(); }
@@ -1035,7 +1074,7 @@ async function readPhoto(file, job) {
   // Show the plan at once only when the user still waits for it: at the photo
   // button, or in the photo plan it replaces, untouched since the upload.
   const a = document.activeElement;
-  const waiting = a === document.body || a === $("photo") ||
+  const waiting = a === document.body || PHOTOS.includes(a) ||
     ($("result").contains(a) && state === replaces && !!replaces && touched < mine.start);
   if (n === planSeq && !loading && waiting) {
     done();
@@ -1070,14 +1109,15 @@ $("ready").addEventListener("click", () => {
   setTimeout(showBusy, 500);
 });
 
-$("photo").addEventListener("change", (ev) => {
+for (const p of PHOTOS) p.addEventListener("change", (ev) => {
   const file = ev.target.files[0];
   ev.target.value = "";  // so the same file can be picked again
   if (file) readPhoto(file);
 });
 
 // Gallery of open-licensed plan photos with saved readings.
-const GALLERY_FIRST = 8;
+// On a wide screen the tiles are in rows of 3 beside the start text.
+const GALLERY_FIRST = matchMedia("(min-width: 960px)").matches ? 9 : 8;
 const countryName = (() => {
   try {
     const names = new Intl.DisplayNames(["en"], { type: "region" });
@@ -1267,7 +1307,7 @@ let speaking = false;
 function stopSpeaking() {
   if (canSpeak) speechSynthesis.cancel();
   speaking = false;
-  $("speak").textContent = "Read the steps aloud";
+  $("speak-text").textContent = "Read the steps aloud";
 }
 
 $("speak").addEventListener("click", () => {
@@ -1283,7 +1323,7 @@ $("speak").addEventListener("click", () => {
     speechSynthesis.speak(u);
   });
   speaking = true;
-  $("speak").textContent = "Stop reading";
+  $("speak-text").textContent = "Stop reading";
 });
 
 function lastPlan(key = STORE_KEY) {
@@ -1306,14 +1346,17 @@ function openFromAddress(ev) {
   else if (gid) openSample(gid);
   else if (photo) { ++planSeq; showPlan(photo, focus); }
   else if (state) {
-    if (ev) $("photo").focus();
     state = null;
     $("result").hidden = true;
+    layout();
+    if (ev) $("photo").focus();
     markOpenSample();
   }
   showBusy();
 }
 window.addEventListener("popstate", openFromAddress);
+// A plan from the address or the tab opens at once: no start page first, so the page does not jump.
+if (new URL(location.href).searchParams.has("sample") || lastPlan(PHOTO_KEY)) document.body.classList.add("has-plan");
 openFromAddress();
 try {
   const job = JSON.parse(sessionStorage.getItem(JOB_KEY) || "null");

@@ -6,71 +6,113 @@
 <meta name="robots" content="noindex">
 <title>HereOut</title>
 <meta name="description" content="Photograph a posted evacuation plan and see a route from where you stand to the nearest exit.">
+<meta name="theme-color" content="#f3f5f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1a16" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="preload" href="/static/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-<header>
-  <h1>HereOut</h1>
-  <p>In front of an evacuation plan you don't know? Take a photo, tap where you stand and see a route to the nearest exit, drawn on the plan.</p>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="/">
+      <svg class="logo" aria-hidden="true" viewBox="0 0 124 120" fill="none">
+        <path class="lw" d="M110 68V110H10V10H110V52" stroke-width="10"/>
+        <path class="lw" d="M52 86H34V34H86V86H68" stroke-width="10"/>
+        <path class="lr" d="M60 60V98H98V60H122" stroke-width="8"/>
+        <circle class="ld" cx="60" cy="60" r="9"/>
+      </svg>
+      <span class="word">Here<span>Out</span></span>
+    </a>
+    <label class="new-photo" id="new-photo" hidden>
+      <input id="photo-2" type="file" accept="image/*" aria-labelledby="new-photo-text">
+      <span id="new-photo-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>New photo</span>
+    </label>
+  </div>
 </header>
-<main>
-  <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
-  <label class="shoot" id="shoot" hidden>
-    <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
-    <span id="shoot-text" aria-hidden="true">Take a photo of the plan</span>
-  </label>
-  <p id="status" role="status" aria-live="polite"></p>
-  <div id="upload-slot">
-  <div id="upload-bar" class="upload-bar">
-    <p id="reading-note" class="muted" aria-hidden="true" hidden>Reading your photo…</p>
-    <progress id="reading" aria-hidden="true" hidden></progress>
-    <button id="ready" type="button" hidden>Show the plan of your photo</button>
-  </div>
+<main class="layout">
+  <section id="intro" class="intro" aria-labelledby="intro-head">
+    <h1 id="intro-head">Your way out, drawn on the plan</h1>
+    <p class="lead">In front of an evacuation plan you don't know? HereOut finds the exits on your photo.</p>
+    <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
+    <label class="shoot" id="shoot" hidden>
+      <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
+      <span id="shoot-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Take a photo of the plan</span>
+    </label>
+    <ol class="howto" role="list">
+      <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>Photograph the posted plan</li>
+      <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>Tap where you stand</li>
+      <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span>See the route to the nearest exit</li>
+    </ol>
+  </section>
+  <div class="status-wrap">
+    <p id="status" role="status" aria-live="polite"></p>
+    <div id="upload-slot">
+    <div id="upload-bar" class="upload-bar">
+      <p id="reading-note" class="muted" aria-hidden="true" hidden>Reading your photo…</p>
+      <progress id="reading" aria-hidden="true" hidden></progress>
+      <button id="ready" type="button" hidden>Show the plan of your photo</button>
+    </div>
+    </div>
   </div>
 
-
-  <section id="result" hidden aria-labelledby="result-head">
-    <h2 id="result-head" tabindex="-1">Plan and route</h2>
-    <div class="view" role="group" aria-label="What the plan shows">
-      <button id="show-map" type="button" aria-pressed="true">Escape map</button>
-      <button id="show-photo" type="button" aria-pressed="false">Photo only</button>
-      <button id="show-routes" type="button" aria-pressed="false">Routes only</button>
-      <button id="enlarge" type="button" aria-pressed="false">Larger plan</button>
+  <section id="result" class="result" hidden aria-labelledby="result-head">
+    <h2 id="result-head" class="sr" tabindex="-1">Plan and route</h2>
+    <div class="plan-col">
+      <div class="view" role="group" aria-label="What the plan shows">
+        <div class="seg">
+          <button id="show-map" type="button" aria-pressed="true">Escape map</button>
+          <button id="show-photo" type="button" aria-pressed="false">Photo only</button>
+          <button id="show-routes" type="button" aria-pressed="false">Routes only</button>
+        </div>
+        <button id="enlarge" class="enlarge" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg><span class="enlarge-text">Larger plan</span></button>
+      </div>
+      <div class="stage" id="stage" role="region" aria-label="Plan">
+        <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
+      </div>
+      <div id="legend" class="legend" hidden>
+        <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i>Wall, as HereOut reads it</span>
+        <span id="legend-field"><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
+        <span id="legend-way"><i class="sw-way" aria-hidden="true"></i>Ways out, arrows to the exits</span>
+        <span id="legend-route"><i class="sw-route" aria-hidden="true"></i>Your route</span>
+        <span id="legend-other" hidden><i class="sw-other" aria-hidden="true"></i>Route if your exit is blocked</span>
+        <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
+      </div>
+      <p id="tap-hint" class="hint"><span id="tap-text">Tap any open spot on the plan to see the route from there.</span><span id="kbd-hint" hidden></span></p>
+      <p id="marker-status" class="sr" role="status" aria-live="polite"></p>
     </div>
-    <div class="stage" id="stage" role="region" aria-label="Plan">
-      <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
+    <div class="answer-col">
+      <div class="card answer">
+        <div id="answer-head" class="answer-head" hidden>
+          <span id="answer-num" class="badge" aria-hidden="true"></span>
+          <p><span id="answer-kind" class="kicker"></span> <strong id="answer-name"></strong></p>
+        </div>
+        <p id="answer-check" class="muted check" hidden>Check the route and the exits against the plan.</p>
+        <p id="plan-status" class="plan-status" role="status" aria-live="polite"></p>
+        <h3 id="steps-head">Steps</h3>
+        <p id="steps-hint" class="muted">Tap a step to see it on the plan.</p>
+        <ol id="steps" role="list" tabindex="-1" aria-labelledby="steps-head"></ol>
+        <p id="backup" class="backup" hidden><i class="sw-other" aria-hidden="true"></i><span id="backup-text"></span> <button id="backup-go" type="button"></button></p>
+        <div class="actions">
+          <button id="speak" type="button"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><span id="speak-text">Read the steps aloud</span></button>
+          <button id="fix" type="button"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg><span id="fix-text">Mark the exit</span></button>
+          <button id="found-exits" type="button" hidden>Use the exits HereOut found</button>
+        </div>
+        <p id="fix-hint" class="muted" hidden>Tap the exit on the plan. HereOut then routes to that exit only.</p>
+      </div>
+      <div id="exits-wrap" class="card" hidden>
+        <h3 id="exits-head">Route to another exit</h3>
+        <div id="exits" class="exits" role="group" aria-labelledby="exits-head"></div>
+        <p id="exits-note" class="muted" hidden>Dashed: HereOut found no way from your spot to that exit.</p>
+      </div>
+      <button id="back-to-samples" type="button" hidden>Back to the samples</button>
+      <p id="credit" class="credit" hidden></p>
     </div>
-    <div id="legend" class="legend" hidden>
-      <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i>Wall, as HereOut reads it</span>
-      <span id="legend-field"><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
-      <span id="legend-way"><i class="sw-way" aria-hidden="true"></i>Ways out, arrows to the exits</span>
-      <span id="legend-route"><i class="sw-route" aria-hidden="true"></i>Your route</span>
-      <span id="legend-other" hidden><i class="sw-other" aria-hidden="true"></i>Route if your exit is blocked</span>
-      <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
-    </div>
-    <p id="tap-hint" class="hint"><span id="tap-text">Tap any open spot on the plan to see the route from there.</span><span id="kbd-hint" hidden></span></p>
-    <p id="plan-status" class="plan-status" role="status" aria-live="polite"></p>
-    <p id="marker-status" class="sr" role="status" aria-live="polite"></p>
-    <div class="fix">
-      <button id="fix" type="button">Mark the exit</button>
-      <button id="found-exits" type="button" hidden>Use the exits HereOut found</button>
-      <span id="fix-hint" hidden>Tap the exit on the plan. HereOut then routes to that exit only.</span>
-    </div>
-    <h2 id="steps-head">Steps</h2>
-    <p id="steps-hint" class="muted">Tap a step to see it on the plan.</p>
-    <ol id="steps" tabindex="-1" aria-labelledby="steps-head"></ol>
-    <p id="backup" class="backup" hidden><span id="backup-text"></span> <button id="backup-go" type="button"></button></p>
-    <button id="speak" type="button">Read the steps aloud</button>
-    <button id="back-to-samples" type="button" hidden>Back to the samples</button>
-    <div id="exits-wrap" hidden>
-      <h2>Route to another exit</h2>
-      <div id="exits" class="exits"></div>
-    </div>
-    <p id="credit" class="credit" hidden></p>
   </section>
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
     <h2 id="gallery-head">No plan nearby? Try a real one</h2>
-    <p class="muted"><span id="gallery-count"></span> open-licensed photos of posted plans from <span id="gallery-countries"></span> countries. HereOut read each one with Muse Spark.</p>
+    <p class="muted"><span id="gallery-count"></span> open-licensed photos of posted plans from <span id="gallery-countries"></span> countries and regions. HereOut read each one with Muse Spark.</p>
     <ul id="gallery" class="gallery"></ul>
     <button id="gallery-more" type="button" hidden></button>
     <details class="credits">
