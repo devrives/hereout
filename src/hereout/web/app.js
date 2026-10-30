@@ -907,7 +907,7 @@ for (const p of PHOTOS) p.addEventListener("click", (ev) => {
 
 // With a plan open, the start page text goes and the header has the photo button.
 function layout() {
-  document.body.classList.toggle("has-plan", !$("result").hidden);
+  document.documentElement.classList.toggle("has-plan", !$("result").hidden);
 }
 
 // Load a sample plan. Only the newest request wins.
@@ -1355,9 +1355,9 @@ function openFromAddress(ev) {
   showBusy();
 }
 window.addEventListener("popstate", openFromAddress);
-// A plan from the address or the tab opens at once: no start page first, so the page does not jump.
-if (new URL(location.href).searchParams.has("sample") || lastPlan(PHOTO_KEY)) document.body.classList.add("has-plan");
 openFromAddress();
+// early.js hid the start page for a plan that is not there: show it again.
+if (!state && !loading) layout();
 try {
   const job = JSON.parse(sessionStorage.getItem(JOB_KEY) || "null");
   sessionStorage.removeItem(JOB_KEY);
