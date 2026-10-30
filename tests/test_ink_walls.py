@@ -44,6 +44,20 @@ def test_thick_walls_are_hard_and_a_stub_is_soft():
     assert hard[300, 500]
 
 
+def test_inner_wall_much_thinner_than_the_outer_wall_is_hard():
+    """Outer walls 30 px thick, an inner wall 10 px thick with a door gap:
+    the inner wall is a wall, a 10 px blot is not (it is short)."""
+    img = np.full((600, 900, 3), PAPER, np.uint8)
+    cv2.rectangle(img, (50, 50), (850, 550), BLACK, 30)
+    cv2.line(img, (65, 300), (600, 300), BLACK, 10)    # the inner wall; a door from 600 to 835
+    cv2.rectangle(img, (400, 400), (410, 410), BLACK, -1)
+    ink = np.all(img < 100, axis=2)
+    hard, thin = split_strokes(ink)
+    assert hard[300, 300] and hard[300, 595]
+    assert not hard[300, 700]
+    assert not hard[405, 405]
+
+
 def plain_thin(mask):
     """Zhang-Suen thinning, every pixel in every pass: the reference for iw._thin."""
     img = np.pad(mask.astype(np.uint8), 1)

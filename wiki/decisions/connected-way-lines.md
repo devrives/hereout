@@ -35,4 +35,4 @@ sources:
 
 - On the 195 plans, 188 have one network for each open area, before 86. On average, 78 % of the floor is near a line, before 64 %.
 - Open, from the ux review: on a plan with a wing (RU-commons_000210), a short piece can stay apart. A link along a slanted wall can show small steps.
-- Errors of the walls stay. On 42 of the 195 plans, one room holds half of the floor or more. On RU-commons_000001 the reader missed the thin inner walls, so the lines cross the rooms. The fix of the wall reader is open.
+- Errors of the walls stay. A later check of the walls: [Inner walls much thinner than the outer walls](inner-wall-width.md).

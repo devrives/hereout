@@ -268,3 +268,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/page-speed.md`: the status line after the second wait.
 - Source: the ux review of 2026-10-30, the reload check on the live site.
+
+## [2026-10-30] ingest | Check of the wall reader
+
+- Added `decisions/inner-wall-width.md`: the check by eye, the inner wall rule, the two rules that failed.
+- Updated `decisions/connected-way-lines.md`: a link to the check.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-30, the ground truth of the review plans, the gallery check.

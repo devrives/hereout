@@ -43,6 +43,7 @@ BAR_LEN = 0.006        # unless it is a bar at least this long
 BAR_ASPECT = 3.0
 STRAIGHT = 0.025       # share of the image: on thin-stroke plans, a straight line this long is a wall
 ANCHORS = 2            # a thin line that touches thick walls at this many places is a wall
+MID_SHARE = 0.25       # share of the wall stroke: a long piece at least this wide is a wall too (an inner wall)
 CLOSE_SHARE = 0.04     # share of the image: the closings that find each footprint
 MIN_DRAWING = 0.01     # share of the floor box: a smaller footprint is not a drawing
 MIN_FILL = 0.3         # a footprint that fills less of its bounding box is an open outline
@@ -192,16 +193,29 @@ def split_strokes(ink: np.ndarray, plan_box=None) -> tuple[np.ndarray, np.ndarra
     if n < 2:
         return straight_lines(ink) & ink, ink
     mask = ink.astype(np.uint8)
-    marker = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * n + 1, 2 * n + 1)))
-    # Opening by reconstruction: grow the eroded core back inside the ink, so
-    # wall ends and short stubs between doors stay whole.
-    k = np.ones((3, 3), np.uint8)
-    for _ in range(n + 1 + int(width)):
-        grown = cv2.dilate(marker, k) & mask
-        if np.array_equal(grown, marker):
-            break
-        marker = grown
-    thick = marker > 0
+
+    def core_of(r: int) -> np.ndarray:
+        """Opening by reconstruction: erode by radius r, then grow the core
+        back inside the ink, so wall ends and short stubs between doors stay whole."""
+        marker = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1)))
+        k = np.ones((3, 3), np.uint8)
+        for _ in range(r + 1 + int(width)):
+            grown = cv2.dilate(marker, k) & mask
+            if np.array_equal(grown, marker):
+                break
+            marker = grown
+        return marker > 0
+
+    thick = core_of(n)
+    # A plan can draw its inner walls much thinner than its outer walls
+    # (RU-commons_000167: 10 px against 30 px). A long piece of ink at least
+    # MID_SHARE of the wall stroke wide is a wall too.
+    mid = int(width * MID_SHARE) // 2
+    if 2 <= mid < n:
+        medium = core_of(mid) & ~thick
+        _, lab, st, _ = cv2.connectedComponentsWithStats(medium.astype(np.uint8), connectivity=8)
+        long_ = np.maximum(st[1:, cv2.CC_STAT_WIDTH], st[1:, cv2.CC_STAT_HEIGHT]) >= STRAIGHT * max(ink.shape)
+        thick |= np.concatenate([[False], long_])[lab]
     thin = ink & ~thick
     hard = thick.copy()
     # A thin line between two thick walls is a wall piece; one that touches a
