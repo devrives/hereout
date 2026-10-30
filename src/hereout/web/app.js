@@ -4,11 +4,13 @@ const $ = (id) => document.getElementById(id);
 const R = HereOutRoute;
 const canvas = $("plan");
 const ctx = canvas.getContext("2d");
-const img = new Image();
+let img = new Image();  // the image of state; a new plan loads into its own image first
 // The plan: the server answer, plus the start, the exits and the chosen exit
 // as the user set them. Everything else is found again from it in the browser.
 let state = null;
 let view = null;      // the escape field, the map layer, the route and the steps for state
+let opening = null;   // the answer whose image loads, before it becomes state
+let openingImg = null;  // its image
 let marking = false;  // true while the user marks the exit
 let cursor = null;    // [x, y] keyboard marker on the plan
 let keyboard = false; // show the marker only after an arrow key
@@ -24,7 +26,9 @@ $("shoot").hidden = $("new-photo").hidden = false;  // without JS the photo butt
 const PHOTOS = [$("photo"), $("photo-2")];
 // Below this width the answer is under the plan, so an answer can scroll the plan away.
 const narrow = () => matchMedia("(max-width: 959px)").matches;
-const STORE_KEY = "hereout:last";
+// "?set=review" opens the review set: plans read with code under test.
+const SET = new URLSearchParams(location.search).get("set") === "review" ? "?set=review" : "";
+const STORE_KEY = `hereout:last${SET}`;  // the review set keeps its own last plan
 const PHOTO_KEY = "hereout:photo";  // the plan of the last photo, so Back after a sample finds it
 
 // Map colours: green near an exit, yellow far from one.
@@ -95,13 +99,16 @@ function buildField() {
 let worker = null;
 let networkJob = 0;
 let networkReady = null;  // the callback of the newest job
+let networkTimer = 0;
+const NETWORK_WAIT = 15000;  // ms: a worker with no answer by then is stopped (a phone can kill it for memory)
 const scriptUrl = (sel) => { const el = document.querySelector(sel); return el && (el.src || el.href); };
 
 function makeNetwork(field) {
   const job = ++networkJob;
   field.waitForNetwork = true;
   const ready = (data) => {
-    if (job !== networkJob || view.field !== field) return;
+    if (job !== networkJob || !state || view.field !== field) return;
+    clearTimeout(networkTimer);
     if (data) field.adoptNetwork(data);
     else field.waitForNetwork = false;
     view.layer = null;
@@ -120,6 +127,13 @@ function makeNetwork(field) {
       worker.onmessage = (ev) => { if (ev.data.id === networkJob && networkReady) networkReady(ev.data.data); };
       worker.onerror = (ev) => { ev.preventDefault(); worker = null; if (networkReady) networkReady(null); };
     }
+    clearTimeout(networkTimer);
+    networkTimer = setTimeout(() => {
+      if (job !== networkJob) return;
+      worker?.terminate();
+      worker = null;
+      ready(null);
+    }, NETWORK_WAIT);
     const g = state.grid;
     worker.postMessage({ id: job, routeUrl: scriptUrl('script[src*="/static/route.js"]'),
                          grid: { w: g.w, h: g.h, scale: g.scale, bits: g.bits, soft: g.soft, axes: g.axes,
@@ -835,24 +849,48 @@ function hints() {
     : "Plan. Tap a spot to see the route from there, or move the marker with the arrow keys and press Enter.");
 }
 
+// The old plan stays in state, with its map, until the image of the new plan
+// is there: a tap or a late worker answer in that time never mixes the two.
 function showPlan(answer, focusResult, push) {
   // Take the focus before the controls of the old plan hide, so it never falls to the page body.
   if (focusResult && !$("result").hidden) $("result-head").focus({ preventScroll: true });
-  state = answer;
-  // A photo map has no routes, so the controls for routes and walls go.
-  const map = !!state.photo_map;
-  if (map) routesOnly = false;
-  $("show-map").hidden = $("show-routes").hidden = $("fix").hidden = $("legend-route").hidden = map;
-  if (state.start === undefined) state.start = null;
-  if (state.exitChoice === undefined) state.exitChoice = -1;
-  if (state.foundExits === undefined) state.foundExits = state.exits.map((e) => ({ ...e }));
+  if (answer.start === undefined) answer.start = null;
+  if (answer.exitChoice === undefined) answer.exitChoice = -1;
+  if (answer.foundExits === undefined) answer.foundExits = answer.exits.map((e) => ({ ...e }));
   say("");
   $("status").style.removeProperty("min-height");
   sayPlan("");  // the same instruction for the next plan is then a change, and is read
+  stopSpeaking();
   stopMarking();
   cursor = null;
   keyboard = false;
-  img.onload = () => {
+  dropOpening();
+  opening = answer;
+  const next = openingImg = new Image();
+  next.onerror = () => {
+    dropOpening();
+    forget(answer);
+    // A new answer that does not open leaves the old plan open. Back or Forward
+    // to a plan that does not open shows the start page, as the address says.
+    if (state && push) {
+      explain();  // the status line of the old plan again
+      if (focusResult) $("result").scrollIntoView({ block: "start" });
+    } else {
+      closePlan();
+      window.scrollTo(0, 0);
+      if (focusResult) $("photo").focus();
+    }
+    say(sampleId(answer.id) ? "Could not show this sample plan. Try another one." : "Could not show the plan of your photo. Send the photo again.");
+  };
+  next.onload = () => {
+    dropOpening();
+    img = next;
+    state = answer;
+    // A photo map has no routes, so the controls for routes and walls go.
+    const map = !!state.photo_map;
+    if (map) routesOnly = false;
+    $("show-map").hidden = $("show-routes").hidden = $("fix").hidden = $("legend-route").hidden = map;
+    hints();
     $("result").hidden = false;
     layout();
     buildField();
@@ -861,12 +899,43 @@ function showPlan(answer, focusResult, push) {
     explain();
     if ($("stage").classList.contains("big")) centreOnStart();
     markOpenSample(push);
+    remember();
+    showBusy();  // the upload bar floats over a plan
     if (focusResult) {
       $("result").scrollIntoView({ block: "start" });
       $("result-head").focus({ preventScroll: true });
     }
   };
-  img.src = state.image;
+  next.src = answer.image;
+}
+
+function dropOpening() {
+  if (openingImg) openingImg.onload = openingImg.onerror = null;
+  openingImg = opening = null;
+}
+
+// Back to the start page: nothing of the old plan may change the page after this.
+function closePlan() {
+  dropOpening();
+  ++networkJob;
+  networkReady = null;
+  clearTimeout(networkTimer);
+  stopSpeaking();
+  stopMarking();
+  state = null;
+  view = null;
+  $("result").hidden = true;
+  layout();
+  markOpenSample();
+}
+
+// A plan whose image does not open is not kept for a reload.
+function forget(answer) {
+  try {
+    // A photo plan has no id: the image tells the plans apart.
+    if (lastPlan()?.image === answer.image) sessionStorage.removeItem(STORE_KEY);
+    if (lastPlan(PHOTO_KEY)?.image === answer.image) sessionStorage.removeItem(PHOTO_KEY);
+  } catch (e) { /* storage blocked */ }
 }
 
 // The photo button waits while a sample plan loads or the server reads a photo.
@@ -931,7 +1000,6 @@ async function loadPlan(request, waitText, push) {
   }
   if (n !== planSeq) return;
   showPlan(answer, true, push);
-  remember();
   showBusy();
   if (upload) say(STILL_TEXT);
 }
@@ -1029,7 +1097,7 @@ async function readPhoto(file, job) {
   stopSpeaking();
   if (marking) stopMarking();
   // After a reload, a plan that is already open stays: the answer gets the button.
-  const n = file ? ++planSeq : (state || loading ? -1 : planSeq);
+  const n = file ? ++planSeq : (state || opening || loading ? -1 : planSeq);
   const mine = job || { start: Date.now(), job: null };
   // The plan that this photo replaces, if the user only waits in it: a photo plan, not a sample.
   const replaces = state && !sampleId(state.id) ? state : null;
@@ -1080,7 +1148,6 @@ async function readPhoto(file, job) {
     done();
     showBusy();
     showPlan(answer, true, true);
-    remember();
   } else {
     readyPlan = answer;
     done();
@@ -1101,7 +1168,6 @@ $("ready").addEventListener("click", () => {
   // The focus leaves the button before it hides; the plan heading takes it on load.
   if ($("result").hidden) $("photo").focus();
   showPlan(readyPlan, true, true);
-  remember();
   readyPlan = null;
   // The bar goes a moment later, so the second tap of a double tap does not hit
   // what was under it. Its room in the page goes now, before the plan shows.
@@ -1128,9 +1194,6 @@ const countryName = (() => {
 })();
 
 const sampleId = (id) => (id && id.startsWith("g-") ? id.slice(2) : null);
-// "?set=review" opens the review set: plans read with code under test.
-const SET = new URLSearchParams(location.search).get("set") === "review" ? "?set=review" : "";
-
 // push: add a history entry, so Back returns to the plan before.
 function openSample(gid, push) {
   return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}${SET}`, { method: "POST" }), "Opening the sample plan…", push);
@@ -1146,8 +1209,11 @@ function markOpenSample(push) {
   if (!state) return;
   const url = new URL(location.href);
   if (gid) url.searchParams.set("sample", gid); else url.searchParams.delete("sample");
-  if (push && url.href !== location.href) history.pushState(null, "", url);
-  else history.replaceState(null, "", url);
+  // The entry of a photo plan says so: Back, Forward and a reload open the photo
+  // again, but the logo link and a new visit of the page show the start page.
+  const entry = gid ? null : { photo: true };
+  if (push && url.href !== location.href) history.pushState(entry, "", url);
+  else history.replaceState(entry, "", url);
 }
 
 $("back-to-samples").addEventListener("click", () => {
@@ -1343,26 +1409,40 @@ function lastPlan(key = STORE_KEY) {
 function openFromAddress(ev) {
   const gid = new URL(location.href).searchParams.get("sample");
   const last = lastPlan();
-  const photo = lastPlan(PHOTO_KEY);
+  const photo = history.state?.photo ? lastPlan(PHOTO_KEY) : null;
+  // A sample that still loads for the entry before is not wanted now.
+  // A photo that the server reads still opens when its answer comes.
+  if (loading) { ++planSeq; loading = 0; }
   // Back or Forward: the focus goes to the plan that comes in.
   const focus = !!ev;
   // A plan from the address is newer than a photo that the server still reads.
-  if (gid && last && last.id === `g-${gid}`) { ++planSeq; showPlan(last, focus); }
+  if (gid && last && last.id === `g-${gid}`) showPlan(last, focus);
   else if (gid) openSample(gid);
-  else if (photo) { ++planSeq; showPlan(photo, focus); }
-  else if (state) {
-    state = null;
-    $("result").hidden = true;
-    layout();
-    if (ev) $("photo").focus();
-    markOpenSample();
+  else if (photo) showPlan(photo, focus);
+  else {
+    if (!upload) say("");  // a wait text of a sample from the entry before goes
+    if (state || opening) {
+      closePlan();
+      if (ev) $("photo").focus();
+    }
   }
   showBusy();
 }
 window.addEventListener("popstate", openFromAddress);
+// The logo goes to the start page in a new entry, so Back opens the plan again.
+// A plain link to the same address is a reload, and a reload keeps the plan.
+document.querySelector(".brand").addEventListener("click", (ev) => {
+  if (!(state || opening) || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+  ev.preventDefault();
+  const url = new URL(location.href);
+  url.searchParams.delete("sample");
+  history.pushState(null, "", url);
+  openFromAddress(ev);
+  window.scrollTo(0, 0);
+});
 openFromAddress();
 // early.js hid the start page for a plan that is not there: show it again.
-if (!state && !loading) layout();
+if (!state && !opening && !loading) layout();
 try {
   const job = JSON.parse(sessionStorage.getItem(JOB_KEY) || "null");
   sessionStorage.removeItem(JOB_KEY);

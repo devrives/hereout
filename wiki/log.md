@@ -244,3 +244,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/orthogonal-way-tree.md`: no second exit when every other way passes the door of the first exit.
 - Updated `components/gallery.md`: countries and regions.
 - Source: the owner words of 2026-10-30, the page code and the fact check of the page.
+
+## [2026-10-30] ingest | Page check after the layout change
+
+- Updated `decisions/page-layout-a.md`: the logo goes to the start page, and a photo plan comes back only in its own history entry.
+- Source: the owner request of 2026-10-30 to check the page for problems, and a code review of the page.

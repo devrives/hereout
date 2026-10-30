@@ -3,7 +3,7 @@ type: decision
 title: "Page layout: plan beside the answer, with the logo"
 status: accepted
 updated: 2026-10-30
-checked: e23b223
+checked: be5d7fc
 sources:
   - owner:2026-10-30
   - src/hereout/web/index.html
@@ -31,6 +31,8 @@ sources:
 - The exit buttons show the number only, as the mark on the plan. The label of each button has the full name of the exit.
 - The page uses the colours of the logo and the font of the word mark, Plus Jakarta Sans. The page serves the font file itself (SIL Open Font License).
 - The marks on the plan keep their colours. The route stays blue and the exits stay green.
+- The logo goes to the start page in a new history entry. Back after it opens the plan again. A plain link to the same address is a reload, and a reload keeps the plan.
+- The plan of a photo of the user comes back only in its own history entry: with Back, Forward and a reload.
 
 ## Consequences
 
@@ -38,3 +40,4 @@ sources:
 - On a phone, the answer card is directly under the plan and the legend.
 - The page loads one font file of 27 KB.
 - A second photo input is in the header. Both inputs get the same wait state.
+- A new visit of the page shows the start page, also in a tab with a photo plan from before.
