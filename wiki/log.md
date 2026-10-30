@@ -256,3 +256,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `components/gallery.md`: the WebP file beside each saved answer.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-30, the browser measurements, the output check on the gallery plans, the code, ux and a11y reviews.
+
+## [2026-10-30] ingest | One network of way lines
+
+- Added `decisions/connected-way-lines.md`: the links, the cover of corridors, the measure on 195 plans, the open wall errors.
+- Updated `decisions/orthogonal-way-tree.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-30, the measure on the gallery plans, the code and the tests.

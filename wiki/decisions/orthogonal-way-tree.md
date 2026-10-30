@@ -83,3 +83,6 @@ sources:
   - text out of view.
 - The commit fixes all of them. The page goes to a new review before the deploy.
 
+## Later
+
+- On 2026-10-30 the trees of the exits got links, and corridors got lines to their far end: [One network of way lines](connected-way-lines.md).

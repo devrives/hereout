@@ -18,6 +18,8 @@ def test_network_lines_and_routes():
                                     text=True, check=True).stdout)
     assert out[0]["legs"] > 0
     assert all(a["waits"] and a["adopted"] and a["treesAdopted"] for a in out)
+    # The lines to all exits make one network: each test plan is one open floor.
+    assert all(a["pieces"] == 1 for a in out), [a["pieces"] for a in out]
     n_routes = 0
     for c, a in zip(cs, out):
         assert a["legsClear"]

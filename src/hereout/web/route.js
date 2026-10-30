@@ -551,6 +551,9 @@ const HereOutRoute = (() => {
   const STAIR_SHARE = 0.05;     // share of the frame: the longest leg of a staircase
   const STAIR_SLOPE = 0.25;     // a staircase line is at least this steep (about 14 degrees)
   const STAIR_RUN = 0.08;       // share of the frame: a shorter staircase stays in steps (a slanted line is for a long slanted corridor)
+  const COVER_SHARE = 0.06;     // share of the frame: a hall or corridor cell farther than this from every line gets a line
+  const MAX_COVER = 40;         // lines added for the cover, at most
+  const CORRIDOR = 4;           // a room this many times longer than wide is a corridor
   const PASS_STEPS = 8;         // points on the line of one move that must be clear of walls
   const DR = [0, 1, 0, -1], DC = [1, 0, -1, 0];  // the four moves: right, down, left, up
 
@@ -843,19 +846,10 @@ const HereOutRoute = (() => {
         for (let m = 0; m < 4; m++) if (s < 0 || dist[4 * i + m] < dist[s]) s = 4 * i + m;
         return s;
       };
-      // Add the sources one by one, the nearest first. Each branch is its
-      // cells from the source to the tree cell it joins.
+      // Each branch is its cells from the source to the tree cell it joins.
       const branches = [];
-      const left = new Set(this.sources.filter((i) => open[i]));
-      while (left.size) {
-        let pick = -1, pickS = -1;
-        for (const i of left) {
-          const s = best(i);
-          if (inTree[i]) { pick = i; pickS = -1; break; }
-          if (pickS < 0 || dist[s] < dist[pickS]) { pick = i; pickS = s; }
-        }
-        left.delete(pick);
-        if (pickS < 0 || !Number.isFinite(dist[pickS])) continue;
+      const covers = new Set();  // the branches to the cover points
+      const addBranch = (pickS) => {
         const cells = [];
         for (let s = pickS; s >= 0; s = prev[s]) {
           cells.push(s >> 2);
@@ -869,44 +863,117 @@ const HereOutRoute = (() => {
         }
         branches.push(cells);
         grow();
-      }
-      // The flow: how many sources drain through each tree cell.
-      const below = new Float64Array(n);
-      for (const cells of branches) for (let i = cells[0]; i >= 0; i = tnext[i]) below[i] += 1;
-      const legs = [];
-      const hook = HOOK_SHARE * Math.max(this.fw, this.fh);
-      const stub = Math.round(STUB_SHARE * Math.max(this.fw, this.fh));
-      const reach = REACH_SHARE * Math.max(this.fw, this.fh);
+        return cells;
+      };
       // The size of each room, and the size of a hall.
       const area = new Map();
       let floor = 0;
       for (let i = 0; i < n; i++) if (open[i]) { floor++; area.set(this.room[i], (area.get(this.room[i]) || 0) + 1); }
       const hall = HALL_SHARE * floor;
+      // Add the sources one by one, the nearest first.
+      const left = new Set(this.sources.filter((i) => open[i]));
+      while (left.size) {
+        let pick = -1, pickS = -1;
+        for (const i of left) {
+          const s = best(i);
+          if (inTree[i]) { pick = i; pickS = -1; break; }
+          if (pickS < 0 || dist[s] < dist[pickS]) { pick = i; pickS = s; }
+        }
+        left.delete(pick);
+        if (pickS < 0 || !Number.isFinite(dist[pickS])) continue;
+        addBranch(pickS);
+      }
+      // The cover: one line for each room leaves long corridors with no line
+      // at their far end. The cell of a corridor farthest from the lines (by
+      // the moves of the tree) gets a line, until every corridor cell is
+      // near a line. A room is a corridor when its floor is long for its
+      // width: the width is twice the distance of its middle to the walls.
+      // Rooms that are not long (offices, halls) get no lines of the cover.
+      // A line of the cover is the way that a route from its far end takes
+      // to the tree. It is drawn only: the tree does not grow from it, so
+      // the routes stay as they are (the ux review found routes that went
+      // the wrong way along lines of the cover).
+      if (only < 0) {
+        const covered = new Uint8Array(n);
+        const corridor = new Set();
+        for (const [root, cell] of this.middles) {
+          const width = 2 * Math.max(1, this.wd[cell]);
+          if ((area.get(root) || 0) >= hall && area.get(root) / (width * width) >= CORRIDOR) corridor.add(root);
+        }
+        const lim = COVER_SHARE * Math.max(fw, fh);
+        const far = new Int32Array(n), q = new Int32Array(n);
+        for (let round = 0; round < MAX_COVER; round++) {
+          far.fill(-1);
+          let h = 0, t = 0, pick = -1;
+          for (let i = 0; i < n; i++) if (inTree[i] || covered[i]) { far[i] = 0; q[t++] = i; }
+          while (h < t) {
+            const i = q[h++];
+            const r = Math.floor(i / fw), c = i - r * fw;
+            for (let m2 = 0; m2 < 4; m2++) {
+              const nr = r + DR[m2], nc = c + DC[m2];
+              if (nr < 0 || nr >= fh || nc < 0 || nc >= fw) continue;
+              const j = nr * fw + nc;
+              if (far[j] >= 0 || !(m2 < 2 ? pass[i] & (m2 + 1) : pass[j] & (m2 - 1))) continue;
+              far[j] = far[i] + 1;
+              q[t++] = j;
+              if (far[j] > lim && this.wd[j] >= MIN_ROOM && corridor.has(this.room[j]) && (pick < 0 || far[j] > far[pick])) pick = j;
+            }
+          }
+          if (pick < 0) break;
+          const s = best(pick);
+          if (!Number.isFinite(dist[s])) break;
+          const cells = [];
+          for (let q2 = s; q2 >= 0; q2 = prev[q2]) {
+            cells.push(q2 >> 2);
+            if (inTree[q2 >> 2] || covered[q2 >> 2]) break;
+          }
+          for (let k = cells.length - 2; k >= 0; k--) {
+            const i = cells[k], to = cells[k + 1];
+            covered[i] = 1; tnext[i] = to; towner[i] = towner[to];
+            tcost[i] = tcost[to] + cost[i];
+          }
+          branches.push(cells);
+          covers.add(cells);
+        }
+      }
+      // The flow: how many sources drain through each tree cell.
+      const below = new Float64Array(n), belowTree = new Float64Array(n);
+      for (const cells of branches) {
+        for (let i = cells[0]; i >= 0; i = tnext[i]) { below[i] += 1; if (!covers.has(cells)) belowTree[i] += 1; }
+      }
+      const legs = [];
+      const hook = HOOK_SHARE * Math.max(this.fw, this.fh);
+      const stub = Math.round(STUB_SHARE * Math.max(this.fw, this.fh));
+      const reach = REACH_SHARE * Math.max(this.fw, this.fh);
       const drawn = new Uint8Array(n);
       for (let cells of branches) {
         // A short line that no other line joins is not drawn.
         if (cells.length < MIN_SPUR && below[cells[1]] === 1 && tnext[cells[cells.length - 1]] >= 0) continue;
-        // A line from a room that no other line joins stops a short way
-        // into the room, as the stub at a door of a printed plan.
-        const home = this.room[cells[0]];
-        let out = 0;
-        while (out < cells.length && this.room[cells[out]] === home && below[cells[out]] === 1) out++;
-        if (area.get(home) < hall) {
-          // A small room (a toilet, a store, an office) has no line of its
-          // own: its door joins the line outside, as on a printed plan. The
-          // way from its door is drawn only when it is long: the far end of
-          // a corridor. The part that other lines share stays.
-          let k = out;
-          while (k < cells.length && below[cells[k]] === 1) k++;
-          cells = cells.slice(k - out >= reach ? out : k);
-          if (cells.length < 2) continue;
-        } else if (out < cells.length && this.room[cells[out]] !== home && out > stub) {
-          cells = cells.slice(out - stub);
-        } else {
-          // A short last turn into the room middle is a hook: it goes too.
-          let k = 1;
-          while (k + 1 < cells.length && cells[k + 1] - cells[k] === cells[k] - cells[k - 1]) k++;
-          if (k < hook && k + 1 < cells.length && below[cells[k]] === 1) cells = cells.slice(k);
+        // A line of the cover is there to reach the far part of a hall or a
+        // corridor: all of it is drawn.
+        if (!covers.has(cells)) {
+          // A line from a room that no other line joins stops a short way
+          // into the room, as the stub at a door of a printed plan.
+          const home = this.room[cells[0]];
+          let out = 0;
+          while (out < cells.length && this.room[cells[out]] === home && below[cells[out]] === 1) out++;
+          if (area.get(home) < hall) {
+            // A small room (a toilet, a store, an office) has no line of its
+            // own: its door joins the line outside, as on a printed plan. The
+            // way from its door is drawn only when it is long: the far end of
+            // a corridor. The part that other lines share stays.
+            let k = out;
+            while (k < cells.length && below[cells[k]] === 1) k++;
+            cells = cells.slice(k - out >= reach ? out : k);
+            if (cells.length < 2) continue;
+          } else if (out < cells.length && this.room[cells[out]] !== home && out > stub) {
+            cells = cells.slice(out - stub);
+          } else {
+            // A short last turn into the room middle is a hook: it goes too.
+            let k = 1;
+            while (k + 1 < cells.length && cells[k + 1] - cells[k] === cells[k] - cells[k - 1]) k++;
+            if (k < hook && k + 1 < cells.length && below[cells[k]] === 1) cells = cells.slice(k);
+          }
         }
         for (const i of cells) drawn[i] = 1;
         // Corners: where the line turns or its flow changes. A change of
@@ -961,14 +1028,101 @@ const HereOutRoute = (() => {
         for (const [, i, j] of bridges.values()) {
           legs.push({ a: this.toPx(this.middle(i)), b: this.toPx(this.middle(j)), flow: 1, bridge: true });
         }
+        legs.push(...this.links(drawn, inTree, tnext, towner, tcost, [...bridges.keys()].map((key) => [Math.floor(key / 1e4), key % 1e4])));
       }
       // Joins: the tree cells where the flow changes, that is where another
       // line of the map joins.
       const joins = new Uint8Array(n);
-      for (let i = 0; i < n; i++) if (tnext[i] >= 0 && below[tnext[i]] !== below[i]) joins[tnext[i]] = 1;
+      // Only the lines of the tree: a route keeps to these points.
+      for (let i = 0; i < n; i++) if (inTree[i] && tnext[i] >= 0 && belowTree[tnext[i]] !== belowTree[i]) joins[tnext[i]] = 1;
       const t = { dist, prev, inTree, tcost, tnext, towner, legs, joins };
       this.trees.set(only, t);
       return t;
+    }
+
+    // Links: the lines to one exit make one tree. Where no bridge joins the
+    // trees of two exits, the cheapest way on the open floor between their
+    // lines (or their exits) joins them, the cheapest first, until all lines
+    // that the floor connects are one network. The cost of a cell is the cost
+    // of the tree, so a link keeps to the middle of the way, away from the
+    // walls. A link splits where both exits are equally near (the cost of
+    // the way out from each end added), and each half points to its exit.
+    // joined: the pairs of exits that a bridge already joins.
+    links(drawn, inTree, tnext, towner, tcost, joined) {
+      const { fw, fh, pass, cost } = this;
+      const n = fw * fh;
+      const group = this.exitSeeds.map((_, k) => k);
+      const find = (k) => { while (group[k] !== k) { group[k] = group[group[k]]; k = group[k]; } return k; };
+      const unite = (a, b) => { a = find(a); b = find(b); if (a === b) return false; group[a] = b; return true; };
+      for (const [a, b] of joined) unite(a, b);
+      // Grow from all drawn cells and exit cells at once, the cheapest first.
+      const label = new Int32Array(n).fill(-1), from = new Int32Array(n).fill(-1);
+      const dist = new Float64Array(n).fill(Infinity);
+      const heap = new CellHeap();
+      for (let i = 0; i < n; i++) {
+        if (drawn[i] || (inTree[i] && tnext[i] < 0)) { label[i] = towner[i]; dist[i] = 0; heap.push(0, i); }
+      }
+      const moves = (i, visit) => {
+        const r = Math.floor(i / fw), c = i - r * fw;
+        for (let m = 0; m < 4; m++) {
+          const nr = r + DR[m], nc = c + DC[m];
+          if (nr < 0 || nr >= fh || nc < 0 || nc >= fw) continue;
+          const j = nr * fw + nc;
+          if (m < 2 ? pass[i] & (m + 1) : pass[j] & (m - 1)) visit(j);
+        }
+      };
+      while (heap.size) {
+        const i = heap.pop(), d = heap.topCost;
+        if (d > dist[i]) continue;
+        moves(i, (j) => {
+          const nd = d + cost[j];
+          if (nd < dist[j]) { dist[j] = nd; label[j] = label[i]; from[j] = i; heap.push(nd, j); }
+        });
+      }
+      // Where the growths of two exits touch, that is a link between them.
+      const meets = new Map();
+      for (let i = 0; i < n; i++) {
+        if (label[i] < 0) continue;
+        moves(i, (j) => {
+          if (label[j] < 0 || label[j] === label[i]) return;
+          const a = Math.min(label[i], label[j]), b = Math.max(label[i], label[j]);
+          const key = a * 1e4 + b, len = dist[i] + dist[j] + cost[j];
+          if (!meets.has(key) || len < meets.get(key)[0]) meets.set(key, label[i] === a ? [len, i, j] : [len, j, i]);
+        });
+      }
+      const legs = [];
+      const back = (i) => { const out = []; for (let q = i; q >= 0; q = from[q]) out.push(q); return out; };
+      for (const [, i, j] of [...meets.values()].sort((x, y) => x[0] - y[0])) {
+        if (!unite(label[i], label[j])) continue;
+        const cells = [...back(i).reverse(), ...back(j)];
+        if (cells.length < 3) continue;  // the two lines touch
+        // The split: the cost of the way out from each end, plus the link to it.
+        const toA = [tcost[cells[0]]];
+        for (let k = 1; k < cells.length; k++) toA.push(toA[k - 1] + cost[cells[k]]);
+        const toB = new Array(cells.length);
+        toB[cells.length - 1] = tcost[cells[cells.length - 1]];
+        for (let k = cells.length - 2; k >= 0; k--) toB[k] = toB[k + 1] + cost[cells[k]];
+        let mid = 1;
+        for (let k = 1; k < cells.length - 1; k++) if (Math.abs(toA[k] - toB[k]) < Math.abs(toA[mid] - toB[mid])) mid = k;
+        for (const half of [cells.slice(0, mid + 1).reverse(), cells.slice(mid)]) {
+          if (half.length < 2) continue;
+          const idx = [0], fixed = [true];
+          for (let k = 1; k < half.length - 1; k++) {
+            if (half[k + 1] - half[k] !== half[k] - half[k - 1]) { idx.push(k); fixed.push(false); }
+          }
+          idx.push(half.length - 1); fixed.push(true);
+          const [cs, fs] = this.squareUp(idx.map((k) => half[k]), fixed);
+          const pts = this.unstair(cs.map((c) => this.middle(c)), fs);
+          for (let k = 0; k + 1 < pts.length; k++) legs.push({ a: this.toPx(pts[k]), b: this.toPx(pts[k + 1]), flow: 1, link: true });
+          // A link to an exit with no line of its own goes on to the exit.
+          const end = half[half.length - 1];
+          if (!drawn[end] && inTree[end] && tnext[end] < 0) {
+            const e = this.toExit(end, towner[end], half[half.length - 2]);
+            for (let k = 0; k < e.length - 1; k++) legs.push({ a: e[k], b: e[k + 1], flow: 1, exit: true });
+          }
+        }
+      }
+      return legs;
     }
 
     // Fewer turns: from each corner (a frame cell), go to the farthest later

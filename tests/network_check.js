@@ -29,7 +29,22 @@ process.stdin.on("end", () => {
     const askTo = (g, s, k) => { try { return JSON.stringify(g.wayRoute(s, k)); } catch (e) { return e.message; } };
     const treesAdopted = c.exits.every((_, k) => sent._network.trees.get(k).best) &&
       c.starts.every((s) => c.exits.every((_, k) => askTo(sent, s, k) === askTo(f, s, k)));
+    // The drawn lines: pieces that touch (an end on another line) are one.
+    const legs = net.legs;
+    const tol = 1.5 / f.scale;
+    const near = (p, a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+      const t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)) : 0;
+      return Math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1]) <= tol;
+    };
+    const group = legs.map((_, i) => i);
+    const find = (i) => (group[i] === i ? i : (group[i] = find(group[i])));
+    legs.forEach((l, i) => legs.forEach((m, j) => {
+      if (i < j && [l.a, l.b].some((p) => near(p, m.a, m.b)) || [m.a, m.b].some((p) => near(p, l.a, l.b))) group[find(i)] = find(j);
+    }));
+    const pieces = new Set(legs.map((_, i) => find(i))).size;
     return {
+      pieces,
       waits,
       adopted,
       treesAdopted,
