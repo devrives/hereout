@@ -67,7 +67,7 @@ a { color: inherit; }
 html:not(.has-plan) .new-photo { display: none; }
 /* With a plan open, the start page text goes. Its h1 stays for a screen reader. */
 html.has-plan .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-html.has-plan .intro > :not(h1) { display: none; }
+html.has-plan .intro > :not(h1), html.has-plan .demo { display: none; }
 /* While a plan from the address loads, the samples wait under it, so they do not jump down. */
 html.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
 .new-photo input, .shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -113,6 +113,20 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .example-go { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--accent); }
 .example-open:hover .example-go { text-decoration: underline; }
 .example .credit { margin-top: 6px; font-size: 0.8rem; }
+.demo-link { margin: 0 0 16px; }
+.demo-link a { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; color: var(--accent); font-weight: 600; }
+.demo-link .ico { width: 16px; height: 16px; fill: currentColor; }
+.demo { margin: 40px 0 8px; }
+.demo h2 { margin-bottom: 4px; }
+.demo > p { margin: 0 0 12px; }
+.demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 14px; background: #000; }
+.demo video:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.transcript { margin-top: 16px; }
+.transcript summary { cursor: pointer; min-height: 24px; }
+.transcript ol { padding-left: 1.4em; }
+.transcript li { margin: 10px 0; }
+.transcript em { display: block; margin-top: 4px; color: var(--muted); font-style: normal; }
+.demo .credits { margin-top: 8px; }
 #status { min-height: 1.5em; margin: 12px 0; color: var(--muted); }
 #status:empty { margin: 8px 0; }
 html.has-plan #status { margin: 6px 0; }
@@ -241,11 +255,12 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
   .top-in, .layout { padding-left: 48px; padding-right: 48px; }
   .top-in { min-height: 72px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); column-gap: 56px; align-items: start;
-            grid-template-areas: "intro gallery" "status gallery" "result result"; }
+            grid-template-areas: "intro gallery" "status gallery" "demo demo" "result result"; }
   .intro { grid-area: intro; }
   .status-wrap { grid-area: status; }
   .result { grid-area: result; }
   .gallery-wrap { grid-area: gallery; }
+  .demo { grid-area: demo; max-width: 1040px; }
   .intro h1 { font-size: 3.1rem; margin-top: 56px; }
   .lead { font-size: 1.15rem; max-width: 30em; }
   .shoot span { display: inline-flex; width: auto; padding: 0 32px; }

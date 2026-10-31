@@ -1255,6 +1255,8 @@ for (const p of PHOTOS) p.addEventListener("click", (ev) => {
 // With a plan open, the start page text goes and the header has the photo button.
 function layout() {
   document.documentElement.classList.toggle("has-plan", !$("result").hidden);
+  // The demo video (start page only) must not play on, hidden, under a plan.
+  if (!$("result").hidden) document.querySelector("#demo video")?.pause();
 }
 
 // Load a sample plan. Only the newest request wins.

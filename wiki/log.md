@@ -326,3 +326,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/judge-polish.md`: the start page example, the gallery order, the frame, the tap checks and the model reading view, with the review results.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-31, the judge review, the agent branches, the ux and a11y reviews and the tests.
+
+## [2026-11-01] ingest | Demo video on the start page
+
+- Added `decisions/demo-video.md`: the video file, the mount, the caption text and the credits.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-11-01, the code and the tests.

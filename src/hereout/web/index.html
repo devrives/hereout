@@ -36,6 +36,7 @@
   <section id="intro" class="intro" aria-labelledby="intro-head">
     <h1 id="intro-head">Your way out, drawn on the plan</h1>
     <p class="lead">In front of an evacuation plan you don't know? HereOut finds the exits on your photo.</p>
+    <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video (2½ min)</a></p>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
@@ -145,6 +146,29 @@
       <summary>Photo credits</summary>
       <p class="muted">Each preview is a resized copy of the photo, some with the perspective corrected. Photos under a ShareAlike licence are shared under the same licence.</p>
       <ul id="credits"></ul>
+    </details>
+  </section>
+  <section id="demo" class="demo" hidden aria-labelledby="demo-head" data-samples="CN-commons_000098,JP-commons_000066,PT-commons_000107">
+    <h2 id="demo-head">Demo video</h2>
+    <p class="muted">2½ min, no sound. The captions are in the picture. On a phone, play it full screen to read them.</p>
+    <video controls playsinline preload="none" width="1280" height="720" src="/video/demo.mp4" aria-labelledby="demo-head"></video>
+    <details class="transcript">
+      <summary>Text of the video, with what it shows</summary>
+      <ol>
+        <li>A photo of a posted evacuation plan. Tap where you stand. HereOut draws the way out. <em>On screen: a Japanese floor plan. A blue route goes from the YOU dot in a lower right room to Exit 2, “Staircase east UP”, and four steps show beside it.</em></li>
+        <li>In a building you don't know, the plan on the wall can use a language and symbols you can't read. It runs in a phone browser. No install. <em>On screen: the start page, with an example route on a metro station plan from China and the sample gallery.</em></li>
+        <li>No plan nearby? 203 open-licensed photos of real plans, from 24 countries and regions. A sample opens from its saved reading in about half a second. Routes are found in your browser. <em>On screen: the gallery scrolls, and a station hall in Portugal with 15 exits opens. Two taps give two routes, to Exit 2 and to Exit 7.</em></li>
+        <li>The first step names a side of the plan, not your left or right: a posted plan does not always face the reader. No meters, because a photo has no reliable scale. Walks are short, medium or long. If the nearest exit is blocked, a backup route is one tap away. <em>On screen: the Japanese plan again. A tap on step 3 marks its turn on the route. Then “Route to Exit 1” draws the route to the other staircase, with seven steps.</em></li>
+        <li>Muse Spark (muse-spark-open-1026, through Baseten, low reasoning effort) reads the plan. It is asked for the box of the floor drawing and every final exit, on every level. On new photos, exits far from any green or red mark get a second look: numbered, zoomed crops in one more call. The model never picks your start. Your tap does. <em>On screen: on the Portuguese plan, “Show the reading on the plan” draws the floor box and the 15 numbered exit points from Muse Spark over the whole photo. Then the plan and its route come back.</em></li>
+        <li>Everything else is code. Walls come from the ink, with OpenCV. RapidOCR text boxes keep the text out of the walls. Routes: an escape field (Dijkstra) in the browser, and a door-to-door network in a Web Worker. <em>On screen: the Japanese plan with “Routes only”, then the escape map with arrows to the exits.</em></li>
+        <li>It is not always right. On 28 photos outside the set I tuned on, the exits looked right on 16. On 9, an exit was missing or false. So each route says: check it against the plan. Mark the exit yourself, and HereOut routes to it. <em>On screen: “Mark the exit”, a tap on a door at the lower left of the Japanese plan, and a new route to that door.</em></li>
+        <li>HereOut, hereout.devrives.com. Muse Spark through Baseten. Built solo during the Meta hackathon. <em>On screen: the start page.</em></li>
+      </ol>
+    </details>
+    <details class="credits">
+      <summary>Photos in the video</summary>
+      <ul id="demo-credits"></ul>
+      <p>The gallery previews in the video have their credits under “Photo credits” in the gallery.</p>
     </details>
   </section>
 </main>

@@ -9,11 +9,14 @@ services:
     environment:
       HEREOUT_SPEND_CAP_USD: "60"
       HEREOUT_GALLERY: /gallery
+      HEREOUT_VIDEO: /video
     volumes:
       - hereout-spend:/data
       # Open-licensed plan photos with saved readings, made by scripts/run_set.py.
       # They stay outside the repository.
       - ../_workspace/hereout-gallery:/gallery:ro
+      # The demo video (demo.mp4, demo-poster.webp), also outside the repository.
+      - ../_workspace/hereout-video/site:/video:ro
     logging:
       driver: json-file
       options:

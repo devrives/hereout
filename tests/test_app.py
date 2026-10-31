@@ -281,3 +281,33 @@ def test_start_page_example_markup():
     assert (WEB / "example-marks.webp").read_bytes()[8:12] == b"WEBP"
     # Without a gallery the start page has no example.
     assert "example-photo" not in TestClient(create_app(None, use_env=False)).get("/").text
+
+
+def test_demo_video_needs_the_file_and_the_credits(tmp_path):
+    from hereout.app import DEMO_CREDITS, DEMO_LINK, DEMO_TAG, WEB, demo_page
+    (tmp_path / "g").mkdir()
+    g = make_gallery(tmp_path / "g")
+    page = (f'<p>a</p>\n{DEMO_LINK}><a href="#demo">Demo</a></p>\n'
+            f'{DEMO_TAG} data-samples="XX-test_1"><video src="/video/demo.mp4"></video>'
+            f'{DEMO_CREDITS}</section>\n<p>b</p>')
+    video = tmp_path / "v"
+    video.mkdir()
+    # No file: the block goes.
+    assert demo_page(page, video, g) == "<p>a</p>\n<p>b</p>"
+    (video / "demo.mp4").write_bytes(b"\0" * 64)
+    assert demo_page(page, video, None) == "<p>a</p>\n<p>b</p>"
+    shown = demo_page(page, video, g)
+    assert " hidden" not in shown and 'src="/video/demo.mp4?v=40' in shown and "poster=" not in shown
+    assert DEMO_LINK in shown
+    assert "shown in a screen recording of HereOut" in shown
+    # A plan that the gallery does not know has no credit: the block goes.
+    assert demo_page(page.replace("XX-test_1", "XX-gone"), video, g) == "<p>a</p>\n<p>b</p>"
+    (video / "demo-poster.webp").write_bytes(b"RIFF")
+    assert 'poster="/video/demo-poster.webp?v=' in demo_page(page, video, g)
+    # The page has one block, and the server serves the file with ranges for Safari.
+    real = (WEB / "index.html").read_text()
+    assert real.count(DEMO_TAG) == 1 and real.count(DEMO_LINK) == 1 and DEMO_CREDITS in real and 'src="/video/demo.mp4"' in real
+    client = TestClient(create_app(None, use_env=False, gallery=g, video=video))
+    r = client.get("/video/demo.mp4", headers={"Range": "bytes=0-9"})
+    assert r.status_code == 206 and len(r.content) == 10
+    assert 'id="demo' not in TestClient(create_app(None, use_env=False)).get("/").text

@@ -94,6 +94,33 @@ def example_page(page: str, gallery: Gallery | None) -> str:
                 .replace(EXAMPLE_CREDIT, EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))
 
 
+DEMO_TAG = '<section id="demo" class="demo" hidden'
+DEMO_LINK = '<p id="demo-link"'
+DEMO_CREDITS = '<ul id="demo-credits"></ul>'
+
+
+def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
+    """The start page with the demo video, from a folder outside the repository
+    (HEREOUT_VIDEO: demo.mp4, demo-poster.webp). The video goes while the folder
+    has no demo.mp4, or the gallery has no credit for a plan photo in it."""
+    m = re.search(DEMO_TAG + r'[^>]* data-samples="([\w,-]+)"', page)
+    ids = m[1].split(",") if m else []
+    if not (m and folder and (folder / "demo.mp4").is_file() and gallery
+            and all(i in gallery.items for i in ids)):
+        page = re.sub(DEMO_LINK + r".*?</p>\n?", "", page, count=1, flags=re.S)
+        return re.sub(DEMO_TAG + r".*?</section>\n?", "", page, count=1, flags=re.S)
+
+    def url(name: str) -> str:  # a new file gets a new URL at the edge
+        st = (folder / name).stat()
+        return f"/video/{name}?v={st.st_size:x}{int(st.st_mtime):x}"
+    poster = f' poster="{url("demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
+    credits = "".join(f"<li>{credit_html(gallery.items[i]['credit'], ['shown in a screen recording of HereOut'])}</li>"
+                      for i in ids)
+    return (page.replace('src="/video/demo.mp4"', f'src="{url("demo.mp4")}"{poster}', 1)
+                .replace(DEMO_TAG, DEMO_TAG.removesuffix(" hidden"), 1)
+                .replace(DEMO_CREDITS, DEMO_CREDITS.replace("></", f">{credits}</"), 1))
+
+
 class LongCache(StaticFiles):
     """Files whose URL changes with their content: the edge and the browsers
     keep them for a year. With versioned, only a URL whose ?v= is the hash of
@@ -176,11 +203,13 @@ class Jobs:
 
 
 def create_app(client: ModelClient | None = None, use_env: bool = True,
-               gallery: Gallery | None = None) -> FastAPI:
+               gallery: Gallery | None = None, video: Path | None = None) -> FastAPI:
     if client is None and use_env:
         client = ModelClient.from_env()
     if gallery is None and use_env and os.environ.get("HEREOUT_GALLERY"):
         gallery = Gallery(Path(os.environ["HEREOUT_GALLERY"]))
+    if video is None and use_env and os.environ.get("HEREOUT_VIDEO"):
+        video = Path(os.environ["HEREOUT_VIDEO"])
     app = FastAPI(title="HereOut", docs_url=None, redoc_url=None, openapi_url=None)
     if use_env:
         # Load the text models now, not in the first request (seconds on one CPU).
@@ -191,7 +220,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return HTMLResponse(example_page(page, gallery))
+        return HTMLResponse(demo_page(example_page(page, gallery), video, gallery))
 
     @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)
     def robots():
@@ -278,6 +307,9 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         return out
 
     app.mount("/static", LongCache(directory=WEB, versioned=True), name="static")
+    # The demo video, made by the recorder in the hub (docs/hackathon-hereout-submission-*).
+    if video and video.is_dir():
+        app.mount("/video", StaticFiles(directory=video), name="video")
     if gallery:
         app.mount("/gallery/thumbs", StaticFiles(directory=gallery.folder / "thumbs"), name="thumbs")
         # The plan images of the saved answers: their names carry the key of the answer.

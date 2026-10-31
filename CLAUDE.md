@@ -21,6 +21,7 @@ HereOut reads a photo of a posted evacuation plan and shows the way out. The use
 
 - `docker compose build hereout && docker compose up -d hereout`, then `curl -sI https://hereout.devrives.com/`.
 - After a change of `src/hereout/*.py` or of the gallery, run `uv run python scripts/save_answers.py ../_workspace/hereout-gallery`. The server sends a saved gallery answer only when its key matches the current code. Without the run, a gallery plan opens in 5 to 11 s.
+- The demo video on the start page is in `../_workspace/hereout-video/site` (`demo.mp4`, `demo-poster.webp`), outside the repository. Replace the files for a new draft. No new build is necessary.
 - The container reads `.env` for the key. The spend ledger is on the volume `hereout-spend` (`/data/spend.json`). Read it with `docker exec hereout cat /data/spend.json`.
 - The Baseten credit is 100 USD (owner, 2026-10-27). The caps share it: 60 USD for the server (`HEREOUT_SPEND_CAP_USD` in `docker-compose.yml`) and 30 USD for local tests (`HEREOUT_SPEND_CAP_USD` in `.env`). Keep the sum below the credit, because each ledger has its own cap.
 
