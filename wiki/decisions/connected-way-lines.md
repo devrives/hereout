@@ -36,3 +36,4 @@ sources:
 - On the 195 plans, 188 have one network for each open area, before 86. On average, 78 % of the floor is near a line, before 64 %.
 - Open, from the ux review: on a plan with a wing (RU-commons_000210), a short piece can stay apart. A link along a slanted wall can show small steps.
 - Errors of the walls stay. A later check of the walls: [Inner walls much thinner than the outer walls](inner-wall-width.md).
+- A later check of the drawn lines alone: [Clean way lines: no jogs, closed gaps, routes on the lines](clean-way-lines.md).

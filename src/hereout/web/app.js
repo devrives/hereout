@@ -227,11 +227,11 @@ function findRoute() {
     const k = state.exitChoice;
     const r = k >= 0 ? to(k) : f.wayRoute(start);
     if (f.waitForNetwork && !f._network) { view.pending = true; return; }
-    main = { points: r.points, exitIndex: k >= 0 ? k : r.exitIndex };
+    main = { points: r.points, exitIndex: k >= 0 ? k : r.exitIndex, length: r.length };
     // "Nearest" is by the cost of the way, as for the second exit below; the
     // map lines can lead a spot to an exit a little farther away.
     const near = k >= 0 ? -1 : f.nearestExit(start);
-    if (near >= 0 && near !== main.exitIndex) main = { points: to(near).points, exitIndex: near };
+    if (near >= 0 && near !== main.exitIndex) { const r = to(near); main = { points: r.points, exitIndex: near, length: r.length }; }
   } catch (e) {
     if (!(e instanceof R.NoRoute)) throw e;
     view.error = e.message;
@@ -246,12 +246,14 @@ function findRoute() {
   for (const k of f.otherExits(start, main.exitIndex).slice(0, OTHER_TRIES)) {
     let r;
     try { r = to(k); } catch (e) { if (!(e instanceof R.NoRoute)) throw e; continue; }
-    if (!passes(r.points, main.exitIndex)) { backup = { points: r.points, exitIndex: k }; break; }
+    if (!passes(r.points, main.exitIndex)) { backup = { points: r.points, exitIndex: k, length: r.length }; break; }
   }
   // The solid route is the shorter one, so "nearest" stays true on the plan.
   // After a swap, the second way must keep clear of the door of the new first exit too.
-  const len = (pts) => pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0);
-  if (backup && state.exitChoice < 0 && len(backup.points) < len(main.points)) {
+  // A route on the ways out gives the length of its way before it moved
+  // onto the drawn lines (route.js).
+  const len = (r) => r.length ?? r.points.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - r.points[i][0], q[1] - r.points[i][1]), 0);
+  if (backup && state.exitChoice < 0 && len(backup) < len(main)) {
     [main, backup] = [backup, main];
     if (passes(backup.points, main.exitIndex)) backup = null;
   }

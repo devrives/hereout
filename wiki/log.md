@@ -275,3 +275,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/connected-way-lines.md`: a link to the check.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-30, the ground truth of the review plans, the gallery check.
+
+## [2026-10-30] ingest | Clean way lines
+
+- Added `decisions/clean-way-lines.md`: the measure of the lines alone, the jog, gap, tick and staircase steps, routes on the lines, the soft cost that failed.
+- Updated `decisions/connected-way-lines.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-30, the measure on 195 gallery plans, the code and the tests.

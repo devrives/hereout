@@ -448,7 +448,11 @@ const HereOutRoute = (() => {
           if (a > b + ALONG_MARGIN || (a > b - ALONG_MARGIN && w.points.length < r.points.length)) r = w;
         }
       }
-      if (r && this.wing) r = { ...r, points: this.squareLocal(r.points) };
+      if (r && this.wing) {
+        // The length of the way changes as much as the points do.
+        const points = this.squareLocal(r.points);
+        r = { ...r, points, length: r.length === undefined ? undefined : r.length - polyLength(r.points) + polyLength(points) };
+      }
       return r || (only < 0 ? this.route(start) : null);
     }
 
@@ -551,11 +555,21 @@ const HereOutRoute = (() => {
   const STAIR_SHARE = 0.05;     // share of the frame: the longest leg of a staircase
   const STAIR_SLOPE = 0.25;     // a staircase line is at least this steep (about 14 degrees)
   const STAIR_RUN = 0.08;       // share of the frame: a shorter staircase stays in steps (a slanted line is for a long slanted corridor)
+  const STAIR_MANY = 6;         // legs: a staircase of this many legs becomes a line at half of STAIR_RUN
+  const STAIR_FINE = 2.5;       // cells: a staircase of legs this short is a slanted line at a quarter of STAIR_RUN
   const COVER_SHARE = 0.06;     // share of the frame: a hall or corridor cell farther than this from every line gets a line
   const MAX_COVER = 40;         // lines added for the cover, at most
   const CORRIDOR = 4;           // a room this many times longer than wide is a corridor
   const PASS_STEPS = 8;         // points on the line of one move that must be clear of walls
   const DR = [0, 1, 0, -1], DC = [1, 0, -1, 0];  // the four moves: right, down, left, up
+  const JOG_SHARE = 0.025;      // share of the frame: a shorter side step between two parallel lines goes
+  const JOG_CLEAR = 0.5;        // a line that moves keeps this share of its distance to the walls
+  const GAP_CELLS = 3;          // cells: a line that ends nearer than this to another line joins it
+  const TRIM_SHARE = 0.04;      // share of the frame: the floor this near (in moves) to a line is near it
+  const TRIM_LEFT = 2;          // cells: a dead end shorter than this after a trim goes
+  const SNAP_PASSES = 3;        // passes of the move of route runs onto the drawn lines
+  const FIRST_SHIFT = 0.25;     // the first piece of a route moves onto a line by this share of its length at most
+  const JOG_SOFT = 4;           // points on soft lines that a moved line may gain: one crossing, not a run along one
 
   // The move of the state of cell i with the least cost in a tree (the
   // first on a tie), or -1 when every state of the cell costs Infinity.
@@ -1035,7 +1049,7 @@ const HereOutRoute = (() => {
       const joins = new Uint8Array(n);
       // Only the lines of the tree: a route keeps to these points.
       for (let i = 0; i < n; i++) if (inTree[i] && tnext[i] >= 0 && belowTree[tnext[i]] !== belowTree[i]) joins[tnext[i]] = 1;
-      const t = { dist, prev, inTree, tcost, tnext, towner, legs, joins };
+      const t = { dist, prev, inTree, tcost, tnext, towner, legs: only < 0 ? this.schematize(legs) : legs, joins };
       this.trees.set(only, t);
       return t;
     }
@@ -1125,6 +1139,391 @@ const HereOutRoute = (() => {
       return legs;
     }
 
+    // Jogs: a short side step between two parallel lines (two lines that
+    // meet a third one a cell or two apart, or a line that steps aside on
+    // its way) makes the map look untidy. The whole straight line on one
+    // side moves onto the other, when it stays clear of walls, crosses no
+    // more soft lines and keeps JOG_CLEAR of its distance to the walls. Lines that end at
+    // the line only change their length. Exit marks do not move. Then
+    // straight runs of the same flow become one line. Works in the frame,
+    // on the drawn lines only: the tree and the routes stay.
+    schematize(legs) {
+      const f = this.field, s = f.scale, EPS = 0.35;
+      const nodes = [], edges = [];
+      const marks = f.exits.map((e) => this.framePoint(e[0] * s, e[1] * s));
+      const nodeAt = (p) => {
+        for (let k = 0; k < nodes.length; k++) if (Math.abs(nodes[k].p[0] - p[0]) < EPS && Math.abs(nodes[k].p[1] - p[1]) < EPS) return k;
+        nodes.push({ p: [p[0], p[1]], fixed: marks.some((m) => Math.hypot(m[0] - p[0], m[1] - p[1]) < EPS) });
+        return nodes.length - 1;
+      };
+      for (const l of legs) {
+        const u = nodeAt(this.framePoint(l.a[0] * s, l.a[1] * s)), v = nodeAt(this.framePoint(l.b[0] * s, l.b[1] * s));
+        if (u !== v) edges.push({ ...l, u, v });
+      }
+      // A node on the inside of a line splits it, so a T join is a node of both.
+      for (let k = 0; k < nodes.length; k++) {
+        const q = nodes[k].p;
+        if (nodes[k].fixed) continue;  // an exit mark next to a line is not on it
+        for (let e = 0; e < edges.length; e++) {
+          const { u, v } = edges[e];
+          if (u === k || v === k) continue;
+          const a = nodes[u].p, b = nodes[v].p, dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+          const t = ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L;
+          if (t <= 0 || t >= 1 || Math.hypot(a[0] + t * dx - q[0], a[1] + t * dy - q[1]) > EPS) continue;
+          edges.push({ ...edges[e], u: k });
+          edges[e] = { ...edges[e], v: k };
+        }
+      }
+      // Gaps: a line that ends a cell or two short of a line of another
+      // piece (a link that ended on a step that became a slanted line) gets
+      // a short line to it, when the way is clear of walls: straight, or
+      // with one right angle when the gap is to the end of that line.
+      // Only a gap between two pieces: a gap in one piece would make a loop.
+      const gapInc = nodes.map(() => 0), piece = nodes.map((_, k) => k);
+      const top = (k) => { while (piece[k] !== k) k = piece[k] = piece[piece[k]]; return k; };
+      for (const E of edges) { gapInc[E.u]++; gapInc[E.v]++; piece[top(E.u)] = top(E.v); }
+      for (let k = 0; k < nodes.length; k++) {
+        if (gapInc[k] !== 1 || nodes[k].fixed) continue;
+        const q = nodes[k].p, own = edges.find((E) => E.u === k || E.v === k);
+        let best = null, bestD = GAP_CELLS;
+        edges.forEach((E, e) => {
+          if (E === own || top(E.u) === top(k)) return;
+          const a = nodes[E.u].p, b = nodes[E.v].p, dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+          const t = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L));
+          const p = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+          if (d > EPS && d < bestD) { best = [e, t, p]; bestD = d; }
+        });
+        if (!best) continue;
+        const [e, t, p] = best, E = edges[e];
+        // A slanted gap (to the end of the other line) becomes a right angle.
+        let via = null;
+        if (Math.abs(p[0] - q[0]) > 1e-6 && Math.abs(p[1] - q[1]) > 1e-6) {
+          via = [[p[0], q[1]], [q[0], p[1]]].find((c) => this.clearLine(q, c) && this.clearLine(c, p));
+          if (!via) continue;
+        } else if (!this.clearLine(q, p)) continue;
+        let m = t <= 0 ? E.u : t >= 1 ? E.v : -1;
+        if (m < 0) {
+          nodes.push({ p, fixed: false });
+          m = nodes.length - 1;
+          edges.push({ ...E, u: m });
+          edges[e] = { ...E, v: m };
+        }
+        let from = k;
+        if (via) {
+          nodes.push({ p: via, fixed: false });
+          edges.push(own.v === k ? { ...own, u: k, v: nodes.length - 1 } : { ...own, u: nodes.length - 1, v: k });
+          from = nodes.length - 1;
+        }
+        edges.push(own.v === k ? { ...own, u: from, v: m } : { ...own, u: m, v: from });
+        piece[top(k)] = top(m);
+      }
+      const axis = (e) => {
+        const a = nodes[e.u].p, b = nodes[e.v].p;
+        return Math.abs(a[1] - b[1]) < 1e-6 ? 0 : Math.abs(a[0] - b[0]) < 1e-6 ? 1 : -1;  // 0: along a, 1: along b
+      };
+      const at = () => {
+        const m = nodes.map(() => []);
+        edges.forEach((e, k) => { if (e) { m[e.u].push(k); m[e.v].push(k); } });
+        return m;
+      };
+      // The lowest wall distance on a frame line, or -1 when it crosses a
+      // wall, and the number of points on soft lines.
+      const clearance = (p, q) => {
+        const steps = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) * 3) + 1;
+        let low = Infinity, soft = 0;
+        for (let k = 0; k <= steps; k++) {
+          const a = p[0] + ((q[0] - p[0]) * k) / steps, b = p[1] + ((q[1] - p[1]) * k) / steps;
+          const c = Math.floor(a), r = Math.floor(b);
+          if (c < 0 || c >= this.fw || r < 0 || r >= this.fh) return [-1, 0];
+          const i = r * this.fw + c;
+          if (this.src[i] < 0 || f.blocked[this.src[i]]) return [-1, 0];
+          if (this.ink[this.src[i]]) soft++;
+          low = Math.min(low, this.wd[i]);
+        }
+        return [low, soft];
+      };
+      const jog = JOG_SHARE * Math.max(this.fw, this.fh);
+      // Moves the straight line through node m (across axis ax of the jog)
+      // by d along ax. Gives false and changes nothing when it may not.
+      const shift = (m, ax, d, inc) => {
+        const line = new Set([m]), lineEdges = new Set(), todo = [m];
+        while (todo.length) {
+          const k = todo.pop();
+          for (const e of inc[k]) {
+            if (lineEdges.has(e) || axis(edges[e]) !== 1 - ax) continue;
+            lineEdges.add(e);
+            for (const o of [edges[e].u, edges[e].v]) if (!line.has(o)) { line.add(o); todo.push(o); }
+          }
+        }
+        const moved = (k) => (line.has(k) ? (ax === 0 ? [nodes[k].p[0] + d, nodes[k].p[1]] : [nodes[k].p[0], nodes[k].p[1] + d]) : nodes[k].p);
+        for (const k of line) if (nodes[k].fixed) return false;
+        const touched = new Set(lineEdges);
+        for (const k of line) for (const e of inc[k]) touched.add(e);
+        for (const e of touched) {
+          const E = edges[e], ea = axis(E);
+          if (ea === -1) return false;
+          const a = moved(E.u), b = moved(E.v);
+          if (ea === ax && !lineEdges.has(e)) {
+            // A line that ends at the moved line: it must not turn round.
+            const before = nodes[E.v].p[ax] - nodes[E.u].p[ax], after = b[ax] - a[ax];
+            if (Math.abs(after) > 1e-6 && Math.sign(after) !== Math.sign(before)) return false;
+            if (Math.abs(after) < 1e-6) continue;  // the jog itself, or a line that the move closes
+          }
+          // A line to an exit mark ends on the wall of the door: it is not checked.
+          const [was, softWas] = clearance(nodes[E.u].p, nodes[E.v].p);
+          if (was < 0) continue;
+          const [now, softNow] = clearance(a, b);
+          if (now < 0 || softNow > softWas + JOG_SOFT || (now < JOG_CLEAR * was && now < was)) return false;
+        }
+        for (const k of line) nodes[k].p = moved(k);
+        return true;
+      };
+      for (let round = 0; round < 4 * edges.length; round++) {
+        const inc = at();
+        let done = false;
+        for (let e = 0; e < edges.length && !done; e++) {
+          const E = edges[e];
+          if (!E) continue;
+          const ax = axis(E);
+          if (ax < 0) continue;
+          const len = Math.abs(nodes[E.v].p[ax] - nodes[E.u].p[ax]);
+          if (len > jog) continue;
+          // A jog has a line across it at both ends.
+          const across = (k) => inc[k].some((o) => o !== e && axis(edges[o]) === 1 - ax);
+          if (!across(E.u) || !across(E.v)) continue;
+          // Move the side with less line first.
+          const size = (k) => {
+            const seen = new Set(), todo = [k];
+            let len = 0;
+            while (todo.length) {
+              const j = todo.pop();
+              for (const o of inc[j]) {
+                if (seen.has(o) || axis(edges[o]) !== 1 - ax) continue;
+                seen.add(o);
+                len += Math.abs(nodes[edges[o].v].p[1 - ax] - nodes[edges[o].u].p[1 - ax]);
+                todo.push(edges[o].u, edges[o].v);
+              }
+            }
+            return len;
+          };
+          const order = size(E.u) <= size(E.v) ? [[E.u, E.v], [E.v, E.u]] : [[E.v, E.u], [E.u, E.v]];
+          for (const [m, keep] of order) {
+            if (shift(m, ax, nodes[keep].p[ax] - nodes[m].p[ax], inc)) { done = true; break; }
+          }
+        }
+        if (!done) break;
+        // Nodes that the move put on the same point become one; empty and
+        // double lines go.
+        for (let k = 0; k < nodes.length; k++) {
+          for (let o = k + 1; o < nodes.length; o++) {
+            if (Math.abs(nodes[k].p[0] - nodes[o].p[0]) < EPS && Math.abs(nodes[k].p[1] - nodes[o].p[1]) < EPS) {
+              nodes[o].fixed = nodes[o].fixed || nodes[k].fixed;
+              for (const E of edges) if (E) { if (E.u === k) E.u = o; if (E.v === k) E.v = o; }
+            }
+          }
+        }
+        const seen = new Map();
+        edges.forEach((E, e) => {
+          if (!E) return;
+          if (E.u === E.v) { edges[e] = null; return; }
+          const key = Math.min(E.u, E.v) * 1e6 + Math.max(E.u, E.v);
+          if (seen.has(key)) { const o = edges[seen.get(key)]; o.flow = Math.max(o.flow, E.flow); edges[e] = null; } else seen.set(key, e);
+        });
+      }
+      // Dead ends: the lines bring every part of the floor near a line. The
+      // end of a line that brings little floor near a line that no other
+      // line brings (a short tick after a turn, the way back of a hook, a
+      // line beside another line) goes back to the last point that does.
+      // The floor near a line: open cells that TRIM_SHARE of the frame of
+      // moves reaches. A route still follows the tree there. Not on a plan
+      // with a wing: the joins at the edge of the wing need the line ends.
+      if (!this.field.wing) {
+        const { fw, fh, open, pass } = this, n = fw * fh;
+        const reach = TRIM_SHARE * Math.max(fw, fh);
+        const cellsOf = (E) => {
+          const a = nodes[E.u].p, b = nodes[E.v].p, out = new Set();
+          const steps = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 3) + 1;
+          for (let k = 0; k <= steps; k++) {
+            const c = Math.floor(a[0] + ((b[0] - a[0]) * k) / steps), r = Math.floor(a[1] + ((b[1] - a[1]) * k) / steps);
+            if (c >= 0 && c < fw && r >= 0 && r < fh && open[r * fw + c]) out.add(r * fw + c);
+          }
+          return out;
+        };
+        const cache = new Map();
+        const cellsOfEdge = (E) => { if (!cache.has(E)) cache.set(E, [...cellsOf(E)]); return cache.get(E); };
+        const dist = new Int32Array(n).fill(-1), q = new Int32Array(n), seen = [];
+        // The cells that the sources reach in the box [c0, c1) x [r0, r1).
+        const near = (sources, c0, c1, r0, r1) => {
+          for (const i of seen) dist[i] = -1;
+          seen.length = 0;
+          let h = 0, t = 0;
+          for (const i of sources) if (dist[i] < 0) { dist[i] = 0; q[t++] = i; seen.push(i); }
+          while (h < t) {
+            const i = q[h++];
+            if (dist[i] >= reach) continue;
+            const r = Math.floor(i / fw), c = i - r * fw;
+            for (let m = 0; m < 4; m++) {
+              const nr = r + DR[m], nc = c + DC[m];
+              if (nr < r0 || nr >= r1 || nc < c0 || nc >= c1) continue;
+              const j = nr * fw + nc;
+              if (dist[j] >= 0 || !(m < 2 ? pass[i] & (m + 1) : pass[j] & (m - 1))) continue;
+              dist[j] = dist[i] + 1;
+              q[t++] = j;
+              seen.push(j);
+            }
+          }
+          return new Set(seen);
+        };
+        for (let changed = true, guard = 0; changed && guard < edges.length; guard++) {
+          changed = false;
+          const inc = at();
+          for (let k = 0; k < nodes.length; k++) {
+            if (inc[k].length !== 1 || nodes[k].fixed) continue;
+            const e = inc[k][0], E = edges[e];
+            if (!E || E.exit || E.link || E.bridge || E.join) continue;
+            const far = E.u === k ? nodes[E.v].p : nodes[E.u].p, tip = nodes[k].p;
+            // Only cells this near to the line matter, and only lines this near to them.
+            const pad = 2 * reach + 2;
+            const c0 = Math.max(0, Math.floor(Math.min(far[0], tip[0]) - pad)), c1 = Math.min(fw, Math.ceil(Math.max(far[0], tip[0]) + pad));
+            const r0 = Math.max(0, Math.floor(Math.min(far[1], tip[1]) - pad)), r1 = Math.min(fh, Math.ceil(Math.max(far[1], tip[1]) + pad));
+            const inBox = (i) => { const r = Math.floor(i / fw), c = i - r * fw; return c >= c0 && c < c1 && r >= r0 && r < r1; };
+            const others = [];
+            edges.forEach((F, f) => { if (F && f !== e) for (const i of cellsOfEdge(F)) if (inBox(i)) others.push(i); });
+            const byOthers = near(others, c0, c1, r0, r1);
+            const byMe = near(cellsOfEdge(E), c0, c1, r0, r1);
+            // The tip goes back to the farthest point on the line (from its
+            // other end) beside a cell that only this line brings near.
+            const dx = tip[0] - far[0], dy = tip[1] - far[1], L2 = dx * dx + dy * dy;
+            let keep = 0, own = 0;
+            for (const i of byMe) {
+              if (byOthers.has(i)) continue;
+              own++;
+              const x = (i % fw) + 0.5 - far[0], y = Math.floor(i / fw) + 0.5 - far[1];
+              keep = Math.max(keep, Math.min(1, (x * dx + y * dy) / L2));
+            }
+            const len = Math.sqrt(L2);
+            if (own < reach || keep * len < TRIM_LEFT) {
+              edges[e] = null;
+              changed = true;
+            } else if ((1 - keep) * len > 1) {
+              nodes[k].p = [far[0] + dx * keep, far[1] + dy * keep];
+              cache.delete(E);
+              changed = true;
+            }
+          }
+        }
+      }
+      // Straight runs: a node with one line in and one line out, on one
+      // straight line with the same flow and kind, is not a corner.
+      const inc = at();
+      for (let k = 0; k < nodes.length; k++) {
+        if (inc[k].length !== 2) continue;
+        const [x, y] = inc[k].map((e) => edges[e]);
+        const [i, o] = x.v === k && y.u === k ? [x, y] : y.v === k && x.u === k ? [y, x] : [null, null];
+        if (!i || i.flow !== o.flow || !!i.link !== !!o.link || !!i.exit !== !!o.exit || !!i.bridge !== !!o.bridge || !!i.join !== !!o.join) continue;
+        const a = nodes[i.u].p, b = nodes[k].p, c = nodes[o.v].p;
+        if (Math.abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])) > 1e-6) continue;
+        i.v = o.v;
+        edges[edges.indexOf(o)] = null;
+        inc[o.v] = inc[o.v].map((e) => (edges[e] === null ? edges.indexOf(i) : e));
+      }
+      return edges.filter(Boolean).map(({ u, v, ...rest }) => ({ ...rest, a: this.toPx(nodes[u].p), b: this.toPx(nodes[v].p) }));
+    }
+
+    // The lines of the map lose their jogs (schematize), the tree does not.
+    // A level or upright piece of a route that runs next to a parallel line
+    // of the map, a jog or less away, moves onto that line, when the route
+    // stays clear of walls. So the route runs on the drawn lines. exit: the
+    // exit of the route; tap: the pixel point where it starts.
+    snapToLines(pts, exit, tap = null) {
+      const s = this.field.scale;
+      // No corner that moves is in the door of another exit: the second exit
+      // is the one whose way keeps its corners out of the door of the first.
+      const door = this.field.doorRadius() / 2;
+      const byDoor = (q) => { const p = this.toPx(q); return this.field.exits.some((e, j) => j !== exit && Math.hypot(p[0] - e[0], p[1] - e[1]) < door); };
+      if (!this.frameLegs) {
+        this.frameLegs = this.tree(-1).legs.map((l) => [this.framePoint(l.a[0] * s, l.a[1] * s), this.framePoint(l.b[0] * s, l.b[1] * s)]);
+      }
+      const jog = JOG_SHARE * Math.max(this.fw, this.fh);
+      // The first point is there twice: the first piece can move too, and a
+      // short step joins it to the tap. It moves only by a small share of
+      // its length, so the way from the tap keeps its heading. The last
+      // piece stays: a step back to the way to the exit makes a hook (ux
+      // review).
+      const out = [pts[0], ...pts].map((q) => [...q]);
+      const last = out.length - 1;
+      // A run can wait for the run after it: passes until nothing moves.
+      for (let pass = 0, moves = 1; pass < SNAP_PASSES && moves; pass++) {
+      moves = 0;
+      for (let k = 1; k + 1 < last; ) {
+        const ax = Math.abs(out[k][1] - out[k + 1][1]) < 1e-6 ? 0 : Math.abs(out[k][0] - out[k + 1][0]) < 1e-6 ? 1 : -1;  // 0: along a
+        if (ax < 0) { k++; continue; }
+        // A straight run of the route (corners where lines of the map join
+        // are on it) moves as one piece (ux review).
+        let m = k + 1;
+        while (m + 1 < last && Math.abs(out[m + 1][1 - ax] - out[k][1 - ax]) < 1e-6) m++;
+        const run = out.slice(k, m + 1);
+        const lo = Math.min(...run.map((q) => q[ax])), hi = Math.max(...run.map((q) => q[ax]));
+        // The part of the run that lines at each offset run beside.
+        const beside = new Map();
+        for (const [a, b] of this.frameLegs) {
+          // Lines back from pixels are level or upright to a small error.
+          if (Math.abs(a[1 - ax] - b[1 - ax]) > 1e-3) continue;
+          const d = (a[1 - ax] + b[1 - ax]) / 2 - out[k][1 - ax];
+          if (Math.abs(d) < 1e-6 || Math.abs(d) > jog) continue;
+          const over = Math.min(hi, Math.max(a[ax], b[ax])) - Math.max(lo, Math.min(a[ax], b[ax]));
+          const key = Math.round(d * 1e3);
+          if (over > 0) beside.set(key, (beside.get(key) || 0) + over);
+        }
+        let best = 0;
+        for (const [key, over] of beside) {
+          if (over >= 0.5 * (hi - lo) && (!best || Math.abs(key) < Math.abs(best * 1e3))) best = key / 1e3;
+        }
+        const moved = run.map((q) => { const n = [...q]; n[1 - ax] += best; return n; });
+        // The pieces before and after only change their length: they must
+        // not turn round. A jog that the move closes goes. A piece along the
+        // run would slant: no move. A slanted piece stays slanted.
+        const keeps = (x, y, nx) => {
+          const along = Math.abs(y[ax] - x[ax]) > 1e-6, across = Math.abs(y[1 - ax] - x[1 - ax]) > 1e-6;
+          if (along) return across;
+          return !across || Math.abs(nx[1 - ax] - x[1 - ax]) < 1e-6 || Math.sign(nx[1 - ax] - x[1 - ax]) === Math.sign(y[1 - ax] - x[1 - ax]);
+        };
+        // The far end of the straight piece before and after the run: the
+        // points between are joins, which the move can pass.
+        let i0 = k - 1, i1 = m + 1;
+        while (i0 > 0 && Math.abs(out[i0 - 1][ax] - out[k][ax]) < 1e-6) i0--;
+        while (i1 < last && Math.abs(out[i1 + 1][ax] - out[m][ax]) < 1e-6) i1++;
+        // The bottom of a U moves out only when the U gets no deeper: a move
+        // may add one side step to the way, not two (ux review).
+        const longer = Math.abs(moved[0][1 - ax] - out[i0][1 - ax]) - Math.abs(out[k][1 - ax] - out[i0][1 - ax]) +
+          Math.abs(moved[moved.length - 1][1 - ax] - out[i1][1 - ax]) - Math.abs(out[m][1 - ax] - out[i1][1 - ax]);
+        const ok = best && longer <= Math.abs(best) + 1e-6 && !(k === 1 && Math.abs(best) > FIRST_SHIFT * (hi - lo)) &&
+          keeps(out[i0], out[k], moved[0]) && keeps(out[i1], out[m], moved[moved.length - 1]) &&
+          this.clearLine(out[k - 1], moved[0]) && this.clearLine(moved[0], moved[moved.length - 1]) &&
+          this.clearLine(moved[moved.length - 1], out[m + 1]) && !moved.some(byDoor) &&
+          // The route starts at the tap: a moved first run is clear from there.
+          !(k === 1 && tap && !this.field.clearPx(tap, this.toPx(moved[0])));
+        if (ok) { moved.forEach((q, j) => { out[k + j] = q; }); moves++; }
+        k = m;
+      }
+      }
+      const same = (x, y) => Math.abs(x[0] - y[0]) < 1e-6 && Math.abs(x[1] - y[1]) < 1e-6;
+      if (same(out[0], out[1])) out.splice(1, 1);
+      // A join that the move left outside its straight piece goes, so the
+      // route does not go forward and back on one line.
+      for (let j = 1; j + 1 < out.length; j++) {
+        const [x, y, z] = [out[j - 1], out[j], out[j + 1]];
+        for (const a of [0, 1]) {
+          if (Math.abs(x[a] - y[a]) < 1e-6 && Math.abs(z[a] - y[a]) < 1e-6 && (y[1 - a] - x[1 - a]) * (z[1 - a] - y[1 - a]) < -1e-9) {
+            out.splice(j, 1);
+            j = Math.max(0, j - 2);
+            break;
+          }
+        }
+      }
+      return out;
+    }
+
     // Fewer turns: from each corner (a frame cell), go to the farthest later
     // corner that one straight line or one right angle reaches, clear of
     // walls and no nearer to them than the way it replaces. A fixed corner
@@ -1204,8 +1603,10 @@ const HereOutRoute = (() => {
     // two main directions, as in a wing of a building at an angle. Corners
     // (frame points, fixed ones stay) of STAIR_LEGS or more short legs that
     // turn left and right in turn become one straight line, when that line
-    // is clear of walls and long (STAIR_RUN). One short step in a line, or a
-    // short staircase, stays: it is not a slanted corridor.
+    // is clear of walls and long (STAIR_RUN, half of it for STAIR_MANY legs
+    // or more). One short step in a line, or a short staircase, stays: it is
+    // not a slanted corridor. Steps of a cell or two (STAIR_FINE) are the
+    // cells of a slanted way: they become a line at a quarter of STAIR_RUN.
     // Each point that stays gets the index of its corner as a third item.
     unstair(corners, fixed) {
       const pts = corners.map((q, k) => [q[0], q[1], k]);
@@ -1217,14 +1618,15 @@ const HereOutRoute = (() => {
       const out = [pts[0]];
       let i = 0;
       while (i < pts.length - 1) {
-        let best = i + 1;
+        let best = i + 1, step = leg(i);
         for (let j = i + 2; j < pts.length; j++) {
           if (fixed[j - 1] || leg(j - 1) > longest || leg(i) > longest) break;
           if (j - 1 > i + 1 && turn(j - 1) !== -turn(j - 2)) break;
+          step = Math.max(step, leg(j - 1));
           if (j - i < STAIR_LEGS) continue;
           const dx = Math.abs(pts[j][0] - pts[i][0]), dy = Math.abs(pts[j][1] - pts[i][1]);
           if (Math.min(dx, dy) < STAIR_SLOPE * Math.max(dx, dy)) continue;
-          if (Math.hypot(dx, dy) < run) continue;
+          if (Math.hypot(dx, dy) < (step <= STAIR_FINE ? run / 4 : j - i >= STAIR_MANY ? run / 2 : run)) continue;
           if (this.clearLine(pts[i], pts[j])) best = j;
         }
         out.push(pts[best]);
@@ -1348,15 +1750,31 @@ const HereOutRoute = (() => {
       const keep = cells.filter((q, j) => j === 0 || j === cells.length - 1 ||
         q - cells[j - 1] !== cells[j + 1] - q || join(q));
       const [cs, fs] = this.squareUp(keep, keep.map((q, j) => j === 0 || j === keep.length - 1 || join(q)));
-      const corners = this.unstair(cs.map((q) => this.middle(q)), fs);
-      const pts = [[start[0], start[1]], ...corners.slice(1, -1).map((q) => this.toPx(q))];
-      pts.push(...this.toExit(end, k, cells.length > 1 ? cells[cells.length - 2] : -1));
-      // A point on a straight line between its two neighbours is not a corner.
-      const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6)
-        .filter((q, j, a) => j === 0 || j === a.length - 1 ||
-          Math.abs((q[0] - a[j - 1][0]) * (a[j + 1][1] - q[1]) - (q[1] - a[j - 1][1]) * (a[j + 1][0] - q[0])) > 1e-6);
-      if (out.length === 1) out.push([...this.field.exits[k]]);
-      return { points: out, exitIndex: k, onNetwork: true };
+      const pointsOf = (corners) => {
+        const pts = [[start[0], start[1]], ...corners.slice(1, -1).map((q) => this.toPx(q))];
+        // A slanted first piece is clear from the middle of the start cell:
+        // from the tap it can cross a wall (ux review). Then it starts there.
+        const slant = corners.length > 1 && Math.abs(corners[0][0] - corners[1][0]) > 1e-6 && Math.abs(corners[0][1] - corners[1][1]) > 1e-6;
+        if (slant && pts.length > 1 && !this.field.clearPx(pts[0], pts[1])) pts.splice(1, 0, this.toPx(corners[0]));
+        pts.push(...this.toExit(end, k, cells.length > 1 ? cells[cells.length - 2] : -1));
+        // A point on a straight line between its two neighbours is not a corner.
+        const out = pts.filter((q, j) => j === 0 || dist(q, pts[j - 1]) > 1e-6)
+          .filter((q, j, a) => j === 0 || j === a.length - 1 ||
+            Math.abs((q[0] - a[j - 1][0]) * (a[j + 1][1] - q[1]) - (q[1] - a[j - 1][1]) * (a[j + 1][0] - q[0])) > 1e-6);
+        if (out.length === 1) out.push([...this.field.exits[k]]);
+        return out;
+      };
+      const plain = pointsOf(this.unstair(cs.map((q) => this.middle(q)), fs));
+      // The route on the drawn lines, unless its steps then name a slight
+      // turn more: the steps leave out short side steps, and a right angle
+      // must not read as a slight turn (a11y review).
+      const onLines = pointsOf(this.snapToLines(this.unstair(cs.map((q) => this.middle(q)), fs), k, start));
+      // The first step starts the walk: its heading is not a turn.
+      const f = this.field, slight = (pts) => directions(pts, f.gw / f.scale, f.gh / f.scale).slice(1).filter((st) => st.turn && st.turn.startsWith("slight")).length;
+      const points = slight(onLines) > slight(plain) ? plain : onLines;
+      // length: of the way before the move onto the lines, so the move does
+      // not change which of two exits is nearer (ux review).
+      return { points, exitIndex: k, onNetwork: true, length: polyLength(plain) };
     }
   }
 

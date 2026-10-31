@@ -197,3 +197,19 @@ process.stdin.on("end", () => {
     assert 0.3 < floor < 0.6
     assert 0 < pocket < 0.05
     assert wall == 0
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_drawn_lines_lose_jogs_gaps_and_ticks():
+    out = json.loads(subprocess.run([NODE, str(Path(__file__).parent / "schematize_check.js")], capture_output=True,
+                                    text=True, check=True).stdout)
+    # The jog: every level line is on one row, and the upright lines are one straight line.
+    rows = {round(p[1], 3) for l in out["jog"] for p in (l["a"], l["b"]) if abs(l["a"][1] - l["b"][1]) < 1e-6}
+    assert len(rows) == 1, out["jog"]
+    assert all(abs(l["a"][0] - 50.5) < 1e-6 and abs(l["b"][0] - 50.5) < 1e-6 for l in out["jog"]
+               if abs(l["a"][0] - l["b"][0]) < 1e-6)
+    # The gap: the upright line now ends on the level line.
+    assert any(abs(l["a"][0] - 40.5) < 1e-6 and abs(l["b"][0] - 40.5) < 1e-6 and min(l["a"][1], l["b"][1]) == 30.5
+               for l in out["gap"]), out["gap"]
+    # The tick: two cells to the side at the end of a line goes.
+    assert all(abs(l["a"][1] - l["b"][1]) > 1e-6 or l["a"][1] < 60 for l in out["tick"]), out["tick"]
