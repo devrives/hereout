@@ -354,6 +354,7 @@ function draw() {
   if (!state) return;
   canvas.width = state.width;
   canvas.height = state.height;
+  if (typeof readingOn === "function" && readingOn()) return drawReading();  // reading.js
   if (routesOnly) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1039,6 +1040,7 @@ function showPlan(answer, focusResult, push) {
     layout();
     buildField();
     showCredit();
+    if (typeof showReading === "function") showReading();  // reading.js
     update();
     explain();
     if ($("stage").classList.contains("big")) centreOnStart();

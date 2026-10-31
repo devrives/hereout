@@ -241,3 +241,26 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
   .result { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: 28px; align-items: start; }
   .answer-col { margin-top: 0; }
 }
+
+/* What Muse Spark read (reading.js): a card under the answer, and a view of the plan. */
+.read h3 { margin: 0 0 8px; }
+#read-sum { margin: 0 0 10px; }
+.read-exits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.95rem; }
+.read-exits li { display: flex; align-items: flex-start; gap: 10px; }
+.read-exits .rk { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px; border-radius: 50%;
+  border: 2.5px solid #6a1b9a; background: #ffffff; color: #6a1b9a; font-size: 0.8rem; font-weight: 800; }
+.read-exits .rk.out { border-color: #5f6368; color: #5f6368; }
+.read-exits .rl { font-weight: 700; overflow-wrap: anywhere; }
+.read-exits .rf { color: var(--muted); }
+#show-read { width: 100%; margin: 0 0 12px; }
+#show-read[aria-pressed="true"] { border-color: #6a1b9a; box-shadow: inset 0 0 0 1.5px #6a1b9a; }
+#read-zoom { margin: 12px 0 8px; font-size: 0.9rem; }
+.read > p:last-child { margin: 0; font-size: 0.9rem; }
+.read-legend { display: none; }
+.result.reading .read-legend { display: flex; }
+.result.reading #legend { display: none; }
+.sw-rbox { height: 12px !important; background: #ffffff !important; outline: 2px dashed #6a1b9a; outline-offset: -2px; }
+.sw-rpt { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 3px solid #6a1b9a; }
+.sw-rzoom { height: 4px !important; background-image: linear-gradient(#6a1b9a, #6a1b9a); }
+.sw-rcode { height: 3px !important; background-image: repeating-linear-gradient(90deg, #111111 0 6px, transparent 6px 10px); }
+.sw-rdrop { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 3px solid #5f6368; }

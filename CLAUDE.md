@@ -7,7 +7,7 @@ HereOut reads a photo of a posted evacuation plan and shows the way out. The use
 ## Stack
 
 - Python 3, FastAPI, OpenCV, numpy. No GPU: the models run through the Baseten Model API.
-- Muse Spark reads the plan. SAM 3.1 segments marks when it helps.
+- Muse Spark reads the plan: the box of the floor plan and the exits. A second call checks suspect exits on zoomed crops. HereOut uses no other Meta model. The walls come from code (OpenCV, with RapidOCR text detection), and the browser finds the routes.
 - Code: `src/hereout/`. How the parts fit: `wiki/components/plan-reader.md`.
 
 ## Commands

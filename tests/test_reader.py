@@ -152,6 +152,11 @@ def test_zoom_moves_and_drops_suspect_exits(tmp_path):
     assert asked == [1, 2]
     assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(100, 100), (320, 200)]
     assert ledger.snapshot()["calls"] == 2
+    # The page shows what the check did with each exit of the main call.
+    assert reading.zoom == "done"
+    assert [t.get("zoom") for t in reading.trace] == [None, "moved", "dropped"]
+    assert [round(v) for v in reading.trace[1]["to"]] == [320, 200]
+    assert (round(reading.trace[1]["x"]), round(reading.trace[1]["y"])) == (300, 200)
 
 
 def test_no_zoom_after_a_slow_main_call(tmp_path, monkeypatch):
@@ -168,6 +173,7 @@ def test_no_zoom_after_a_slow_main_call(tmp_path, monkeypatch):
     client, _ = make_client(tmp_path, handler)
     reading = client.read_plan(plan_with_sign())
     assert len(asked) == 1 and len(reading.exits) == 1
+    assert reading.zoom == "skipped" and "zoom" not in reading.trace[0]
 
 
 def test_no_zoom_after_a_main_call_that_was_tried_again(tmp_path, monkeypatch):
@@ -209,4 +215,45 @@ def test_zoom_ignores_a_large_move(tmp_path):
     client, _ = make_client(tmp_path, handler)
     reading = client.read_plan(plan_with_sign())
     assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(300, 200)]
+    assert reading.trace[0]["zoom"] == "unchanged"
+
+
+def test_zoom_keeps_one_exit_when_it_drops_all(tmp_path):
+    first = '{"final_exits": [{"x": 750, "y": 667}]}'
+    zoom = '{"exits": [{"n": 1, "sheet": 2, "point": null}]}'
+
+    def handler(request):
+        content = json.loads(request.content)["messages"][0]["content"]
+        return httpx.Response(200, json=answer(zoom if len(content) > 2 else first))
+
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert len(reading.exits) == 1 and reading.trace[0]["zoom"] == "unchanged"
+
+
+def test_failed_zoom_keeps_the_points(tmp_path):
+    first = '{"final_exits": [{"x": 750, "y": 667}]}'
+
+    def handler(request):
+        content = json.loads(request.content)["messages"][0]["content"]
+        if len(content) > 2:
+            return httpx.Response(400)
+        return httpx.Response(200, json=answer(first))
+
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert reading.zoom == "failed" and len(reading.exits) == 1 and "zoom" not in reading.trace[0]
+
+
+def test_no_suspect_no_zoom(tmp_path):
+    first = '{"final_exits": [{"x": 250, "y": 333}]}'  # on the green sign
+    asked = []
+
+    def handler(request):
+        asked.append(1)
+        return httpx.Response(200, json=answer(first))
+
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert len(asked) == 1 and reading.zoom == "none"
 

@@ -80,6 +80,13 @@
         <span id="legend-other" hidden><i class="sw-other" aria-hidden="true"></i>Route if your exit is blocked</span>
         <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
       </div>
+      <div id="read-legend" class="legend read-legend">
+        <span id="rl-box"><i class="sw-rbox" aria-hidden="true"></i>Floor box, from Muse Spark</span>
+        <span><i class="sw-rpt" aria-hidden="true"></i>Exit point from Muse Spark, by exit number</span>
+        <span id="rl-zoom"><i class="sw-rzoom" aria-hidden="true"></i>Moved by the zoom check</span>
+        <span id="rl-code"><i class="sw-rcode" aria-hidden="true"></i>Moved by HereOut</span>
+        <span id="rl-drop"><i class="sw-rdrop" aria-hidden="true"></i>Not used</span>
+      </div>
       <p id="tap-hint" class="hint"><span id="tap-text">Tap any open spot on the plan to see the route from there.</span><span id="kbd-hint" hidden></span></p>
       <p id="marker-status" class="sr" role="status" aria-live="polite"></p>
     </div>
@@ -107,6 +114,14 @@
         <div id="exits" class="exits" role="group" aria-labelledby="exits-head"></div>
         <p id="exits-note" class="muted" hidden>Dashed: HereOut found no way from your spot to that exit.</p>
       </div>
+      <div id="read-wrap" class="card read" hidden>
+        <h3 id="read-head">What Muse Spark read</h3>
+        <p id="read-sum"></p>
+        <button id="show-read" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Show the reading on the plan</button>
+        <ol id="read-exits" class="read-exits" role="list" aria-labelledby="read-head"></ol>
+        <p id="read-zoom" class="muted"></p>
+        <p class="muted">Muse Spark's part ends here. HereOut's own code finds the walls in the ink (OpenCV, with RapidOCR text detection to skip lettering) and works out every route in your browser.</p>
+      </div>
       <button id="back-to-samples" type="button" hidden>Back to the samples</button>
       <p id="credit" class="credit" hidden></p>
     </div>
@@ -126,5 +141,6 @@
 <link id="network-worker" rel="prefetch" href="/static/network-worker.js">
 <script src="/static/route.js"></script>
 <script src="/static/app.js"></script>
+<script src="/static/reading.js"></script>
 </body>
 </html>

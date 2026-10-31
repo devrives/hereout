@@ -56,16 +56,22 @@ class Plan:
         to the building (ink_walls.place_exits)."""
         if self.text is None:
             self.text = text_boxes(self.image)
-        exits = drop_legend_exits(self.image, self.text, reading.exits, reading.plan_box)
+        given = list(reading.exits)
+        exits = drop_legend_exits(self.image, self.text, given, reading.plan_box)
         # Walls found in an aerial photo are roofs and trees: the page shows
         # the exits and points to the printed route.
         self.photo_map = is_photo_map(self.image, reading.plan_box)
         if self.photo_map:
             self.walls, self.soft, self.faded, self.drawn = np.ones(self.image.shape[:2], bool), None, None, {"lines": [], "blocks": []}
-            reading.exits = exits
-            return
-        self.walls, self.soft, self.drawn, placed, self.faded = find_walls(self.image, reading.plan_box, self.text, exits)
+            placed = [(e["x"], e["y"]) for e in exits]
+        else:
+            self.walls, self.soft, self.drawn, placed, self.faded = find_walls(self.image, reading.plan_box, self.text, exits)
         reading.exits = [{**e, "x": p[0], "y": p[1]} for e, p in zip(exits, placed) if p is not None]
+        # What the code did with each exit of the model, for the page (model_reading).
+        at = {id(e): p for e, p in zip(exits, placed)}
+        reading.given = given
+        reading.code = [{"drop": "legend"} if id(e) not in at else {"drop": "off"} if at[id(e)] is None
+                        else {"at": at[id(e)]} for e in given]
 
     def no_reading(self) -> None:
         """Find the walls with no reading, for marks that the user places by hand."""
@@ -119,7 +125,45 @@ def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None
            "photo_map": plan.photo_map}
     if reading:
         out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]
+        out["read"] = model_reading(reading)
     return out
+
+
+MOVED_PX = 1.0  # a smaller change of a point is rounding, not a move
+
+
+def model_reading(reading: Reading) -> dict:
+    """What the model gave and what came of it, for the page. For each exit of
+    the model: its label and point, the zoom check on it ("zoom", "zoom_at"),
+    and then either the number of the exit in "exits" ("exit", with
+    "placed_at" when the code moved it) or why the code dropped it ("drop").
+    "zoom" of the whole reading is None for a saved reading: no record of the check."""
+    given = reading.given if reading.given is not None else reading.exits
+    code = reading.code if reading.code is not None else [{"at": (e["x"], e["y"])} for e in given]
+    trace = reading.trace if reading.trace is not None else [dict(e) for e in given]
+    pt = lambda p: [round(p[0]), round(p[1])]
+    rows, j, n = [], 0, 0
+    for t in trace:
+        row = {"label": str(t.get("label", "")), "at": pt((t["x"], t["y"]))}
+        if t.get("zoom"):
+            row["zoom"] = t["zoom"]
+        last = (t["x"], t["y"])
+        if t.get("zoom") == "moved":
+            last = t["to"]
+            row["zoom_at"] = pt(last)
+        if t.get("zoom") != "dropped" and j < len(code):
+            c = code[j]
+            j += 1
+            if "drop" in c:
+                row["drop"] = c["drop"]
+            else:
+                row["exit"] = n
+                n += 1
+                if np.hypot(c["at"][0] - last[0], c["at"][1] - last[1]) > MOVED_PX:
+                    row["placed_at"] = pt(c["at"])
+        rows.append(row)
+    box = [round(v) for v in reading.plan_box] if reading.plan_box else None
+    return {"box": box, "zoom": reading.zoom, "exits": rows}
 
 
 def read_marks(plan: Plan, client: ModelClient | None) -> tuple[Reading | None, str | None]:
