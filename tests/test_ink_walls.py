@@ -5,7 +5,7 @@ import numpy as np
 
 from hereout import ink_walls as iw
 from hereout.ink_walls import (beyond_exits, door_arcs, faded_ends, footprints, ink_walls, legend_exits, outdoor_areas,
-                                place_exits, room_doors, split_strokes)
+                                outdoor_ways, place_exits, room_doors, split_strokes)
 from hereout.photo_map import is_photo_map
 from hereout.legend import drop_legend_exits
 from hereout.route import Field, NoRoute, blocked_grid, soft_grid
@@ -266,6 +266,41 @@ def test_area_beyond_the_exits_is_outside():
     inside[400:473, :] = True
     out = beyond_exits(blocked, inside, [(300, 403), (700, 403)])
     assert out[440, 500] and not out[200, 500]
+
+
+def street_exit(door_x):
+    """A hall with an 8 px wall and a door 40 px wide in it at door_x. The
+    exit mark is on the street, 60 px below the bottom wall and to the right."""
+    walls = np.zeros((640, 640), bool)
+    walls[100:400, 100:540] = True
+    walls[108:392, 108:532] = False
+    if door_x[1] == 400:
+        walls[392:400, door_x[0]:door_x[0] + 40] = False
+    else:
+        walls[100:108, door_x[0]:door_x[0] + 40] = False
+    paper = np.ones_like(walls)
+    paper[100:400, 100:540] = False
+    hard = walls | paper
+    rows, cols = np.mgrid[:640, :640]
+    hard &= (rows - 460) ** 2 + (cols - 360) ** 2 > int(iw.EXIT_ROOM * 640) ** 2
+    return hard, walls, paper
+
+
+def test_exit_on_the_street_gets_a_way_to_the_door():
+    hard, walls, paper = street_exit((300, 400))
+    soft = np.zeros_like(hard)
+    try:
+        route(hard, soft, (320, 250), (360, 460))
+        assert False, "the exit mark is on an island"
+    except NoRoute:
+        pass
+    way = outdoor_ways(hard, walls, [(360, 460)])
+    assert route(hard & ~(way & paper), soft, (320, 250), (360, 460)).exit_index == 0
+
+
+def test_no_way_round_the_building_to_a_far_door():
+    hard, walls, paper = street_exit((300, 100))
+    assert not outdoor_ways(hard, walls, [(360, 460)]).any()
 
 
 def test_closed_room_gets_a_door():

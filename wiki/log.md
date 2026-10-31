@@ -289,3 +289,11 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/clean-way-lines.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-30 and 2026-10-31, the gallery check, the ground truth, the code and the tests.
+
+## [2026-10-31] ingest | A walk outside from an exit mark to its door
+
+- Added `decisions/exit-walk-outside.md`: the count of areas with no way out, the walk from an exit mark on the street and its limits.
+- The same page has the colour edge rule that failed.
+- Updated `decisions/faded-wall-ends.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-31, the gallery check, the ground truth, the code and the tests.

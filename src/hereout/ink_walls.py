@@ -76,6 +76,8 @@ OUT_SHARE = 0.25            # and along this share of its border, is outside the
 EXIT_OFF = 0.1              # share of the image: an exit farther than this from every drawing is not on the plan
 MINOR_DRAWING = 0.3         # share of the largest footprint: a smaller one is a minor drawing
 EXIT_MOVE = 0.1             # share of the image: an exit outside the building moves to the building this close
+EXIT_WALK = 0.25            # share of the image: the longest walk outside from an exit mark to the door of the building
+WALK_DETOUR = 2.0           # that walk is at most this many times the straight distance to the building
 OUT_DEPTH = 0.15            # share of the image: the deepest that an area beyond the exits goes from the edge of the drawing
 ROOM_MIN = 0.0004           # share of the image: a closed area this large is a room and gets a door
 ROOM_WIDTH = 0.025          # share of the image: the mean width of a room that gets a door
@@ -595,8 +597,10 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None)
         disc = np.zeros(ink.shape, np.uint8)
         for x, y in (p for p in placed if p is not None):
             cv2.circle(disc, (round(x), round(y)), max(3, int(EXIT_ROOM * side)), 1, -1)
+        drawn = (hard | soft) & ~box_out
         hard |= (~fp | out) & (disc == 0)
         soft &= ~hard
+        paper = (~fp | out | box_out) & ~drawn
     cut = np.zeros(ink.shape, np.uint8)
     width = max(3, int(DOOR_CUT * side))
     for (cx, cy), e in door_openings(thin, core, ink):
@@ -605,6 +609,8 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None)
     hard, soft = hard & ~opened, soft & ~opened & ~hard
     kept = [p for p in placed if p is not None]
     hard &= ~exit_doors(hard, kept)
+    if fp is not None:
+        hard &= ~(outdoor_ways(hard, (hard | soft) & ~paper, kept) & paper)
     hard &= ~room_doors(hard, kept, None if fp is None else ~fp | box_out)
     # Last: a faded end closes none of the doors and areas found above.
     faded = faded_ends(core, ink, stroke_width(ink, plan_box), hard) & ~box_out & ~hard
@@ -850,6 +856,72 @@ def place_exits(exits: list, fp: np.ndarray, blocked: np.ndarray) -> list:
     if exits and all(p is None for p in out):
         return [(float(x), float(y)) for x, y in exits]
     return out
+
+
+def outdoor_ways(hard: np.ndarray, bar: np.ndarray, exits) -> np.ndarray:
+    """A way over the paper outside the building, from each exit that no
+    large open area reaches to the nearest one. An exit mark often sits on
+    the pavement at the head of an arrow, away from its door; the way goes
+    round the lines and through the door gap.
+    bar: the drawn lines, which the way never crosses."""
+    out = np.zeros(hard.shape, np.uint8)
+    if not len(exits):
+        return out > 0
+    shut, scale = blocked_grid(hard)
+    n, lab = cv2.connectedComponents((~shut).astype(np.uint8), connectivity=4)
+    size = np.bincount(lab[~shut], minlength=n)
+    big = size >= BIG_AREA * max(1, size[1:].sum())
+    big[0] = False
+    walk = ~blocked_grid(bar)[0]
+    gh, gw = shut.shape
+    to_big = cv2.distanceTransform((~big[lab]).astype(np.uint8), cv2.DIST_L2, 5)
+    width = int(np.ceil(1 / scale)) + 2
+    reach = max(1, int(EXIT_ROOM * GRID_SIDE))
+    rows, cols = np.mgrid[:gh, :gw]
+    dist2 = [(rows - y * scale) ** 2 + (cols - x * scale) ** 2 for x, y in exits]
+    inside = [big[lab[d <= reach ** 2]].any() for d in dist2]
+    # A walk past an exit of the building, or to a door just by one, ends at
+    # that exit, not in the building.
+    free, by_exit = walk.copy(), np.zeros(walk.shape, bool)
+    for d, ok in zip(dist2, inside):
+        if ok:
+            free &= d > (reach + 3) ** 2
+            by_exit |= d <= (2 * reach) ** 2
+    for d, ok in zip(dist2, inside):
+        if ok:
+            continue
+        # The walk starts on the paper round the mark (the mark itself is ink).
+        near = d <= reach ** 2
+        start = list(zip(*np.nonzero(near & free)))
+        if not start:
+            continue
+        # A way round the building to another door is no way to this exit.
+        most = min(int(EXIT_WALK * GRID_SIDE), int(WALK_DETOUR * min(to_big[p] for p in start)) + reach)
+        came = {p: None for p in start}
+        todo, end = start, None
+        for _ in range(most):
+            nxt = []
+            for p in todo:
+                for q in ((p[0] + 1, p[1]), (p[0] - 1, p[1]), (p[0], p[1] + 1), (p[0], p[1] - 1)):
+                    if 0 <= q[0] < gh and 0 <= q[1] < gw and q not in came and free[q]:
+                        came[q] = p
+                        if big[lab[q]]:
+                            end = q
+                            break
+                        nxt.append(q)
+                if end:
+                    break
+            if end or not nxt:
+                break
+            todo = nxt
+        if end and by_exit[end]:
+            continue
+        while end and came[end]:
+            a, b = end, came[end]
+            cv2.line(out, (round((a[1] + 0.5) / scale), round((a[0] + 0.5) / scale)),
+                     (round((b[1] + 0.5) / scale), round((b[0] + 0.5) / scale)), 1, width)
+            end = b
+    return out > 0
 
 
 def room_doors(hard: np.ndarray, exits, edge: np.ndarray | None) -> np.ndarray:

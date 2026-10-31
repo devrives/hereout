@@ -51,3 +51,4 @@ sources:
 - The lines no longer cross the partitions of JP-commons_000066 and IE-commons_000146. Each office of JP-commons_000066 gets a straight line from its door.
 - Room 150 of IE-commons_000146 has no way out now. Its door had a closed sill before this change, and its only way was the gap at the partition end.
 - Open: on RU-commons_000260 the printed green route lines are soft ink. Their colour is weak and they join the walls, so a colour rule does not find them.
+- The exit marks on the street are in [A walk outside from an exit mark to its door](exit-walk-outside.md).
