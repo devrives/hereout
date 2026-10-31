@@ -20,4 +20,13 @@ const out = {
   // A short tick at the end of a line, towards a wall near the line, goes.
   tick: net.schematize([leg([10.5, 50.5], [90.5, 50.5]), leg([50.5, 50.5], [50.5, 80.5]), leg([52.5, 80.5], [50.5, 80.5])]),
 };
+// A jog where neither line can move onto the other: a wall below the left
+// line and a wall above the right line, each one cell from the other line.
+// Both lines move to the row between them.
+const W2 = 200, both = new Uint8Array(W2 * W2);
+for (let i = 0; i < W2; i++) { both[i] = both[(W2 - 1) * W2 + i] = 1; both[i * W2] = both[i * W2 + W2 - 1] = 1; }
+for (let x = 12; x < 29; x++) both[46 * W2 + x] = 1;
+for (let x = 72; x < 89; x++) both[38 * W2 + x] = 1;
+const net2 = new R.Field(both, W2, W2, 1, [[50, 1]]).network();
+out.both = net2.schematize([leg([10.5, 40.5], [50.5, 40.5]), leg([50.5, 44.5], [90.5, 44.5]), leg([50.5, 20.5], [50.5, 70.5])]);
 process.stdout.write(JSON.stringify(out));

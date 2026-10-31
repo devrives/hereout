@@ -304,3 +304,12 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/exit-walk-outside.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-31, the gallery check, the a11y review, the code and the tests.
+
+## [2026-10-31] ingest | Links start on the drawn lines
+
+- Added `decisions/links-on-drawn-lines.md`: links from the drawn lines, short links at doors side by side, jog moves of both lines.
+- The same page has the link rule for exits with lines that failed.
+- The same page has the steps that split where a side step starts, and the arrow and step number places.
+- Updated `decisions/step-turns-main-leg.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-31, the gallery check, the code and the tests.

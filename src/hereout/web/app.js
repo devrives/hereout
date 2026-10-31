@@ -40,6 +40,9 @@ const ARROW_SIZE = 1.1; // plan units: half the width of an arrow head
 const OTHER_TRIES = 3;  // exits tried for the second way out
 const FLOOR_SHARE = 0.05; // an open area with this share of the open cells is a floor, not a pocket of paper
 const ARROW_CLEAR = 2;  // plan units: no arrow this close to a route
+const ARROW_APART = 4;  // arrow sizes: no head this close to another head (two heads meet at a split or join)
+const ARROW_KEEP = 5;   // plan units: a line this long keeps one head, also near other heads
+const ARROW_START = 8;  // plan units: no arrow this close to the start, where it can point away from the route
 const WALL = "#7a818b";  // lighter than the ways out, so a way and a wall differ in more than hue
 const BLOCK = "#d3d6db";  // a filled area of the plan, in Routes only
 const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contrast over a photo
@@ -378,8 +381,11 @@ function drawArrows(unit) {
   const net = f._network || (f.waitForNetwork ? null : f.network());
   if (!net) return;
   const routes = [view.route, view.backup].filter(Boolean).map((r) => r.points);
-  const clearOfRoutes = (x, y) => routes.every((pts) => pts.slice(1).every((q, i) =>
-    segmentGap([x, y], pts[i], q) > unit * ARROW_CLEAR));
+  const here = state.start;
+  const clear = (x, y) => routes.every((pts) => pts.slice(1).every((q, i) =>
+    segmentGap([x, y], pts[i], q) > unit * ARROW_CLEAR)) &&
+    !(here && Math.hypot(x - here[0], y - here[1]) < unit * ARROW_START);
+  const heads = [];
   // The heads are wider than the line and filled in its colour with a white
   // edge, so their shape shows on a phone and over a photo.
   const gap = unit * ARROW_GAP;
@@ -395,18 +401,37 @@ function drawArrows(unit) {
     const len = Math.hypot(dx, dy);
     if (len < gap * 0.6) continue;
     const ux = dx / len, uy = dy / len;
-    for (let t = len % gap / 2 || gap / 2; t < len; t += gap) {
-      const x = leg.a[0] + ux * (t + s / 2), y = leg.a[1] + uy * (t + s / 2);
-      if (!clearOfRoutes(x, y)) continue;
+    const head = (x, y) => {
+      heads.push([x, y]);
       ctx.moveTo(x, y);
       ctx.lineTo(x - ux * s * 1.4 - uy * s, y - uy * s * 1.4 + ux * s);
       ctx.lineTo(x - ux * s * 1.4 + uy * s, y - uy * s * 1.4 - ux * s);
       ctx.closePath();
+    };
+    const near = (x, y) => Math.min(Infinity, ...heads.map(([hx, hy]) => Math.hypot(x - hx, y - hy)));
+    let placed = 0, best = null;
+    for (let t0 = len % gap / 2 || gap / 2; t0 < len; t0 += gap) {
+      // A head too near another head slides on along its line (ux review):
+      // a line beside another line keeps its heads.
+      for (const t of [0, 1, -1, 2, -2, 3].map((k) => t0 + (k * gap) / 4).filter((t) => t >= 0 && t < len)) {
+        const x = leg.a[0] + ux * (t + s / 2), y = leg.a[1] + uy * (t + s / 2);
+        if (!clear(x, y)) break;
+        if (!best || near(x, y) > near(best[0], best[1])) best = [x, y];
+        if (near(x, y) < s * ARROW_APART) continue;
+        head(x, y);
+        placed++;
+        break;
+      }
     }
+    // A long line keeps one head, at its place farthest from the others.
+    if (!placed && best && len >= unit * ARROW_KEEP) head(best[0], best[1]);
   }
   ctx.stroke();
   ctx.fill();
 }
+
+// Smooth scrolling, unless the user asks for less motion.
+const smoothScroll = () => (matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
 // The distance from point p to segment a-b.
 function segmentGap(p, a, b) {
@@ -478,15 +503,32 @@ function drawMarks(unit) {
       ctx.stroke();
     }
   }
+  let you = null;
   if (here) {
     const r = unit * 2.4;
     hereMark(here[0], here[1], r);
     const at = youLabelAt(here, r, unit * 2.2);
     label("YOU", at.x, at.y, r, at.baseline, at.align);
+    you = [Math.min(at.box[0], here[0] - r), Math.min(at.box[1], here[1] - r), Math.max(at.box[2], here[0] + r), Math.max(at.box[3], here[1] + r)];
   }
   if (step && step.kind === "walk") {
-    const mid = longestMiddle(step.path);
-    label(String(selected + 1), mid[0], mid[1] - unit * 2.5, unit * 2.4, "bottom");
+    // The number goes above the middle of the longest leg, else below, right
+    // or left of it, where it covers neither YOU (a11y review) nor an exit
+    // mark (ux review). With no such place, step 1 has no number: YOU marks
+    // where it starts.
+    const [x, y] = longestMiddle(step.path), r = unit * 2.4, gap = unit * 2.5;
+    ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
+    const w = ctx.measureText(String(selected + 1)).width, h = r * 1.6, pad = r / 3;
+    const marks = state.exits.map((e) => [e.x - unit * 2.2, e.y - unit * 2.2, e.x + unit * 2.2, e.y + unit * 2.2]);
+    const covers = ([x0, y0, x1, y1]) => [you, ...marks].some((m) => m && x0 - pad < m[2] && x1 + pad > m[0] && y0 - pad < m[3] && y1 + pad > m[1]);
+    const places = [
+      { x, y: y - gap, baseline: "bottom", align: "center", box: [x - w / 2, y - gap - h, x + w / 2, y - gap] },
+      { x, y: y + gap, baseline: "top", align: "center", box: [x - w / 2, y + gap, x + w / 2, y + gap + h] },
+      { x: x + gap, y, baseline: "middle", align: "left", box: [x + gap, y - h / 2, x + gap + w, y + h / 2] },
+      { x: x - gap, y, baseline: "middle", align: "right", box: [x - gap - w, y - h / 2, x - gap, y + h / 2] },
+    ];
+    const at = places.find((p) => !covers(p.box)) || (selected > 0 ? places[0] : null);
+    if (at) label(String(selected + 1), at.x, at.y, r, at.baseline, at.align);
   }
 }
 
@@ -627,7 +669,7 @@ function select(i) {
   // On a phone the plan is above the steps: bring the leg into the window.
   const box = canvas.getBoundingClientRect();
   const y = box.top + mid[1] / state.height * box.height;
-  if (y < 0 || y > window.innerHeight) $("stage").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (y < 0 || y > window.innerHeight) $("stage").scrollIntoView({ block: "nearest", behavior: smoothScroll() });
 }
 
 // Model labels are often all "Exit", so the number tells the exits apart.
@@ -721,8 +763,9 @@ function showAnswer() {
 // Find the route again and show everything that depends on it.
 function update() {
   findRoute();
-  draw();
+  // The steps first: they clear the step selection that draw() shows (a11y review).
   showSteps();
+  draw();
   showBackup();
   showExits();
   showAnswer();
@@ -874,7 +917,7 @@ $("fix").addEventListener("click", (ev) => {
   // A click from Enter or Space has detail 0: go on with the keyboard.
   if (ev.detail === 0) canvas.focus();
   // The exit is marked on the plan: on a phone it is above this button.
-  else if (narrow()) $("stage").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  else if (narrow()) $("stage").scrollIntoView({ block: "nearest", behavior: smoothScroll() });
 });
 
 // The user's exit takes the place of the exits the model found. After a tap

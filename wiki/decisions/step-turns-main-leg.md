@@ -45,4 +45,5 @@ sources:
 - Python and JS give the same words on all 2925 routes.
 - DE-commons_000024 and IT-web_more_000013 have 2 pieces of lines, before 3. Against the third round, the gallery has pieces 272 to 270, bends 4066 to 4067, jogs 855 to 854 and dead ends 1570 to 1569. The routes run on the lines for 0.802 of their length, as before.
 - Open: slanted corridors still get steps of lines (RU-commons_000206, RU-commons_000230). A fix must keep the routes on the lines and the turn words right.
-- Open: a walk with no way of 0.35 of its length (a fine staircase) still takes the heading of its straight line. The first step does not name a side step.
+- The next round, on pieces of lines and jogs: [Links start on the drawn lines](links-on-drawn-lines.md).
+- Open: a walk with no way of 0.35 of its length (a fine staircase) still takes the heading of its straight line.

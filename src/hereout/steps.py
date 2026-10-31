@@ -114,6 +114,33 @@ def _side_step(a, b, head: float, plan_size: float) -> str | None:
     return "right" if right > 0 else "left"
 
 
+def _detour(points, i: int, j: int, head: float, plan_size: float) -> int | None:
+    """The route point where a walk from point i to point j must split, when
+    it goes more than SIDE_STEP_SHARE of the plan to one side of its start
+    line and comes back: the last point out on that side. Else None."""
+    h, lim = math.radians(head), SIDE_STEP_SHARE * plan_size
+    a = points[i]
+    off = [(p[0] - a[0]) * math.cos(h) + (p[1] - a[1]) * math.sin(h) for p in points[i:j + 1]]
+    far = max(off, key=abs)
+    if abs(off[-1]) > lim or abs(far) <= lim:
+        return None
+    return i + max(k for k, o in enumerate(off) if o * far > 0 and abs(o) > lim)
+
+
+def _side_move(points, i: int, j: int, head: float, plan_size: float) -> int | None:
+    """The route point where the side step of a walk from point i to point j
+    starts: the last point from which the walk still goes more than
+    SIDE_STEP_SHARE of the plan to the side where it ends, so the walk after
+    it names the side step (two small jogs count as one). None when the walk
+    has no side step."""
+    h, lim = math.radians(head), SIDE_STEP_SHARE * plan_size
+    a = points[i]
+    off = [(p[0] - a[0]) * math.cos(h) + (p[1] - a[1]) * math.sin(h) for p in points[i:j + 1]]
+    if abs(off[-1]) <= lim:
+        return None
+    return i + max(k for k, o in enumerate(off) if abs(off[-1] - o) > lim)
+
+
 def _turn(delta: float) -> str:
     delta = (delta + 180) % 360 - 180
     a = abs(delta)
@@ -151,8 +178,15 @@ def directions(points: list[tuple[float, float]], plan_w: float, plan_h: float) 
         out = [idx[0]]
         for a, b in zip(idx, idx[1:]):
             w = _walk_headings(points, a, b)
-            if len(w) == 3 and a < w[2] < b:
-                out.append(w[2])
+            # A walk that steps aside and back (round a wall) splits where it
+            # is farthest out, so both side steps get words (a11y review).
+            # A walk with a side step splits where the side step starts, so
+            # the words give it in its place (ux and a11y reviews).
+            split = w[2] if len(w) == 3 else _detour(points, a, b, w[0], plan_size)
+            if split is None:
+                split = _side_move(points, a, b, w[0], plan_size)
+            if split is not None and a < split < b:
+                out.append(split)
             out.append(b)
         if len(out) == len(idx):
             break
@@ -164,11 +198,16 @@ def directions(points: list[tuple[float, float]], plan_w: float, plan_h: float) 
         head, end = _walk_headings(points, idx[i], idx[i + 1])[:2]
         turn = _turn(head - prev)
         length = _length(math.dist(a, b), plan_size)
+        # A side step is at the start of its walk (the walk split there). The
+        # first step names it in the plan frame, the others for the walker.
+        aside = _side_step(a, b, head, plan_size)
         if i == 0:
             text = f"Start toward the {_plan_side(head)} of the plan and walk a {length} way."
+            if aside:
+                text = (f"Move over toward the {_plan_side(head + (90 if aside == 'right' else -90))} of the plan, "
+                        f"then start toward the {_plan_side(head)} of the plan and walk a {length} way.")
         elif turn == "straight":
-            side = _side_step(a, b, head, plan_size)
-            text = (f"Step {side}, then keep going straight for a {length} way." if side
+            text = (f"Step {aside}, then keep going straight for a {length} way." if aside
                     else f"Keep going straight for a {length} way.")
         elif turn == "back":
             # The side step comes before the turn: its side is that of the way the walker still faces.
@@ -176,7 +215,8 @@ def directions(points: list[tuple[float, float]], plan_w: float, plan_h: float) 
             text = (f"Step {side}, then turn around and go back a {length} way." if side
                     else f"Turn around and go back a {length} way.")
         else:
-            text = f"Turn {turn.replace('slight', 'slightly')} and walk a {length} way."
+            text = (f"Turn {turn.replace('slight', 'slightly')}, step {aside}, then walk a {length} way." if aside
+                    else f"Turn {turn.replace('slight', 'slightly')} and walk a {length} way.")
         steps.append({"kind": "walk", "turn": turn, "length": length, "text": text,
                       "from": a, "to": b, "path": points[idx[i]:idx[i + 1] + 1]})
         prev = end

@@ -100,6 +100,35 @@ def test_directions_side_step_keeps_the_right_angle():
     assert walks[1]["path"] == [(250, 250), (250, 265), (275, 265)]
 
 
+def test_directions_side_step_in_its_place():
+    """A side step inside a walk gets words in its place (a11y and ux
+    reviews): the walk splits where the side step starts. A side step at the
+    start of the first walk comes first, in the plan frame."""
+    walks = [s["text"] for s in directions([(500, 50), (500, 400), (800, 400), (800, 440), (1100, 440)], 1200, 1200)
+             if s["kind"] == "walk"]
+    assert walks[1:] == ["Turn left and walk a medium way.", "Step right, then keep going straight for a medium way."]
+    walks = [s["text"] for s in directions([(943, 333), (898, 333), (898, 643)], 1200, 1200) if s["kind"] == "walk"]
+    assert walks == ["Move over toward the left of the plan, then start toward the bottom of the plan and walk a medium way."]
+    # Two small jogs to one side, each under the limit, are one side step (a11y review).
+    walks = [s["text"] for s in directions([(356, 667), (338, 563), (313, 563), (313, 378), (296, 378), (296, 200)],
+                                           1600, 1200) if s["kind"] == "walk"]
+    assert walks[1:] == ["Step left, then keep going straight for a medium way."]
+    # Past the corner and back: facing east after the turn, the step is to the left (up).
+    walks = [s["text"] for s in directions([(500, 50), (500, 400), (500, 360), (1000, 360)], 1200, 1200)
+             if s["kind"] == "walk"]
+    assert walks[1:] == ["Turn left, step left, then walk a medium way."]
+
+
+def test_directions_detour_out_and_back_gets_two_side_steps():
+    """A straight walk that steps aside round a wall and back ends on its start
+    line: it splits where it is farthest out, so the words name both side steps
+    (a11y review)."""
+    pts = [(1500, 300), (1244, 300), (1244, 355), (1009, 355), (1009, 305), (769, 305), (769, 600)]
+    walks = [s["text"] for s in directions(pts, 1600, 1200) if s["kind"] == "walk"]
+    assert walks[1:3] == ["Step left, then keep going straight for a medium way.",
+                          "Step right, then keep going straight for a medium way."]
+
+
 def test_directions_side_step_before_a_turn_back():
     """Down, then a side step to the plan left and back up: the walker steps
     to their right (facing down), then turns around."""

@@ -213,3 +213,49 @@ def test_drawn_lines_lose_jogs_gaps_and_ticks():
                for l in out["gap"]), out["gap"]
     # The tick: two cells to the side at the end of a line goes.
     assert all(abs(l["a"][1] - l["b"][1]) > 1e-6 or l["a"][1] < 60 for l in out["tick"]), out["tick"]
+    # Both sides: the level lines meet on one row between the two.
+    rows = {round(p[1], 3) for l in out["both"] for p in (l["a"], l["b"]) if abs(l["a"][1] - l["b"][1]) < 1e-6}
+    assert len(rows) == 1 and 40.5 < rows.pop() < 44.5, out["both"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_exits_with_doors_side_by_side_join_the_lines():
+    """A hall with two exit marks side by side on its left wall and one on the
+    right. The growths from the two left doors touch at once. Both marks get a
+    line, and all lines are one piece."""
+    import math
+    import numpy as np
+    from hereout.route import grid_payload
+    walls = np.ones((800, 1600), bool)
+    walls[100:700, 100:1500] = False                    # the hall
+    walls[100:700, 700:720] = True                      # a wall across it
+    walls[380:420, 700:720] = False                     # its door
+    case = {"grid": grid_payload(walls), "exits": [[105, 380], [105, 420], [1495, 400]]}
+    js = r"""
+const R = require(process.argv[1]);
+let input = ""; process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const c = JSON.parse(input), g = c.grid;
+  const f = new R.Field(R.decodeGrid(g), g.w, g.h, g.scale, c.exits, [], null, g.axes);
+  process.stdout.write(JSON.stringify(f.network().legs.map((l) => [l.a, l.b])));
+});"""
+    legs = json.loads(subprocess.run([NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                     input=json.dumps(case), capture_output=True, text=True, check=True).stdout)
+    ends = [p for l in legs for p in l]
+    assert all(any(math.dist(e, p) < 1 for p in ends) for e in case["exits"]), legs
+
+    def gap(p, a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy or 1)))
+        return math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1])
+    piece = list(range(len(legs)))
+
+    def top(k):
+        while piece[k] != k:
+            k = piece[k]
+        return k
+    for i, (a, b) in enumerate(legs):
+        for j, (c, d) in enumerate(legs[:i]):
+            if min(gap(a, c, d), gap(b, c, d), gap(c, a, b), gap(d, a, b)) < 1:
+                piece[top(i)] = top(j)
+    assert len({top(k) for k in range(len(legs))}) == 1, legs

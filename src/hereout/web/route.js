@@ -569,6 +569,7 @@ const HereOutRoute = (() => {
   const DR = [0, 1, 0, -1], DC = [1, 0, -1, 0];  // the four moves: right, down, left, up
   const JOG_SHARE = 0.025;      // share of the frame: a shorter side step between two parallel lines goes
   const JOG_CLEAR = 0.5;        // a line that moves keeps this share of its distance to the walls
+  const JOG_STEP = 0.5;         // cells: the places between the two lines of a jog that both may move to
   const GAP_CELLS = 3;          // cells: a line that ends nearer than this to another line joins it
   const TRIM_SHARE = 0.04;      // share of the frame: the floor this near (in moves) to a line is near it
   const TRIM_LEFT = 2;          // cells: a dead end shorter than this after a trim goes
@@ -1007,6 +1008,7 @@ const HereOutRoute = (() => {
       const stub = Math.round(STUB_SHARE * Math.max(this.fw, this.fh));
       const reach = REACH_SHARE * Math.max(this.fw, this.fh);
       const drawn = new Uint8Array(n);
+      const lineOwner = new Int32Array(n).fill(-1);  // the exit of the line over each cell, or -1
       for (let cells of branches) {
         // A short line that no other line joins is not drawn.
         if (cells.length < MIN_SPUR && below[cells[1]] === 1 && tnext[cells[cells.length - 1]] >= 0) continue;
@@ -1055,6 +1057,7 @@ const HereOutRoute = (() => {
         const pts = this.unstair(cs.map((c) => this.middle(c)), fs);
         for (let k = 0; k + 1 < pts.length; k++) {
           legs.push({ a: this.toPx(pts[k]), b: this.toPx(pts[k + 1]), flow: flow[pts[k + 1][2]] });
+          this.cellsUnder(pts[k], pts[k + 1], (i) => { if (lineOwner[i] < 0) lineOwner[i] = towner[cells[cells.length - 1]]; });
         }
         const end = cells[cells.length - 1];
         if (tnext[end] < 0) {
@@ -1089,7 +1092,7 @@ const HereOutRoute = (() => {
         for (const [, i, j] of bridges.values()) {
           legs.push({ a: this.toPx(this.middle(i)), b: this.toPx(this.middle(j)), flow: 1, bridge: true });
         }
-        legs.push(...this.links(drawn, inTree, tnext, towner, tcost, [...bridges.keys()].map((key) => [Math.floor(key / 1e4), key % 1e4])));
+        legs.push(...this.links(drawn, lineOwner, inTree, tnext, towner, tcost, [...bridges.keys()].map((key) => [Math.floor(key / 1e4), key % 1e4])));
       }
       // Joins: the tree cells where the flow changes, that is where another
       // line of the map joins.
@@ -1108,20 +1111,27 @@ const HereOutRoute = (() => {
     // of the tree, so a link keeps to the middle of the way, away from the
     // walls. A link splits where both exits are equally near (the cost of
     // the way out from each end added), and each half points to its exit.
-    // joined: the pairs of exits that a bridge already joins.
-    links(drawn, inTree, tnext, towner, tcost, joined) {
+    // joined: the pairs of exits that a bridge already joins. lineOwner:
+    // the exit of the line over each cell, or -1.
+    links(drawn, lineOwner, inTree, tnext, towner, tcost, joined) {
       const { fw, fh, pass, cost } = this;
       const n = fw * fh;
       const group = this.exitSeeds.map((_, k) => k);
       const find = (k) => { while (group[k] !== k) { group[k] = group[group[k]]; k = group[k]; } return k; };
       const unite = (a, b) => { a = find(a); b = find(b); if (a === b) return false; group[a] = b; return true; };
       for (const [a, b] of joined) unite(a, b);
-      // Grow from all drawn cells and exit cells at once, the cheapest first.
+      // Grow from all cells under the lines and exit cells at once, the
+      // cheapest first. The cells under the lines, not the cells of the way
+      // under them: a line goes straight where its way turns, and a link
+      // must start on the line.
       const label = new Int32Array(n).fill(-1), from = new Int32Array(n).fill(-1);
       const dist = new Float64Array(n).fill(Infinity);
       const heap = new CellHeap();
+      const lined = new Set();
       for (let i = 0; i < n; i++) {
-        if (drawn[i] || (inTree[i] && tnext[i] < 0)) { label[i] = towner[i]; dist[i] = 0; heap.push(0, i); }
+        if (lineOwner[i] >= 0) lined.add(lineOwner[i]);
+        const own = lineOwner[i] >= 0 ? lineOwner[i] : inTree[i] && tnext[i] < 0 ? towner[i] : -1;
+        if (own >= 0) { label[i] = own; dist[i] = 0; heap.push(0, i); }
       }
       const moves = (i, visit) => {
         const r = Math.floor(i / fw), c = i - r * fw;
@@ -1153,44 +1163,61 @@ const HereOutRoute = (() => {
       }
       const legs = [];
       const back = (i) => { const out = []; for (let q = i; q >= 0; q = from[q]) out.push(q); return out; };
+      const doors = [];
       for (const [, i, j] of [...meets.values()].sort((x, y) => x[0] - y[0])) {
         if (!unite(label[i], label[j])) continue;
         const cells = [...back(i).reverse(), ...back(j)];
-        if (cells.length < 3) continue;  // the two lines touch
-        // The split: the cost of the way out from each end, plus the link to it.
-        const toA = [tcost[cells[0]]];
-        for (let k = 1; k < cells.length; k++) toA.push(toA[k - 1] + cost[cells[k]]);
-        const toB = new Array(cells.length);
-        toB[cells.length - 1] = tcost[cells[cells.length - 1]];
-        for (let k = cells.length - 2; k >= 0; k--) toB[k] = toB[k + 1] + cost[cells[k]];
-        let mid = 1;
-        for (let k = 1; k < cells.length - 1; k++) if (Math.abs(toA[k] - toB[k]) < Math.abs(toA[mid] - toB[mid])) mid = k;
-        for (const half of [cells.slice(0, mid + 1).reverse(), cells.slice(mid)]) {
-          if (half.length < 2) continue;
-          const idx = [0], fixed = [true];
-          for (let k = 1; k < half.length - 1; k++) {
-            if (half[k + 1] - half[k] !== half[k] - half[k - 1]) { idx.push(k); fixed.push(false); }
-          }
-          idx.push(half.length - 1); fixed.push(true);
-          const [cs, fs] = this.squareUp(idx.map((k) => half[k]), fixed);
-          const pts = this.unstair(cs.map((c) => this.middle(c)), fs);
-          for (let k = 0; k + 1 < pts.length; k++) legs.push({ a: this.toPx(pts[k]), b: this.toPx(pts[k + 1]), flow: 1, link: true });
-          // A link to an exit with no line of its own goes on to the exit.
-          const end = half[half.length - 1];
-          if (!drawn[end] && inTree[end] && tnext[end] < 0) {
-            const e = this.toExit(end, towner[end], half[half.length - 2]);
-            for (let k = 0; k < e.length - 1; k++) legs.push({ a: e[k], b: e[k + 1], flow: 1, exit: true });
-          }
-        }
+        // Two doors side by side, of two exits with no lines: a line between
+        // them only when other links join them to the lines (after the loop).
+        if (cells.length < 3 && !lined.has(label[i]) && !lined.has(label[j])) doors.push(cells);
+        else this.drawLink(cells, legs, drawn, inTree, tnext, towner, tcost);
+      }
+      for (const cells of doors) {
+        if ([...lined].some((k) => find(k) === find(label[cells[0]]))) this.drawLink(cells, legs, drawn, inTree, tnext, towner, tcost);
       }
       return legs;
+    }
+
+    // The legs of a link along cells, in two halves that each point to their exit.
+    drawLink(cells, legs, drawn, inTree, tnext, towner, tcost) {
+      const cost = this.cost;
+      // The split: the cost of the way out from each end, plus the link to it.
+      const toA = [tcost[cells[0]]];
+      for (let k = 1; k < cells.length; k++) toA.push(toA[k - 1] + cost[cells[k]]);
+      const toB = new Array(cells.length);
+      toB[cells.length - 1] = tcost[cells[cells.length - 1]];
+      for (let k = cells.length - 2; k >= 0; k--) toB[k] = toB[k + 1] + cost[cells[k]];
+      let mid = 1;
+      for (let k = 1; k < cells.length - 1; k++) if (Math.abs(toA[k] - toB[k]) < Math.abs(toA[mid] - toB[mid])) mid = k;
+      // Two cells side by side (the lines or the doors of two exits touch):
+      // one short line, which goes on to the exit at each end.
+      const halves = cells.length < 3 ? [[...cells].reverse(), [...cells]] : [cells.slice(0, mid + 1).reverse(), cells.slice(mid)];
+      for (const half of halves) {
+        if (half.length < 2) continue;
+        const idx = [0], fixed = [true];
+        for (let k = 1; k < half.length - 1; k++) {
+          if (half[k + 1] - half[k] !== half[k] - half[k - 1]) { idx.push(k); fixed.push(false); }
+        }
+        idx.push(half.length - 1); fixed.push(true);
+        const [cs, fs] = this.squareUp(idx.map((k) => half[k]), fixed);
+        const pts = this.unstair(cs.map((c) => this.middle(c)), fs);
+        for (let k = 0; k + 1 < pts.length; k++) legs.push({ a: this.toPx(pts[k]), b: this.toPx(pts[k + 1]), flow: 1, link: true });
+        // A link to an exit with no line of its own goes on to the exit.
+        const end = half[half.length - 1];
+        if (!drawn[end] && inTree[end] && tnext[end] < 0) {
+          const e = this.toExit(end, towner[end], half[half.length - 2]);
+          for (let k = 0; k < e.length - 1; k++) legs.push({ a: e[k], b: e[k + 1], flow: 1, exit: true });
+        }
+      }
     }
 
     // Jogs: a short side step between two parallel lines (two lines that
     // meet a third one a cell or two apart, or a line that steps aside on
     // its way) makes the map look untidy. The whole straight line on one
     // side moves onto the other, when it stays clear of walls, crosses no
-    // more soft lines and keeps JOG_CLEAR of its distance to the walls. Lines that end at
+    // more soft lines and keeps JOG_CLEAR of its distance to the walls. When
+    // neither side may move, both lines move to a place between them (a
+    // door jamb on each side of a corridor). Lines that end at
     // the line only change their length. Exit marks do not move. Then
     // straight runs of the same flow become one line. Works in the frame,
     // on the drawn lines only: the tree and the routes stay.
@@ -1330,7 +1357,8 @@ const HereOutRoute = (() => {
         let done = false;
         for (let e = 0; e < edges.length && !done; e++) {
           const E = edges[e];
-          if (!E) continue;
+          // The walk into an exit mark is not a jog: the route keeps it.
+          if (!E || E.exit) continue;
           const ax = axis(E);
           if (ax < 0) continue;
           const len = Math.abs(nodes[E.v].p[ax] - nodes[E.u].p[ax]);
@@ -1356,6 +1384,19 @@ const HereOutRoute = (() => {
           const order = size(E.u) <= size(E.v) ? [[E.u, E.v], [E.v, E.u]] : [[E.v, E.u], [E.u, E.v]];
           for (const [m, keep] of order) {
             if (shift(m, ax, nodes[keep].p[ax] - nodes[m].p[ax], inc)) { done = true; break; }
+          }
+          // Neither side can move onto the other: both lines move to a
+          // place between them, the middle first.
+          if (!done) {
+            const pu = nodes[E.u].p[ax], pv = nodes[E.v].p[ax], n = Math.floor(Math.abs(pv - pu) / JOG_STEP);
+            const ts = [];
+            for (let k = 1; k < n; k++) ts.push(pu + ((pv - pu) * k) / n);
+            ts.sort((x, y) => Math.abs(x - (pu + pv) / 2) - Math.abs(y - (pu + pv) / 2));
+            for (const t of ts) {
+              const was = nodes.map((q) => q.p);
+              if (shift(E.u, ax, t - nodes[E.u].p[ax], inc) && shift(E.v, ax, t - nodes[E.v].p[ax], inc)) { done = true; break; }
+              nodes.forEach((q, k) => { q.p = was[k]; });
+            }
           }
         }
         if (!done) break;
@@ -1614,6 +1655,15 @@ const HereOutRoute = (() => {
         i = best;
       }
       return [out, outFixed];
+    }
+
+    // Calls f for each open frame cell under the straight line between two frame points.
+    cellsUnder(p, q, f) {
+      const steps = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) * 3) + 1;
+      for (let k = 0; k <= steps; k++) {
+        const c = Math.floor(p[0] + ((q[0] - p[0]) * k) / steps), r = Math.floor(p[1] + ((q[1] - p[1]) * k) / steps);
+        if (c >= 0 && c < this.fw && r >= 0 && r < this.fh && this.open[r * this.fw + c]) f(r * this.fw + c);
+      }
     }
 
     // The smallest wall distance on the straight frame line between two cells.
@@ -1935,13 +1985,47 @@ const HereOutRoute = (() => {
     return right > 0 ? "right" : "left";
   }
 
+  // The route point where a walk from point i to point j must split, when it
+  // goes more than SIDE_STEP_SHARE of the plan to one side of its start line
+  // and comes back: the last point out on that side. Else -1.
+  function detour(points, i, j, head, planSize) {
+    const h = head * (Math.PI / 180), lim = SIDE_STEP_SHARE * planSize, a = points[i];
+    const off = points.slice(i, j + 1).map((p) => (p[0] - a[0]) * Math.cos(h) + (p[1] - a[1]) * Math.sin(h));
+    const far = off.reduce((m, o) => (Math.abs(o) > Math.abs(m) ? o : m), 0);
+    if (Math.abs(off[off.length - 1]) > lim || Math.abs(far) <= lim) return -1;
+    let k = off.length - 1;
+    while (!(off[k] * far > 0 && Math.abs(off[k]) > lim)) k--;
+    return i + k;
+  }
+
+  // The route point where the side step of a walk from point i to point j
+  // starts: the last point from which the walk still goes more than
+  // SIDE_STEP_SHARE of the plan to the side where it ends, so the walk after
+  // it names the side step (two small jogs count as one). -1 when the walk
+  // has no side step.
+  function sideMove(points, i, j, head, planSize) {
+    const h = head * (Math.PI / 180), lim = SIDE_STEP_SHARE * planSize, a = points[i];
+    const off = points.slice(i, j + 1).map((p) => (p[0] - a[0]) * Math.cos(h) + (p[1] - a[1]) * Math.sin(h));
+    const end = off[off.length - 1];
+    if (Math.abs(end) <= lim) return -1;
+    let k = off.length - 1;
+    while (Math.abs(end - off[k]) <= lim) k--;
+    return i + k;
+  }
+
   function directions(points, planW, planH) {
     const planSize = Math.hypot(planW, planH);
     let idx = simplify(points, planSize);
     for (let pass = 0; pass < SPLIT_PASSES; pass++) {
       const out = [idx[0]];
       for (let k = 0; k + 1 < idx.length; k++) {
-        const split = walkHeadings(points, idx[k], idx[k + 1])[2];
+        const w = walkHeadings(points, idx[k], idx[k + 1]);
+        // A walk that steps aside and back (round a wall) splits where it
+        // is farthest out, so both side steps get words (a11y review).
+        // A walk with a side step splits where the side step starts, so
+        // the words give it in its place (ux and a11y reviews).
+        let split = w.length === 3 ? w[2] : detour(points, idx[k], idx[k + 1], w[0], planSize);
+        if (split < 0) split = sideMove(points, idx[k], idx[k + 1], w[0], planSize);
         if (split > idx[k] && split < idx[k + 1]) out.push(split);
         out.push(idx[k + 1]);
       }
@@ -1956,18 +2040,21 @@ const HereOutRoute = (() => {
       const [head, end] = walkHeadings(points, idx[i], idx[i + 1]);
       const turn = turnOf(head - prev);
       const length = lengthOf(dist(a, b), planSize);
+      // A side step is at the start of its walk (the walk split there). The
+      // first step names it in the plan frame, the others for the walker.
+      const aside = sideStep(a, b, head, planSize);
       let text;
-      if (i === 0) text = `Start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
-      else if (turn === "straight") {
-        const side = sideStep(a, b, head, planSize);
-        text = side ? `Step ${side}, then keep going straight for a ${length} way.` : `Keep going straight for a ${length} way.`;
+      if (i === 0) {
+        text = `Start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
+        if (aside) text = `Move over toward the ${planSide(head + (aside === "right" ? 90 : -90))} of the plan, then start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
       }
+      else if (turn === "straight") text = aside ? `Step ${aside}, then keep going straight for a ${length} way.` : `Keep going straight for a ${length} way.`;
       else if (turn === "back") {
         // The side step comes before the turn: its side is that of the way the walker still faces.
         const side = sideStep(a, b, prev, planSize);
         text = side ? `Step ${side}, then turn around and go back a ${length} way.` : `Turn around and go back a ${length} way.`;
       }
-      else text = `Turn ${turn.replace("slight", "slightly")} and walk a ${length} way.`;
+      else text = aside ? `Turn ${turn.replace("slight", "slightly")}, step ${aside}, then walk a ${length} way.` : `Turn ${turn.replace("slight", "slightly")} and walk a ${length} way.`;
       steps.push({ kind: "walk", turn, length, text, from: a, to: b, path: points.slice(idx[i], idx[i + 1] + 1) });
       prev = end;
     }
