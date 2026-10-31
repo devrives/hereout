@@ -2,7 +2,7 @@
 type: decision
 title: "Clean way lines: no jogs, closed gaps, routes on the lines"
 status: accepted
-updated: 2026-10-30
+updated: 2026-10-31
 checked: 171c2fc
 sources:
   - owner:2026-10-30
@@ -48,4 +48,4 @@ sources:
 - On 2925 routes the steps name 286 slight turns, before 304. Routes with a turn back go from 106 to 100.
 - On 4475 taps no second exit goes away.
 - `tests/test_network.py` checks a jog, a gap and a tick on a test floor.
-- Open: most dead ends are lines into rooms and halls that no other line reaches. The office walls of JP-commons_000066 are thin, so the reader keeps them as soft lines, and lines cross them. The exit marks of PT-commons_000107 are on the pavement in front of the doors. See [Inner walls much thinner than the outer walls](inner-wall-width.md).
+- Open: most dead ends are lines into rooms and halls that no other line reaches. The office walls of JP-commons_000066 are thin, so the reader keeps them as soft lines, and lines cross them. The exit marks of PT-commons_000107 are on the pavement in front of the doors. See [Inner walls much thinner than the outer walls](inner-wall-width.md). The partitions of JP-commons_000066 are fixed in [Faded ends of walls are walls](faded-wall-ends.md).

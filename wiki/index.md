@@ -25,6 +25,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [One network of way lines: links between exits, lines along corridors](decisions/connected-way-lines.md): accepted; links join the exits, and corridors get lines.
 - [Clean way lines: no jogs, closed gaps, routes on the lines](decisions/clean-way-lines.md): accepted; side steps, ticks and gaps go, and routes keep to the lines.
 - [Inner walls much thinner than the outer walls](decisions/inner-wall-width.md): accepted; a long wide line is a wall, two other rules failed.
+- [Faded ends of walls are walls](decisions/faded-wall-ends.md): accepted; ink in the line of a wall goes on as wall, unless it closes a door.
 - [Fix the weak plan types](decisions/weak-plan-types.md): accepted; photo maps, outdoor words, floors with no exit, legends, a new read of 30 plans, gallery speed.
 - [Find the walls as straight lines](decisions/wall-lines.md): wall lines and blocks from the wall mask.
 - [Check the exits with numbered marks](decisions/exit-mark-check.md): a second call keeps, moves or drops each exit (proposed).

@@ -4,11 +4,12 @@ import cv2
 import numpy as np
 
 from hereout import ink_walls as iw
-from hereout.ink_walls import (beyond_exits, door_arcs, footprints, ink_walls, legend_exits, outdoor_areas, place_exits, room_doors,
-                                split_strokes)
+from hereout.ink_walls import (beyond_exits, door_arcs, faded_ends, footprints, ink_walls, legend_exits, outdoor_areas,
+                                place_exits, room_doors, split_strokes)
 from hereout.photo_map import is_photo_map
 from hereout.legend import drop_legend_exits
 from hereout.route import Field, NoRoute, blocked_grid, soft_grid
+from hereout.walls import stroke_width
 
 PAPER, BLACK = (245, 245, 245), (20, 20, 20)
 
@@ -58,6 +59,40 @@ def test_inner_wall_much_thinner_than_the_outer_wall_is_hard():
     assert not hard[405, 405]
 
 
+def test_faded_end_of_a_wall_is_hard_and_a_door_stays_open():
+    """Thin strokes only. A partition is solid in its middle and broken into
+    short dashes at its top end (a faded photo); door gaps are above and below it. A
+    dashed line apart from every wall stays soft."""
+    img = np.full((600, 900, 3), PAPER, np.uint8)
+    cv2.rectangle(img, (50, 50), (850, 550), BLACK, 2)
+    cv2.line(img, (400, 200), (400, 450), BLACK, 2)        # the solid middle
+    for y in range(120, 200, 9):                             # the faded end: dashes 5 px, gaps 4 px
+        cv2.line(img, (400, y), (400, y + 4), BLACK, 2)
+    for x in range(600, 800, 12):                            # a dashed line in the room
+        cv2.line(img, (x, 300), (x + 5, 300), BLACK, 2)
+    ink = np.all(img < 100, axis=2)
+    hard, thin = split_strokes(ink)
+    hard |= faded_ends(hard, ink, stroke_width(ink))
+    assert hard[300, 400]
+    assert hard[125:200, 399:402].any(axis=1).all()          # the dashes and their gaps
+    assert not hard[60:110, 400].any()                       # the door at the top (from 50 to 120)
+    assert not hard[470:540, 400].any()                      # the door at the bottom (from 450 to 550)
+    assert not hard[300, 600:800].any()
+
+
+def test_sill_across_a_door_is_no_faded_end():
+    """Thin strokes only: two walls in one line, and a sill joins them across
+    a door 30 px wide. The sill is not a faded end of either wall."""
+    img = np.full((600, 900, 3), PAPER, np.uint8)
+    cv2.line(img, (50, 300), (400, 300), BLACK, 2)
+    cv2.line(img, (430, 300), (850, 300), BLACK, 2)
+    for x in range(403, 428, 6):                             # the sill, broken in the photo
+        cv2.line(img, (x, 300), (x + 2, 300), BLACK, 1)
+    ink = np.all(img < 100, axis=2)
+    hard, thin = split_strokes(ink)
+    assert not faded_ends(hard, ink, stroke_width(ink))[300, 405:425].any()
+
+
 def plain_thin(mask):
     """Zhang-Suen thinning, every pixel in every pass: the reference for iw._thin."""
     img = np.pad(mask.astype(np.uint8), 1)
@@ -99,7 +134,7 @@ def test_door_arc_is_found():
 
 def test_door_swing_opens_the_room():
     img = room_with_door()
-    hard, soft, _ = ink_walls(img, boxes=[])
+    hard, soft, _, _ = ink_walls(img, boxes=[])
     r = route(hard, soft, (400, 300), (880, 305))
     assert r.exit_index == 0
 
@@ -108,7 +143,7 @@ def test_closed_wall_has_no_way():
     img = np.full((600, 900, 3), PAPER, np.uint8)
     cv2.rectangle(img, (50, 50), (850, 550), BLACK, 10)
     cv2.line(img, (450, 50), (450, 550), BLACK, 10)
-    hard, soft, _ = ink_walls(img, boxes=[])
+    hard, soft, _, _ = ink_walls(img, boxes=[])
     try:
         route(hard, soft, (250, 300), (650, 300))
     except NoRoute:

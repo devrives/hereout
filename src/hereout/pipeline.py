@@ -34,13 +34,14 @@ class Plan:
     soft: np.ndarray | None = None     # soft lines: door swings and dashes, passable at a cost
     text: list | None = None           # the text boxes of the image, once found
     photo_map: bool = False            # a route printed on an aerial photo: no walls, the exits only
+    faded: np.ndarray | None = None    # the faded ends of walls among the walls (ink_walls.faded_ends)
 
     @classmethod
     def of(cls, image: np.ndarray, plan_box=None, changes: list[str] | None = None, text: list | None = None,
            exits: list[dict] = ()) -> "Plan":
         text = text_boxes(image) if text is None else text
-        walls, soft, drawn, _ = find_walls(image, plan_box, text, exits)
-        return cls(image, walls, changes or [], drawn, soft, text)
+        walls, soft, drawn, _, faded = find_walls(image, plan_box, text, exits)
+        return cls(image, walls, changes or [], drawn, soft, text, faded=faded)
 
     @classmethod
     def of_reading(cls, image: np.ndarray, reading: Reading, text: list) -> "Plan":
@@ -60,26 +61,27 @@ class Plan:
         # the exits and points to the printed route.
         self.photo_map = is_photo_map(self.image, reading.plan_box)
         if self.photo_map:
-            self.walls, self.soft, self.drawn = np.ones(self.image.shape[:2], bool), None, {"lines": [], "blocks": []}
+            self.walls, self.soft, self.faded, self.drawn = np.ones(self.image.shape[:2], bool), None, None, {"lines": [], "blocks": []}
             reading.exits = exits
             return
-        self.walls, self.soft, self.drawn, placed = find_walls(self.image, reading.plan_box, self.text, exits)
+        self.walls, self.soft, self.drawn, placed, self.faded = find_walls(self.image, reading.plan_box, self.text, exits)
         reading.exits = [{**e, "x": p[0], "y": p[1]} for e, p in zip(exits, placed) if p is not None]
 
     def no_reading(self) -> None:
         """Find the walls with no reading, for marks that the user places by hand."""
         if self.text is None:
             self.text = text_boxes(self.image)
-        self.walls, self.soft, self.drawn, _ = find_walls(self.image, None, self.text)
+        self.walls, self.soft, self.drawn, _, self.faded = find_walls(self.image, None, self.text)
 
 
-def find_walls(image: np.ndarray, plan_box, text: list, exits=()) -> tuple[np.ndarray, np.ndarray, dict, list]:
-    """The hard walls, the soft lines, the wall lines to draw, and the exits
-    as placed on the drawing (None for an exit that is not on it)."""
+def find_walls(image: np.ndarray, plan_box, text: list, exits=()) -> tuple[np.ndarray, np.ndarray, dict, list, np.ndarray]:
+    """The hard walls, the soft lines, the wall lines to draw, the exits
+    as placed on the drawing (None for an exit that is not on it), and the
+    faded ends among the hard walls."""
     strong = strong_ink(image, plan_box)
     _, drawn = plan_walls(image, plan_box, strong)
-    walls, soft, placed = ink_walls(image, plan_box, text, [(e["x"], e["y"]) for e in exits], strong)
-    return walls, soft, drawn, placed
+    walls, soft, placed, faded = ink_walls(image, plan_box, text, [(e["x"], e["y"]) for e in exits], strong)
+    return walls, soft, drawn, placed, faded
 
 
 def decode_photo(data: bytes) -> np.ndarray:
@@ -113,7 +115,7 @@ def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None
     """The response for a new plan: the flat image, the marks, the wall grid and the wall lines."""
     h, w = plan.image.shape[:2]
     out = {"id": pid, "image": image_data_url(plan.image), "width": w, "height": h,
-           "exits": [], "grid": grid_payload(plan.walls, plan.soft), "walls": plan.drawn, "model_error": err,
+           "exits": [], "grid": grid_payload(plan.walls, plan.soft, plan.faded), "walls": plan.drawn, "model_error": err,
            "photo_map": plan.photo_map}
     if reading:
         out["exits"] = [{"x": round(e["x"]), "y": round(e["y"]), "label": e["label"]} for e in reading.exits]

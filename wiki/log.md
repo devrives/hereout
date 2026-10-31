@@ -282,3 +282,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/connected-way-lines.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-30, the measure on 195 gallery plans, the code and the tests.
+
+## [2026-10-31] ingest | Faded ends of walls
+
+- Added `decisions/faded-wall-ends.md`: the faded partition ends, the rules that keep doors open, the axes from the walls without faded ends, the gallery numbers.
+- Updated `decisions/clean-way-lines.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-30 and 2026-10-31, the gallery check, the ground truth, the code and the tests.

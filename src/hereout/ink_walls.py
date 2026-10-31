@@ -33,7 +33,7 @@ import threading
 import cv2
 import numpy as np
 
-from .route import GRID_SIDE
+from .route import GRID_SIDE, blocked_grid
 from .walls import outside_box, strong_ink, stroke_width
 
 CHROMA = 14.0          # Lab chroma above the paper: coloured ink, not a wall
@@ -44,6 +44,9 @@ BAR_ASPECT = 3.0
 STRAIGHT = 0.025       # share of the image: on thin-stroke plans, a straight line this long is a wall
 ANCHORS = 2            # a thin line that touches thick walls at this many places is a wall
 MID_SHARE = 0.25       # share of the wall stroke: a long piece at least this wide is a wall too (an inner wall)
+FADE_GAP = 3.0         # wall strokes: a wall line goes on through ink in its line with gaps no wider than this
+FADE_DOOR = 0.008      # share of the image: and no wider than this, the narrowest door
+FADE_MAX = 0.1         # share of the image: the longest piece that a wall line gets this way
 CLOSE_SHARE = 0.04     # share of the image: the closings that find each footprint
 MIN_DRAWING = 0.01     # share of the floor box: a smaller footprint is not a drawing
 MIN_FILL = 0.3         # a footprint that fills less of its bounding box is an open outline
@@ -228,6 +231,81 @@ def split_strokes(ink: np.ndarray, plan_box=None) -> tuple[np.ndarray, np.ndarra
         comps, counts = np.unique(pairs[:, 0], return_counts=True)
         hard |= np.isin(lab, comps[(counts >= ANCHORS) & (comps > 0)])
     return hard, thin
+
+
+def faded_ends(hard: np.ndarray, ink: np.ndarray, width: float, walls: np.ndarray | None = None) -> np.ndarray:
+    """The faded ends of the straight walls: the ink that goes on in the line
+    of a wall, with small gaps, is the same wall (JP-commons_000066: a thin
+    partition that a photo shows dark in its middle and in broken dashes at
+    its ends). These stay soft: a gap wider than FADE_GAP strokes or
+    FADE_DOOR (a door), a line that ends at another long wall (a sill), a
+    dashed line that is not in the line of a wall, and a faded end that cuts
+    an open area of walls (default: hard) in two (a door drawn shut)."""
+    side = max(hard.shape)
+    length = int(STRAIGHT * side)
+    segs = cv2.HoughLinesP(_thin(hard).astype(np.uint8) * 255, 1, np.pi / 360, threshold=int(length * 0.6),
+                           minLineLength=length, maxLineGap=2)
+    out = np.zeros(hard.shape, np.uint8)
+    if segs is None:
+        return out > 0
+    pieces = []
+    h, w = hard.shape
+    gap = max(3, int(min(FADE_GAP * width, FADE_DOOR * side)))
+    longest = int(FADE_MAX * side)
+    # A segment can stop inside its wall: the walk goes to the end of the wall first.
+    steps = np.arange(0, side + 1)  # step 0: the end of the segment, on the wall
+    on = ink | hard
+    for x0, y0, x1, y1 in segs.reshape(-1, 4).astype(float):
+        d = np.array([x1 - x0, y1 - y0])
+        d /= np.hypot(*d)
+        nx, ny = -d[1], d[0]
+        for (ex, ey), s in (((x1, y1), 1), ((x0, y0), -1)):
+            px, py = ex + s * d[0] * steps, ey + s * d[1] * steps
+            hit, wall = np.zeros(len(steps), bool), np.zeros(len(steps), bool)
+            for o in (-1, 0, 1):
+                xs, ys = np.rint(px + o * nx).astype(int), np.rint(py + o * ny).astype(int)
+                inside = (xs >= 0) & (xs < w) & (ys >= 0) & (ys < h)
+                hit[inside] |= on[ys[inside], xs[inside]]
+                wall[inside] |= hard[ys[inside], xs[inside]]
+            off = np.flatnonzero(~wall)
+            if not len(off) or off[0] == 0:
+                continue
+            first = off[0]  # the first step past the end of the wall
+            # The last hit before the first run of more than gap misses.
+            idx = np.flatnonzero(hit[first - 1:]) + first - 1
+            breaks = np.flatnonzero(np.diff(idx) > gap + 1)
+            last = min(idx[breaks[0]] if len(breaks) else idx[-1], first - 1 + longest)
+            if last < first:
+                continue
+            # Ink that joins the wall to another long wall is a sill across a
+            # door (AU-commons_000077): only a free end goes on. Short pieces
+            # of wall on the way are the dashes of the faded end.
+            ahead = np.concatenate([[False], wall[first:last + gap + 2], [False]]).astype(np.int8)
+            runs = np.flatnonzero(np.diff(ahead) == -1) - np.flatnonzero(np.diff(ahead) == 1)
+            if (runs > 2 * gap).any():
+                continue
+            at = lambda k: (round(ex + s * d[0] * steps[k]), round(ey + s * d[1] * steps[k]))
+            pieces.append((at(first - 1), at(last)))
+    thick = max(2, round(width))
+    walls = hard if walls is None else walls
+    for a, b in pieces:
+        cv2.line(out, a, b, 1, thick)
+    # On the grid of the routes: a gap that is open in pixels can be shut in it (CN-commons_more_000022).
+    shut, scale = blocked_grid(walls)
+    _, before = cv2.connectedComponents((~shut).astype(np.uint8), connectivity=4)
+    _, after = cv2.connectedComponents((~blocked_grid(walls | (out > 0))[0]).astype(np.uint8), connectivity=4)
+    keep = np.zeros(hard.shape, np.uint8)
+    for a, b in pieces:
+        # The open cells in a band of two cells around the piece: one area
+        # before that is two areas after is cut in two.
+        band = np.zeros(shut.shape, np.uint8)
+        cv2.line(band, (int(a[0] * scale), int(a[1] * scale)), (int(b[0] * scale), int(b[1] * scale)), 1, 5)
+        near = (band > 0) & (after > 0)
+        pairs = np.unique(np.stack([before[near], after[near]], 1), axis=0)
+        if len(pairs) and len(np.unique(pairs[:, 0])) < len(pairs):
+            continue
+        cv2.line(keep, a, b, 1, thick)
+    return keep > 0
 
 
 # The 8 neighbours, clockwise from the top: (dy, dx).
@@ -464,9 +542,10 @@ def footprints(walls: np.ndarray, plan_box=None) -> np.ndarray | None:
     return fp > 0 if fp.any() else None
 
 
-def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None) -> tuple[np.ndarray, np.ndarray, list]:
-    """The hard walls (with the outside of the drawings), the soft lines, and
-    the exits as placed on the drawing (place_exits; None for a dropped exit).
+def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None) -> tuple[np.ndarray, np.ndarray, list, np.ndarray]:
+    """The hard walls (with the outside of the drawings), the soft lines, the
+    exits as placed on the drawing (place_exits; None for a dropped exit),
+    and the faded ends among the hard walls (faded_ends).
     exits: (x, y) points; the paper just around each exit stays open, because
     an exit mark often sits just outside the outer wall, at its door."""
     side = max(img.shape[:2])
@@ -527,8 +606,11 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None)
     kept = [p for p in placed if p is not None]
     hard &= ~exit_doors(hard, kept)
     hard &= ~room_doors(hard, kept, None if fp is None else ~fp | box_out)
+    # Last: a faded end closes none of the doors and areas found above.
+    faded = faded_ends(core, ink, stroke_width(ink, plan_box), hard) & ~box_out & ~hard
+    hard |= faded
     it = iter(placed)
-    return hard, soft & ~hard, [None if i in legend else next(it) for i in range(len(marks))]
+    return hard, soft & ~hard, [None if i in legend else next(it) for i in range(len(marks))], faded
 
 
 def fills(img: np.ndarray, plan_box=None, boxes=None, exits=(), chroma=None) -> np.ndarray:

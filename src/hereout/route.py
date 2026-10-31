@@ -78,17 +78,20 @@ def soft_grid(soft: np.ndarray, blocked: np.ndarray) -> np.ndarray:
     return (share >= SOFT_SHARE) & ~blocked
 
 
-def grid_payload(walls: np.ndarray, soft: np.ndarray | None = None) -> dict:
+def grid_payload(walls: np.ndarray, soft: np.ndarray | None = None, faded: np.ndarray | None = None) -> dict:
     """The grid for the browser: blocked cells as packed bits, first bit high.
     With soft lines, "soft" has the soft cells in the same form. "axes" are
-    the two main directions of the walls (wall_axes)."""
+    the two main directions of the walls (wall_axes). The axes and the wing
+    come from the walls without their faded ends, which change only where
+    the lines go (26 gallery plans got other axes with them)."""
     blocked, scale = blocked_grid(walls)
     gh, gw = blocked.shape
-    axes = wall_axes(walls)
+    frame = walls if faded is None else walls & ~faded
+    axes = wall_axes(frame)
     out = {"w": gw, "h": gh, "scale": scale, "bits": pack(blocked), "axes": list(axes)}
     if soft is not None and soft.any():
         out["soft"] = pack(soft_grid(soft, blocked))
-    wing = wall_wing(walls, axes, scale, blocked.shape)
+    wing = wall_wing(frame, axes, scale, blocked.shape)
     if wing is not None:
         out["wing"], out["wing_axes"] = pack(wing[1]), [wing[0], wing[0]]
     return out
