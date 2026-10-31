@@ -2,7 +2,7 @@
 type: decision
 title: Upload as a job; no zoom call after a slow main call
 status: accepted
-updated: 2026-10-30
+updated: 2026-10-31
 checked: b83441a
 sources:
   - owner:2026-10-30
@@ -44,4 +44,5 @@ sources:
 - A main call that fails one time can still give a reading. The worst case is two main calls of 120 s and the wall pass.
 - A failed try costs the worst case in the spend ledger, because the provider can bill a timeout.
 - After a slow main call, a suspect exit keeps the point of the main call.
+- The time limits and the page times changed on 2026-10-31: see [Short time limits for the model calls](call-timeouts.md).
 - The server holds each answer in memory for up to 10 minutes. Before, it held nothing after it answered.

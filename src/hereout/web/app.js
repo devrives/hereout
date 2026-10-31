@@ -1187,19 +1187,19 @@ async function smallPhoto(file) {
 }
 
 // The upload starts a job on the server, and the page asks for its answer.
-// A slow model answer takes minutes, longer than a proxy keeps one request open.
+// A slow model answer can take longer than a proxy keeps one request open.
 // The job is kept for the tab, so a reload asks again for the same answer.
 const JOB_KEY = "hereout:job";
 const ASK_EVERY = 2000;
-const GIVE_UP_AFTER = 6 * 60 * 1000;  // the server tries a slow model call twice, 2 minutes each
+const GIVE_UP_AFTER = 3 * 60 * 1000;  // the server tries a slow model call twice, 45 s each (and 10 s to connect), then the wall pass
 const WAIT_TEXT = "Reading your photo. This takes 15 seconds to a minute, sometimes more. The photo button works again when it is done.";
 const STILL_TEXT = 'HereOut still reads your photo. When it is ready, choose "Show the plan of your photo".';
 const LOST_TEXT = "The connection is lost. HereOut asks again when it is back.";
 const OFFLINE_TEXT = "Could not reach HereOut. Check the connection and send the photo again.";
 // What the status line says after a long wait: [after ms, text].
 const WAIT_NEWS = [
-  [60 * 1000, "Still reading your photo. A slow answer can take a few minutes. The photo button works again when it is done."],
-  [4 * 60 * 1000, "This takes longer than usual. HereOut stops at 6 minutes. The photo button works again when it is done."],
+  [60 * 1000, "Still reading your photo. A slow answer can take 2 minutes. The photo button works again when it is done."],
+  [2 * 60 * 1000, "This takes longer than usual. HereOut stops at 3 minutes, then the photo button works again."],
 ];
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
@@ -1248,7 +1248,9 @@ async function readPhoto(file, job) {
   upload = mine;
   readyPlan = null;
   showBusy();
-  say(job ? "Reading your photo again after the reload. The photo button works again when it is done." : WAIT_TEXT);
+  // After a reload, the last news that is due comes again: it can say when HereOut stops (ux and a11y reviews).
+  const due = job ? WAIT_NEWS.filter(([after]) => Date.now() - job.start > after).pop() : null;
+  say(due ? due[1] : job ? "Reading your photo again after the reload. The photo button works again when it is done." : WAIT_TEXT);
   let r = null;
   try {
     if (file) {

@@ -73,9 +73,12 @@ ZOOM_PER_SHEET = 4
 ZOOM_MAX = (MAX_IMAGES - 1) * ZOOM_PER_SHEET
 # The zoom call only moves exits a little. After a slow main call the user waits
 # for the plan, so no zoom call (wiki/decisions/slow-reads.md).
-ZOOM_SKIP_AFTER = 45.0  # seconds of the main call
-ZOOM_TIMEOUT = 60.0
-CALL_TIMEOUT = 120.0
+ZOOM_SKIP_AFTER = 30.0  # seconds of the main call, with its second try
+# A call with an answer takes 4 to 30 s (low effort). A call that stops
+# answering waits for the timeout, so the timeouts are short and the main
+# call tries again (wiki/decisions/call-timeouts.md).
+ZOOM_TIMEOUT = 25.0
+CALL_TIMEOUT = 45.0
 MAIN_TRIES = 2  # a timeout or a 5xx answer gets one more try
 
 ZOOM_PROMPT = """Image 1 is a photo of a posted evacuation plan (fire escape plan). The other images are sheets of zoomed parts of image 1, up to four on each sheet, each with its number in a black box. Each zoomed part is centred on a proposed final exit, marked with a small magenta cross.
@@ -304,8 +307,8 @@ class ModelClient:
 
     def read_plan(self, img: np.ndarray, refine: bool = True) -> Reading:
         h, w = img.shape[:2]
+        start = time.monotonic()
         for attempt in range(MAIN_TRIES):
-            start = time.monotonic()
             try:
                 text, cost, usage = self._ask(PROMPT, img)
                 break

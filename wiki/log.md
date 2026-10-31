@@ -313,3 +313,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/step-turns-main-leg.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-31, the gallery check, the code and the tests.
+
+## [2026-10-31] ingest | Short time limits for the model calls
+
+- Added `decisions/call-timeouts.md`: shorter call limits, the page wait times, and the speed and step tests that failed.
+- Updated `decisions/slow-reads.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-31, the paid call test, the timed full reads, the code and the tests.

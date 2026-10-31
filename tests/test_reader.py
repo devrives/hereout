@@ -170,6 +170,34 @@ def test_no_zoom_after_a_slow_main_call(tmp_path, monkeypatch):
     assert len(asked) == 1 and len(reading.exits) == 1
 
 
+def test_no_zoom_after_a_main_call_that_was_tried_again(tmp_path, monkeypatch):
+    import hereout.reader as reader
+    first = '{"final_exits": [{"x": 750, "y": 667}]}'  # a suspect exit
+    asked = []
+
+    def handler(request):
+        asked.append(1)
+        if len(asked) == 1:
+            raise httpx.ReadTimeout("slow")
+        return httpx.Response(200, json=answer(first))
+
+    # The first try waits for its timeout; the second try is fast. The wait
+    # counts from the first try.
+    clock = iter([0.0, reader.CALL_TIMEOUT + 5])
+    monkeypatch.setattr(reader.time, "monotonic", lambda: next(clock))
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    assert len(asked) == 2 and len(reading.exits) == 1
+
+
+def test_call_timeouts_are_short():
+    import hereout.reader as reader
+    # Calls with an answer take 4 to 30 s; a call that stops answering must not
+    # hold the user for minutes (wiki/decisions/call-timeouts.md).
+    assert reader.CALL_TIMEOUT <= 45 and reader.ZOOM_TIMEOUT <= 25
+    assert reader.ZOOM_SKIP_AFTER < reader.CALL_TIMEOUT
+
+
 def test_zoom_ignores_a_large_move(tmp_path):
     first = '{"final_exits": [{"x": 750, "y": 667}]}'
     zoom = '{"exits": [{"n": 1, "sheet": 2, "x": 900, "y": 900}]}'

@@ -21,6 +21,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Draw the ways out as one tree of level and upright lines](decisions/orthogonal-way-tree.md): proposed; lines along the two wall directions, joined at right angles.
 - [Close the outside of the building and give closed rooms a door](decisions/outside-and-closed-rooms.md): proposed; fills, outside areas, exit placement and room doors with no model call.
 - [Fast processing of a new photo](decisions/photo-speed.md): accepted; one wall pass, text boxes during the model call, faster wall steps.
+- [Short time limits for the model calls](decisions/call-timeouts.md): accepted; 45 s main call, 25 s zoom call, page stops at 3 minutes.
 - [Fast first tap and smaller sample plans](decisions/page-speed.md): accepted; the worker makes the trees to single exits, faster loops, sample images as WebP files.
 - [One network of way lines: links between exits, lines along corridors](decisions/connected-way-lines.md): accepted; links join the exits, and corridors get lines.
 - [Clean way lines: no jogs, closed gaps, routes on the lines](decisions/clean-way-lines.md): accepted; side steps, ticks and gaps go, and routes keep to the lines.
