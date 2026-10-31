@@ -1,7 +1,7 @@
 ---
 type: index
 title: HereOut wiki
-updated: 2026-10-29
+updated: 2026-10-31
 ---
 # HereOut wiki
 
@@ -22,6 +22,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Close the outside of the building and give closed rooms a door](decisions/outside-and-closed-rooms.md): proposed; fills, outside areas, exit placement and room doors with no model call.
 - [Fast processing of a new photo](decisions/photo-speed.md): accepted; one wall pass, text boxes during the model call, faster wall steps.
 - [Short time limits for the model calls](decisions/call-timeouts.md): accepted; 45 s main call, 25 s zoom call, page stops at 3 minutes.
+- [Polish for the judging criteria](decisions/judge-polish.md): accepted; a route example, plans open on the floor, tap checks, the Muse Spark reading.
 - [Fast first tap and smaller sample plans](decisions/page-speed.md): accepted; the worker makes the trees to single exits, faster loops, sample images as WebP files.
 - [One network of way lines: links between exits, lines along corridors](decisions/connected-way-lines.md): accepted; links join the exits, and corridors get lines.
 - [Clean way lines: no jogs, closed gaps, routes on the lines](decisions/clean-way-lines.md): accepted; side steps, ticks and gaps go, and routes keep to the lines.

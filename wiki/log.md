@@ -320,3 +320,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/slow-reads.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-31, the paid call test, the timed full reads, the code and the tests.
+
+## [2026-10-31] ingest | Polish for the judging criteria
+
+- Added `decisions/judge-polish.md`: the start page example, the gallery order, the frame, the tap checks and the model reading view, with the review results.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-31, the judge review, the agent branches, the ux and a11y reviews and the tests.

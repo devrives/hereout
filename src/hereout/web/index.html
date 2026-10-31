@@ -36,21 +36,21 @@
   <section id="intro" class="intro" aria-labelledby="intro-head">
     <h1 id="intro-head">Your way out, drawn on the plan</h1>
     <p class="lead">In front of an evacuation plan you don't know? HereOut finds the exits on your photo.</p>
-    <figure id="example" class="example" hidden data-sample="CN-commons_000098" data-start="1083,573">
-      <a id="example-open" class="example-open" href="/?sample=CN-commons_000098">
-        <span class="example-pic" style="--aspect: 1260 / 680; --w: 126.984%; --x: -23.810%; --y: -41.176%">
-          <img class="example-photo" src="/gallery/example-photo" alt="" fetchpriority="high">
-          <img class="example-marks" src="/static/example-marks.webp" alt="">
-        </span>
-        <span class="example-bar"><span>Example: a metro station plan from China</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
-      </a>
-      <figcaption id="example-credit" class="credit"></figcaption>
-    </figure>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
       <span id="shoot-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Take a photo of the plan</span>
     </label>
+    <figure id="example" class="example" hidden data-sample="CN-commons_000098" data-start="1083,573">
+      <a id="example-open" class="example-open" href="/?sample=CN-commons_000098">
+        <span class="example-pic" style="--aspect: 1260 / 680; --w: 126.984%; --x: -23.810%; --y: -41.176%">
+          <img class="example-photo" src="/gallery/example-photo" alt="" fetchpriority="high">
+          <img class="example-marks" src="/static/example-marks.webp" alt="A route drawn from a YOU mark in the hall to Exit 2, with Exits 1 and 3 marked.">
+        </span>
+        <span class="example-bar"><span>Example: a metro station plan from China</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
+      </a>
+      <figcaption id="example-credit" class="credit"></figcaption>
+    </figure>
     <ol class="howto" role="list">
       <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>Photograph the posted plan</li>
       <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>Tap where you stand</li>
@@ -127,7 +127,7 @@
       <div id="read-wrap" class="card read" hidden>
         <h3 id="read-head">What Muse Spark read</h3>
         <p id="read-sum"></p>
-        <button id="show-read" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Show the reading on the plan</button>
+        <button id="show-read" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span id="show-read-text">Show the reading on the plan</span></button>
         <ol id="read-exits" class="read-exits" role="list" aria-labelledby="read-head"></ol>
         <p id="read-zoom" class="muted"></p>
         <p class="muted">Muse Spark's part ends here. HereOut's own code finds the walls in the ink (OpenCV, with RapidOCR text detection to skip lettering) and works out every route in your browser.</p>

@@ -16,12 +16,23 @@ function readingOn() {
   return readShown && !!(state && state.read);
 }
 
+// While the reading shows, the other views are off; after it, they are as before.
 function setReading(on) {
+  const was = readShown;
   readShown = on && !!(state && state.read);
+  if (readShown) clearRefusal();
   $("show-read").setAttribute("aria-pressed", String(readShown));
+  $("show-read-text").textContent = readShown ? "Hide the reading" : "Show the reading on the plan";
   $("result").classList.toggle("reading", readShown);
+  $("show-map").setAttribute("aria-pressed", String(!readShown && showMap && !photoOnly));
+  $("show-photo").setAttribute("aria-pressed", String(!readShown && photoOnly));
+  $("show-routes").setAttribute("aria-pressed", String(!readShown && routesOnly));
+  $("tap-text").textContent = readShown ? READ_TAP_TEXT : TAP_TEXT;
+  $("tap-text").hidden = !readShown && (!state || !state.start || marking);
+  if (readShown !== was) sayPlan(readShown ? "Showing what Muse Spark read on all of the photo." : "Back to the plan and the route.");
   draw();
 }
+const READ_TAP_TEXT = "Tap the plan or press Enter to go back to the route.";
 
 const readSide = () => Math.max(state.width, state.height);
 const zoomMoved = (row) => row.zoom === "moved" &&
@@ -43,7 +54,7 @@ function readZoomText(read) {
   const count = (f) => rows.filter(f).length;
   switch (read.zoom) {
     case null: case undefined:
-      return "This sample uses a saved reading. Its zoom check, if any, was not saved.";
+      return "This sample uses a saved reading without its zoom check.";
     case "none":
       return "Every point was near a green or red plan mark, so no zoom check ran.";
     case "skipped":
@@ -189,20 +200,21 @@ function drawReading() {
 
 $("show-read").addEventListener("click", (ev) => {
   setReading(!readShown);
-  // On a phone the plan is above this card.
-  if (readShown && narrow() && ev.detail !== 0) $("stage").scrollIntoView({ block: "nearest", behavior: smoothScroll() });
+  // The plan can be above the window (a phone, or a long card).
+  if (readShown && ev.detail !== 0) $("stage").scrollIntoView({ block: "nearest", behavior: smoothScroll() });
 });
 // Another view of the plan, a tap or Enter ends the reading view. The tap
 // sets no start: the reading view shows all of the photo, and the plan view
 // is framed, so the tap point would be wrong.
-for (const id of ["show-map", "show-photo", "show-routes"]) {
-  $(id).addEventListener("click", () => { if (readShown) setReading(false); });
-}
-canvas.addEventListener("click", (ev) => {
+// The view buttons then only end it: the view under it comes back as it was.
+function endReading(ev) {
   if (!readShown) return;
   ev.stopImmediatePropagation();
+  ev.preventDefault();
   setReading(false);
-}, true);
+}
+for (const id of ["show-map", "show-photo", "show-routes"]) $(id).addEventListener("click", endReading, true);
+canvas.addEventListener("click", endReading, true);
 canvas.addEventListener("keydown", (ev) => {
-  if (readShown && (ev.key === "Enter" || ev.key === " ")) setReading(false);
+  if (ev.key === "Enter" || ev.key === " ") endReading(ev);
 }, true);

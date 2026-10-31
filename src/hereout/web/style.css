@@ -102,6 +102,7 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 
 /* The example: the photo of a sample plan, cropped, under the marks HereOut drew on it. */
 .example { margin: 0 0 20px; }
+.shoot + .example { margin-top: 16px; }
 .example-open { display: block; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--fg); text-decoration: none; }
 .example-open:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 .example-pic { display: block; position: relative; overflow: hidden; aspect-ratio: var(--aspect); background: var(--soft); }
@@ -278,3 +279,6 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 .sw-rzoom { height: 4px !important; background-image: linear-gradient(#6a1b9a, #6a1b9a); }
 .sw-rcode { height: 3px !important; background-image: repeating-linear-gradient(90deg, #111111 0 6px, transparent 6px 10px); }
 .sw-rdrop { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 3px solid #5f6368; }
+@media (prefers-color-scheme: dark) {
+  #show-read[aria-pressed="true"] { border-color: #c58af0; box-shadow: inset 0 0 0 1.5px #c58af0; }
+}

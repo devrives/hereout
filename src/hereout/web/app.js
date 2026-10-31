@@ -56,6 +56,7 @@ function say(text) { $("status").textContent = text; }
 let sayAgain = 0;
 function sayPlan(text) {
   const el = $("plan-status");
+  if (text === FINDING && el.textContent === FINDING) return;  // one open, one message
   clearTimeout(sayAgain);
   if (text && el.textContent === text) {
     el.textContent = "";
@@ -351,8 +352,10 @@ function wallLayer() {
 // often has a frame, text panels and a legend round the sheet, and the plan
 // was small on a phone. The frame is the box of the open cells of the wall
 // grid (route.js openBox: every cell outside the model's floor box is wall)
-// and every exit, start and their marks, with a margin. "Photo only" shows
-// all of the photo. All drawing is in photo pixels; setFrame maps them.
+// and every exit, start and their marks, with a margin. "Photo only" keeps the
+// frame, so the photo and the route compare at one place; the reading view
+// (reading.js) shows all of the photo. All drawing is in photo pixels;
+// setFrame maps them.
 const FRAME_MARGIN = 0.05;  // share of the long side of the box: room for the exit marks and their labels
 const FRAME_TALL = 1.25;    // a frame is at most this tall for its width, or as tall as the photo
 const FRAME_ALL = 0.9;      // a box with this share of the photo on both sides shows all of it
@@ -386,7 +389,7 @@ function floorFrame() {
 // The reading view (reading.js) shows all of the photo, as the model saw it.
 function shownFrame() {
   const reading = typeof readingOn === "function" && readingOn();
-  return photoOnly || reading || !view || !view.frame ? [0, 0, state.width, state.height] : view.frame;
+  return reading || !view || !view.frame ? [0, 0, state.width, state.height] : view.frame;
 }
 
 // Canvas pixels for each photo pixel: a frame gets as many canvas pixels as
@@ -937,6 +940,8 @@ function explain(how = "tap") {
     sayPlan("Route to the exit you marked. Check it against the plan.");
   } else if (state.exitChoice >= 0) {
     sayPlan(`Route to ${exitName(state.exitChoice)}.${otherWay()} Check it against the plan.`);
+  } else if (exampleStart()) {
+    sayPlan(`Example start, picked by hand. Route to the nearest exit, ${exitName(view.route.exitIndex)}.${otherWay()} Tap the plan to start from another spot.`);
   } else {
     sayPlan(`Route from the spot you chose to the nearest exit, ${exitName(view.route.exitIndex)}.${otherWay()} Check it against the plan.`);
   }
@@ -960,6 +965,7 @@ function showBackup() {
 
 // Photo only and Routes only change what is under the marks, so at most one is on.
 function setPhotoOnly(on) {
+  clearRefusal();
   photoOnly = on;
   if (on) routesOnly = false;
   $("show-photo").setAttribute("aria-pressed", String(on));
@@ -971,6 +977,7 @@ function setPhotoOnly(on) {
 }
 
 $("show-map").addEventListener("click", () => {
+  clearRefusal();
   showMap = !showMap;
   $("show-map").setAttribute("aria-pressed", String(showMap));
   showLegend();
@@ -1484,6 +1491,14 @@ function openExample(gid, start) {
   }, "Opening the example…", true);
 }
 
+// The start is the one of the example picture (not one the user chose).
+function exampleStart() {
+  const fig = $("example");
+  if (!fig || !state.start || sampleId(state.id) !== fig.dataset.sample) return false;
+  const [x, y] = fig.dataset.start.split(",").map(Number);
+  return state.start[0] === x && state.start[1] === y;
+}
+
 function setUpExample() {
   const fig = $("example");
   if (!fig) return;  // the server has no saved image of the example plan
@@ -1597,8 +1612,9 @@ canvas.addEventListener("keydown", (ev) => {
   if (move) {
     keyboard = true;
     $("kbd-hint").hidden = false;
-    cursor = [Math.min(fr[2], Math.max(fr[0], cursor[0] + move[0])),
-              Math.min(fr[3], Math.max(fr[1], cursor[1] + move[1]))];
+    const inset = frameUnit() * 4;  // the cross stays whole on the plan
+    cursor = [Math.min(fr[2] - inset, Math.max(fr[0] + inset, cursor[0] + move[0])),
+              Math.min(fr[3] - inset, Math.max(fr[1] + inset, cursor[1] + move[1]))];
     draw();
     scrollToPoint(cursor);
     sayMarker();
