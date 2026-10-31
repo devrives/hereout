@@ -214,3 +214,70 @@ def test_gallery_mixes_countries(tmp_path):
         g.items[f"{c}-{i}"] = {**g.items["XX-test_1"], "id": f"{c}-{i}", "country": c}
     countries = [p["country"] for p in g.listing()[:4]]
     assert len(set(countries)) == 4
+
+
+def test_gallery_order_first_and_last(tmp_path):
+    g = make_gallery(tmp_path)
+    for i, c in enumerate(["AA", "AA", "BB", "CC", "DD"]):
+        g.items[f"{c}-{i}"] = {**g.items["XX-test_1"], "id": f"{c}-{i}", "country": c}
+    g.items["EE-5"] = {**g.items["XX-test_1"], "id": "EE-5", "country": "EE", "route_found": False}
+    # Unknown ids and plans with no route are not put first.
+    g.first, g.last = ["CC-3", "nope", "AA-1", "EE-5"], ["DD-4", "CC-3"]
+    ids = [p["id"] for p in g.listing()]
+    assert ids[:2] == ["CC-3", "AA-1"]
+    assert ids[-2:] == ["DD-4", "EE-5"]
+    assert sorted(ids) == sorted(g.items)
+
+
+def test_gallery_order_file_names_real_plans():
+    import json
+    from hereout.gallery import ORDER_FILE
+    order = json.loads(ORDER_FILE.read_text())
+    assert len(order["first"]) >= 9 and len(set(order["first"])) == len(order["first"])
+    assert not set(order["first"]) & set(order.get("last", []))
+
+
+def example_template(pid):
+    from hereout.app import EXAMPLE_CREDIT, EXAMPLE_PHOTO, EXAMPLE_TAG
+    return (f'<p>a</p>\n{EXAMPLE_TAG} data-sample="{pid}" data-start="1,2">'
+            f'<img src="{EXAMPLE_PHOTO}">{EXAMPLE_CREDIT}</figure>\n<p>b</p>')
+
+
+def test_example_shows_the_saved_image(tmp_path):
+    import json
+    from hereout.app import example_page
+    g = make_gallery(tmp_path)
+    g.items["XX-test_1"]["credit"].update(title='The "A" plan', licence_url="https://l", source_url="https://s",
+                                          changes=["resized"], share_alike=True)
+    page = example_template("XX-test_1")
+    # No saved image for the current code: the example goes, with its image.
+    assert example_page(page, g) == "<p>a</p>\n<p>b</p>"
+    assert example_page(page, None) == "<p>a</p>\n<p>b</p>"
+    (tmp_path / "answers").mkdir()
+    out, image = g.answer_to_save("XX-test_1")
+    path = g.answer_path("XX-test_1")
+    path.write_text(json.dumps(out))
+    path.with_suffix(".webp").write_bytes(image)
+    shown = example_page(page, g)
+    assert f'src="/gallery/answers/{path.stem}.webp"' in shown and " hidden" not in shown
+    assert "“The ‘A’ plan” by A" in shown
+    assert '<a href="https://l" rel="noopener">CC0 1.0</a>' in shown
+    assert "Changes: resized, cropped, marks, escape map and route drawn on top." in shown
+    assert "shared under the same licence" in shown
+    # The image URL is the one the plan opens with, so the browser loads it once.
+    client = TestClient(create_app(None, use_env=False, gallery=g))
+    assert client.post("/api/gallery/XX-test_1").json()["image"] == f"/gallery/answers/{path.stem}.webp"
+    # After a code change the old image is not shown.
+    g.code = "other"
+    assert "<figure" not in example_page(page, g)
+
+
+def test_start_page_example_markup():
+    from hereout.app import EXAMPLE_CREDIT, EXAMPLE_PHOTO, EXAMPLE_TAG, WEB
+    page = (WEB / "index.html").read_text()
+    assert page.count(EXAMPLE_TAG) == 1 and EXAMPLE_CREDIT in page and f'src="{EXAMPLE_PHOTO}"' in page
+    m = re.search(r'data-sample="([\w-]+)" data-start="(\d+),(\d+)"', page)
+    assert m and f'href="/?sample={m[1]}"' in page
+    assert (WEB / "example-marks.webp").read_bytes()[8:12] == b"WEBP"
+    # Without a gallery the start page has no example.
+    assert "example-photo" not in TestClient(create_app(None, use_env=False)).get("/").text

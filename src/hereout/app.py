@@ -10,6 +10,7 @@ memory for a few minutes only. Nothing is written to disk.
 from __future__ import annotations
 
 import hashlib
+import html
 import mimetypes
 import os
 import re
@@ -57,6 +58,40 @@ def index_html() -> str:
     def versioned(m: re.Match) -> str:
         return f'{m.group(1)}/static/{m.group(2)}?v={static_digest(m.group(2))}"'
     return re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / "index.html").read_text())
+
+
+EXAMPLE_PHOTO = "/gallery/example-photo"  # in index.html: the server puts the URL of the saved image here
+EXAMPLE_TAG = '<figure id="example" class="example" hidden'
+EXAMPLE_CREDIT = '<figcaption id="example-credit" class="credit"></figcaption>'
+
+
+def credit_html(c: dict, changes: list[str]) -> str:
+    """The credit of a gallery photo, as the gallery gives it (app.js showCredit)."""
+    def link(text: str, href: str) -> str:
+        t = html.escape(text)
+        return f'<a href="{html.escape(href)}" rel="noopener">{t}</a>' if href else t
+    title = re.sub(r'"([^"]*)"', "\u2018\\1\u2019", c["title"])  # app.js quoted()
+    out = (f"Photo: \u201c{html.escape(title)}\u201d by {html.escape(c['author'])}, "
+           f"{link(c['licence'], c.get('licence_url', ''))}, {link('source', c.get('source_url', ''))}. "
+           f"Changes: {html.escape(', '.join([*c.get('changes', []), *changes]))}.")
+    if c.get("share_alike"):
+        out += " The changed image is shared under the same licence."
+    return out
+
+
+def example_page(page: str, gallery: Gallery | None) -> str:
+    """The start page with its example: the photo of one sample plan under the
+    marks that HereOut drew on it (web/example-marks.webp, scripts/example_marks.mjs).
+    The example goes while the gallery has no saved image of that plan for the
+    current code (scripts/save_answers.py): a hidden image would still load."""
+    m = re.search(EXAMPLE_TAG + r'[^>]* data-sample="([\w-]+)"', page)
+    url = gallery.saved_image_url(m[1]) if m and gallery else None
+    if not url:
+        return re.sub(EXAMPLE_TAG + r".*?</figure>\n?", "", page, count=1, flags=re.S)
+    credit = credit_html(gallery.items[m[1]]["credit"], ["cropped", "marks, escape map and route drawn on top"])
+    return (page.replace(f'src="{EXAMPLE_PHOTO}"', f'src="{html.escape(url)}"', 1)
+                .replace(EXAMPLE_TAG, EXAMPLE_TAG.removesuffix(" hidden"), 1)
+                .replace(EXAMPLE_CREDIT, EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))
 
 
 class LongCache(StaticFiles):
@@ -156,7 +191,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return HTMLResponse(page)
+        return HTMLResponse(example_page(page, gallery))
 
     @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)
     def robots():

@@ -100,6 +100,18 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .howto li { display: flex; align-items: center; gap: 12px; font-weight: 500; }
 .howto .n { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--soft); color: var(--accent); flex: none; }
 
+/* The example: the photo of a sample plan, cropped, under the marks HereOut drew on it. */
+.example { margin: 0 0 20px; }
+.example-open { display: block; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--fg); text-decoration: none; }
+.example-open:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.example-pic { display: block; position: relative; overflow: hidden; aspect-ratio: var(--aspect); background: var(--soft); }
+.example-pic img { position: absolute; display: block; max-width: none; height: auto; }
+.example-photo { width: var(--w); left: var(--x); top: var(--y); }
+.example-marks { inset: 0; width: 100%; }
+.example-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 14px; font-weight: 600; border-top: 1px solid var(--line); }
+.example-go { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--accent); }
+.example-open:hover .example-go { text-decoration: underline; }
+.example .credit { margin-top: 6px; font-size: 0.8rem; }
 #status { min-height: 1.5em; margin: 12px 0; color: var(--muted); }
 #status:empty { margin: 8px 0; }
 html.has-plan #status { margin: 6px 0; }
