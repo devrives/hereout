@@ -89,6 +89,41 @@ def test_directions_simple_l_shape():
     assert steps[2]["text"] == "Then you reach the exit."
 
 
+def test_directions_side_step_keeps_the_right_angle():
+    """A short side step just before a right angle: the steps name no slight
+    turn, because the side step does not tilt the walks. The walk with the
+    side step names it."""
+    pts = [(50, 250), (250, 250), (250, 265), (275, 265), (275, 460)]
+    walks = [s for s in directions(pts, 500, 500) if s["kind"] == "walk"]
+    assert [s["turn"] for s in walks] == ["right", "straight", "right"]
+    assert walks[1]["text"] == "Step right, then keep going straight for a short way."
+    assert walks[1]["path"] == [(250, 250), (250, 265), (275, 265)]
+
+
+def test_directions_side_step_before_a_turn_back():
+    """Down, then a side step to the plan left and back up: the walker steps
+    to their right (facing down), then turns around."""
+    pts = [(100, 50), (100, 300), (80, 300), (80, 200)]
+    walks = [s for s in directions(pts, 500, 500) if s["kind"] == "walk"]
+    assert walks[1]["text"] == "Step right, then turn around and go back a medium way."
+
+
+def test_directions_zigzag_takes_the_main_way():
+    """Short legs across a long walk down: the legs down add up, so the walk
+    goes down and the turn after it is a right angle."""
+    pts = [(100, 50), (100, 300), (112, 300), (112, 340), (124, 340), (124, 380), (124, 420), (400, 420)]
+    walks = [s for s in directions(pts, 500, 500) if s["kind"] == "walk"]
+    assert not any(s["turn"].startswith("slight") for s in walks)
+
+
+def test_directions_split_walk_with_two_ways():
+    """Down, a short way to the plan left, then a long way down. The words
+    name both turns, so a walker who follows them ends up going down."""
+    pts = [(500, 50), (500, 90), (450, 90), (450, 600)]
+    texts = [s["text"] for s in directions(pts, 1200, 1200) if s["kind"] == "walk"]
+    assert texts[1:] == ["Turn right and walk a short way.", "Turn left and walk a medium way."]
+
+
 def camera_view(sheet_w, sheet_h, yaw_deg, pitch_deg, f=1000.0, size=(1200, 900), dist=1000.0):
     """Corners of a flat sheet seen by a pinhole camera, as photo pixels."""
     yaw, pitch = np.radians(yaw_deg), np.radians(pitch_deg)

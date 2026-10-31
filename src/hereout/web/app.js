@@ -473,8 +473,8 @@ function drawMarks(unit) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.beginPath();
-      ctx.moveTo(step.from[0], step.from[1]);
-      ctx.lineTo(step.to[0], step.to[1]);
+      ctx.moveTo(step.path[0][0], step.path[0][1]);
+      for (const p of step.path.slice(1)) ctx.lineTo(p[0], p[1]);
       ctx.stroke();
     }
   }
@@ -485,7 +485,8 @@ function drawMarks(unit) {
     label("YOU", at.x, at.y, r, at.baseline, at.align);
   }
   if (step && step.kind === "walk") {
-    label(String(selected + 1), (step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2 - unit * 2.5, unit * 2.4, "bottom");
+    const mid = longestMiddle(step.path);
+    label(String(selected + 1), mid[0], mid[1] - unit * 2.5, unit * 2.4, "bottom");
   }
 }
 
@@ -589,6 +590,30 @@ function showSteps() {
   stopSpeaking();
 }
 
+// The point halfway along the path of a step: the step follows the route
+// with its side steps, not the straight line from its start to its end.
+function pathMiddle(path) {
+  const len = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  let half = path.slice(1).reduce((t, p, k) => t + len(path[k], p), 0) / 2;
+  for (let k = 1; k < path.length; k++) {
+    const d = len(path[k - 1], path[k]);
+    if (d >= half && d > 0) return [path[k - 1][0] + (path[k][0] - path[k - 1][0]) * half / d, path[k - 1][1] + (path[k][1] - path[k - 1][1]) * half / d];
+    half -= d;
+  }
+  return path[path.length - 1];
+}
+
+// The middle of the longest leg of the path of a step: its number goes
+// there, off the short side steps that its words name.
+function longestMiddle(path) {
+  let k = 1;
+  for (let j = 2; j < path.length; j++) {
+    if (Math.hypot(path[j][0] - path[j - 1][0], path[j][1] - path[j - 1][1]) >
+        Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1])) k = j;
+  }
+  return [(path[k - 1][0] + path[k][0]) / 2, (path[k - 1][1] + path[k][1]) / 2];
+}
+
 // Show one step on the plan. -1 shows none.
 function select(i) {
   selected = i;
@@ -597,7 +622,7 @@ function select(i) {
   draw();
   const step = view.steps[i];
   if (!step || step.kind !== "walk") return;
-  const mid = [(step.from[0] + step.to[0]) / 2, (step.from[1] + step.to[1]) / 2];
+  const mid = pathMiddle(step.path);
   scrollToPoint(mid);
   // On a phone the plan is above the steps: bring the leg into the window.
   const box = canvas.getBoundingClientRect();

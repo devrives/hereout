@@ -48,3 +48,4 @@ sources:
 - No plan changed its exits. No area lost its way to an exit. The ground truth of the 7 review plans did not change: floor 1.000, leak 0.105, walls 9 of 11.
 - On CN-commons_000097 the way to the escalator exit goes on the paper beside the escalator. The line on the corridor to the escalator is not drawn now.
 - Open: on US-openverse_000109 a printed red route closes a corridor, and the rooms behind it have no way out.
+- The next round is in [Turn words from the main leg of a walk](step-turns-main-leg.md).

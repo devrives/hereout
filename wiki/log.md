@@ -297,3 +297,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/faded-wall-ends.md`: a link to the new page.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-10-31, the gallery check, the ground truth, the code and the tests.
+
+## [2026-10-31] ingest | Turn words from the main leg of a walk
+
+- Added `decisions/step-turns-main-leg.md`: the heading of a walk from its longest leg, the joins at the wing edge, and the wing for slanted corridors that failed.
+- Updated `decisions/exit-walk-outside.md`: a link to the new page.
+- Updated `index.md`: the new page.
+- Source: the owner words of 2026-10-31, the gallery check, the a11y review, the code and the tests.

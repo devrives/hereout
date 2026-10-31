@@ -27,6 +27,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Inner walls much thinner than the outer walls](decisions/inner-wall-width.md): accepted; a long wide line is a wall, two other rules failed.
 - [Faded ends of walls are walls](decisions/faded-wall-ends.md): accepted; ink in the line of a wall goes on as wall, unless it closes a door.
 - [A walk outside from an exit mark to its door](decisions/exit-walk-outside.md): accepted; an exit mark on the street gets a way to its door.
+- [Turn words from the main leg of a walk](decisions/step-turns-main-leg.md): accepted; a side step does not make a right angle a slight turn.
 - [Fix the weak plan types](decisions/weak-plan-types.md): accepted; photo maps, outdoor words, floors with no exit, legends, a new read of 30 plans, gallery speed.
 - [Find the walls as straight lines](decisions/wall-lines.md): wall lines and blocks from the wall mask.
 - [Check the exits with numbered marks](decisions/exit-mark-check.md): a second call keeps, moves or drops each exit (proposed).

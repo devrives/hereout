@@ -25,6 +25,11 @@ const HereOutRoute = (() => {
   const N_STEP = Float64Array.from(NEIGHBOURS, (q) => q[2]);
   const SIMPLIFY_SHARE = 0.015;
   const MIN_LEG_SHARE = 0.03;
+  const MAIN_LEG_SHARE = 0.6;   // legs of one way this share of a walk or more give the walk its heading
+  const SAME_WAY = 10;          // degrees: legs within this of each other go the same way
+  const END_WAY_SHARE = 0.35;   // with no main way, a walk starts and ends on legs of a way this share of it or more
+  const SPLIT_PASSES = 4;       // passes that split walks with a turn between their two ways
+  const SIDE_STEP_SHARE = 0.02;  // a straight walk that ends farther than this share of the plan to one side has a side step
 
   class NoRoute extends Error {}
 
@@ -601,7 +606,8 @@ const HereOutRoute = (() => {
     // The lines of the map with a wing at an angle: the lines of this network
     // outside the wing, and the lines of the wing's own network inside it.
     // Where a line of each leaves the edge of the wing near the other, a
-    // short straight line joins the two cut ends.
+    // short straight line joins the two cut ends. A cut end with no other
+    // cut end near joins the nearest line of the other part.
     mergeWing(main, wing) {
       const f = this.field, mask = f.wing.mask;
       const inWing = (p) => { const [r, c] = f.toCell(p); return mask[r * f.gw + c] === 1; };
@@ -637,8 +643,8 @@ const HereOutRoute = (() => {
         }
         return true;
       };
-      const used = new Set();
-      for (const w of wingEnds) {
+      const used = new Set(), joined = new Set();
+      wingEnds.forEach((w, j) => {
         let best = -1, bestD = reach;
         mainEnds.forEach((m, k) => {
           const d = Math.hypot(m.p[0] - w.p[0], m.p[1] - w.p[1]);
@@ -646,8 +652,49 @@ const HereOutRoute = (() => {
         });
         if (best >= 0) {
           used.add(best);
+          joined.add(j);
           legs.push({ a: w.p, b: mainEnds[best].p, flow: Math.max(w.flow, mainEnds[best].flow), join: true });
         }
+      });
+      // A cut end with no cut end near joins the nearest point of a line of
+      // the other part.
+      const nearest = (p, lines) => {
+        let best = null, bestD = reach;
+        for (const l of lines) {
+          const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], len2 = dx * dx + dy * dy;
+          const t = len2 ? Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / len2)) : 0;
+          const q = [l.a[0] + t * dx, l.a[1] + t * dy], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
+          if (d < bestD && open(p, q)) { best = q; bestD = d; }
+        }
+        return best;
+      };
+      // Only to a line of another piece: a join inside one piece makes a
+      // small loop, and a second join at the same end adds nothing.
+      const tol = 1.5 / f.scale;
+      const piece = legs.map((l, k) => k);
+      const find = (k) => { while (piece[k] !== k) k = piece[k] = piece[piece[k]]; return k; };
+      const onLeg = (p, l) => {
+        const dx = l.b[0] - l.a[0], dy = l.b[1] - l.a[1], len2 = dx * dx + dy * dy;
+        const t = len2 ? Math.max(0, Math.min(1, ((p[0] - l.a[0]) * dx + (p[1] - l.a[1]) * dy) / len2)) : 0;
+        return Math.hypot(l.a[0] + t * dx - p[0], l.a[1] + t * dy - p[1]) <= tol;
+      };
+      const pieceAt = (p) => { const k = legs.findIndex((l) => onLeg(p, l)); return k < 0 ? -1 : find(k); };
+      for (let j = 0; j < legs.length; j++) {
+        for (let k = 0; k < j; k++) {
+          if (onLeg(legs[j].a, legs[k]) || onLeg(legs[j].b, legs[k]) || onLeg(legs[k].a, legs[j]) || onLeg(legs[k].b, legs[j])) piece[find(j)] = find(k);
+        }
+      }
+      const loose = [...wingEnds.filter((w, j) => !joined.has(j)).map((w) => [w, outside]),
+                     ...mainEnds.filter((m, k) => !used.has(k)).map((m) => [m, inside])];
+      for (const [e, lines] of loose) {
+        const from = pieceAt(e.p);
+        const q = nearest(e.p, lines.filter((l) => { const k = pieceAt(l.a); return k < 0 || k !== from; }));
+        if (!q) continue;
+        const to = pieceAt(q);
+        legs.push({ a: e.p, b: q, flow: e.flow, join: true });
+        piece.push(legs.length - 1);
+        if (from >= 0) piece[find(legs.length - 1)] = from;
+        if (to >= 0) piece[find(to)] = find(legs.length - 1);
       }
       return legs;
     }
@@ -1813,17 +1860,50 @@ const HereOutRoute = (() => {
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   const mod = (a, m) => ((a % m) + m) % m;
 
+  // The indices of the route points that stay.
   function simplify(points, planSize) {
-    if (points.length < 3) return points.slice();
-    const out = douglasPeucker(points, SIMPLIFY_SHARE * planSize);
+    if (points.length < 3) return points.map((p, i) => i);
+    const out = douglasPeucker(points.map((p, i) => [p[0], p[1], i]), SIMPLIFY_SHARE * planSize);
     const kept = [out[0]];
-    for (const p of out.slice(1, -1)) if (dist(kept[kept.length - 1], p) >= MIN_LEG_SHARE * planSize) kept.push(p);
+    for (const p of out.slice(1, -1)) if (dist(kept[kept.length - 1], p) >= MIN_LEG_SHARE * planSize - 1e-9) kept.push(p);
     kept.push(out[out.length - 1]);
-    return kept;
+    return kept.map((p) => p[2]);
   }
 
   // Angle in degrees, 0 = up on the plan, clockwise positive.
   const heading = (a, b) => Math.atan2(b[0] - a[0], -(b[1] - a[1])) * (180 / Math.PI);
+
+  // The headings of the walk from route point i to route point j, as
+  // [where it starts, where it ends]. Its legs that go the same way (within
+  // SAME_WAY degrees of each other) add up. When the legs of one way are
+  // MAIN_LEG_SHARE of the walk or more, both are the heading of the longest
+  // of them: a short side step does not tilt the walk, so a right angle
+  // after it stays a right angle. Else the walk starts on its first leg of
+  // a way with END_WAY_SHARE of the walk and ends on its last one, as on a
+  // side step of two equal legs. With no such way, both are the heading of
+  // the straight line. A third item is the route point where the walk must
+  // split, when two of its ways make a turn.
+  function walkHeadings(points, i, j) {
+    const legs = [];
+    for (let k = i; k < j; k++) legs.push({ d: dist(points[k], points[k + 1]), h: heading(points[k], points[k + 1]) });
+    const total = legs.reduce((a, l) => a + l.d, 0);
+    const ways = legs.map((l) => legs.reduce((a, m) => a + (Math.abs(mod(m.h - l.h + 180, 360) - 180) <= SAME_WAY ? m.d : 0), 0));
+    let best = -1;
+    legs.forEach((l, k) => {
+      if (best < 0 || ways[k] > ways[best] + 1e-9 || (Math.abs(ways[k] - ways[best]) <= 1e-9 && l.d > legs[best].d)) best = k;
+    });
+    if (best >= 0 && ways[best] > 0 && ways[best] >= MAIN_LEG_SHARE * total) return [legs[best].h, legs[best].h];
+    const ends = [];
+    legs.forEach((l, k) => { if (l.d > 0 && ways[k] >= END_WAY_SHARE * total) ends.push(k); });
+    if (!ends.length) { const h = heading(points[i], points[j]); return [h, h]; }
+    const first = legs[ends[0]].h, last = legs[ends[ends.length - 1]].h;
+    // A turn between two of these ways is a step of its own: the walk
+    // splits where the second way starts.
+    for (let k = 1; k < ends.length; k++) {
+      if (turnOf(legs[ends[k]].h - legs[ends[k - 1]].h) !== "straight") return [first, last, i + ends[k]];
+    }
+    return [first, last];
+  }
 
   function turnOf(delta) {
     delta = mod(delta + 180, 360) - 180;
@@ -1845,23 +1925,51 @@ const HereOutRoute = (() => {
     return "long";
   }
 
+  // "left" or "right" when a walk from a to b with this heading ends to
+  // one side of its start line by more than SIDE_STEP_SHARE of the plan: a
+  // side step round a wall that the walk leaves out. Else null.
+  function sideStep(a, b, head, planSize) {
+    const h = head * (Math.PI / 180);
+    const right = (b[0] - a[0]) * Math.cos(h) + (b[1] - a[1]) * Math.sin(h);
+    if (Math.abs(right) <= SIDE_STEP_SHARE * planSize) return null;
+    return right > 0 ? "right" : "left";
+  }
+
   function directions(points, planW, planH) {
     const planSize = Math.hypot(planW, planH);
-    const pts = simplify(points, planSize);
+    let idx = simplify(points, planSize);
+    for (let pass = 0; pass < SPLIT_PASSES; pass++) {
+      const out = [idx[0]];
+      for (let k = 0; k + 1 < idx.length; k++) {
+        const split = walkHeadings(points, idx[k], idx[k + 1])[2];
+        if (split > idx[k] && split < idx[k + 1]) out.push(split);
+        out.push(idx[k + 1]);
+      }
+      if (out.length === idx.length) break;
+      idx = out;
+    }
+    const pts = idx.map((i) => points[i]);
     const steps = [];
     let prev = 0.0;  // facing the plan = facing "up"
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i], b = pts[i + 1];
-      const head = heading(a, b);
+      const [head, end] = walkHeadings(points, idx[i], idx[i + 1]);
       const turn = turnOf(head - prev);
       const length = lengthOf(dist(a, b), planSize);
       let text;
       if (i === 0) text = `Start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
-      else if (turn === "straight") text = `Keep going straight for a ${length} way.`;
-      else if (turn === "back") text = `Turn around and go back a ${length} way.`;
+      else if (turn === "straight") {
+        const side = sideStep(a, b, head, planSize);
+        text = side ? `Step ${side}, then keep going straight for a ${length} way.` : `Keep going straight for a ${length} way.`;
+      }
+      else if (turn === "back") {
+        // The side step comes before the turn: its side is that of the way the walker still faces.
+        const side = sideStep(a, b, prev, planSize);
+        text = side ? `Step ${side}, then turn around and go back a ${length} way.` : `Turn around and go back a ${length} way.`;
+      }
       else text = `Turn ${turn.replace("slight", "slightly")} and walk a ${length} way.`;
-      steps.push({ kind: "walk", turn, length, text, from: a, to: b });
-      prev = head;
+      steps.push({ kind: "walk", turn, length, text, from: a, to: b, path: points.slice(idx[i], idx[i + 1] + 1) });
+      prev = end;
     }
     steps.push({ kind: "arrive", text: "Then you reach the exit.", at: pts[pts.length - 1] });
     return steps;
