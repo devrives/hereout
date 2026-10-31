@@ -214,3 +214,25 @@ def test_gallery_mixes_countries(tmp_path):
         g.items[f"{c}-{i}"] = {**g.items["XX-test_1"], "id": f"{c}-{i}", "country": c}
     countries = [p["country"] for p in g.listing()[:4]]
     assert len(set(countries)) == 4
+
+
+def test_gallery_order_first_and_last(tmp_path):
+    g = make_gallery(tmp_path)
+    for i, c in enumerate(["AA", "AA", "BB", "CC", "DD"]):
+        g.items[f"{c}-{i}"] = {**g.items["XX-test_1"], "id": f"{c}-{i}", "country": c}
+    g.items["EE-5"] = {**g.items["XX-test_1"], "id": "EE-5", "country": "EE", "route_found": False}
+    # Unknown ids and plans with no route are not put first.
+    g.first, g.last = ["CC-3", "nope", "AA-1", "EE-5"], ["DD-4", "CC-3"]
+    ids = [p["id"] for p in g.listing()]
+    assert ids[:2] == ["CC-3", "AA-1"]
+    assert ids[-2:] == ["DD-4", "EE-5"]
+    assert sorted(ids) == sorted(g.items)
+
+
+def test_gallery_order_file_names_real_plans():
+    import json
+    from hereout.gallery import ORDER_FILE
+    order = json.loads(ORDER_FILE.read_text())
+    assert len(order["first"]) >= 9 and len(set(order["first"])) == len(order["first"])
+    assert not set(order["first"]) & set(order.get("last", []))
+

@@ -20,6 +20,9 @@ from .pipeline import Plan, answer
 from .reader import Reading
 
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+# The order of the list: plans that read well first, plans with wrong exits
+# last. A JSON file, so a new order does not change the key of the saved answers.
+ORDER_FILE = Path(__file__).parent / "gallery_order.json"
 PLAN_WEBP_QUALITY = 80  # half the bytes of the JPEG in the answer; the marks and the text stay sharp
 
 
@@ -32,8 +35,11 @@ def code_hash() -> str:
 
 
 class Gallery:
-    def __init__(self, folder: Path, thumbs_url: str = "/gallery/thumbs"):
+    def __init__(self, folder: Path, thumbs_url: str = "/gallery/thumbs", order: dict | None = None):
         self.folder = folder
+        order = json.loads(ORDER_FILE.read_text()) if order is None else order
+        self.first: list[str] = order.get("first", [])
+        self.last: list[str] = order.get("last", [])
         self.thumbs_url = thumbs_url
         self.answers_url = thumbs_url.rsplit("/", 1)[0] + "/answers"
         self.code = code_hash()
@@ -44,27 +50,37 @@ class Gallery:
                 self.items[item["id"]] = item
 
     def listing(self) -> list[dict]:
-        """Public fields only. Plans with a route come first, and countries
-        take turns, so the first rows show many countries."""
-        rows = [{
+        """Public fields only. The plans of the "first" list come first, in its
+        order. Then the other plans with a route, and the countries take turns,
+        so the first rows show many countries. The plans of the "last" list
+        (wrong exits) and the plans with no route are at the end."""
+        rows = {i["id"]: {
             "id": i["id"],
             "country": i["country"],
             "credit": i["credit"],
             "route_found": i["route_found"],
             "thumb": f"{self.thumbs_url}/{i['id']}.jpg",
-        } for i in self.items.values()]
-        rows.sort(key=lambda r: (not r["route_found"], r["country"], r["id"]))
+        } for i in self.items.values()}
+        first = [rows[i] for i in dict.fromkeys(self.first) if i in rows and rows[i]["route_found"]]
+        placed = {r["id"] for r in first}
+        last = [rows[i] for i in dict.fromkeys(self.last) if i in rows and i not in placed and rows[i]["route_found"]]
+        placed |= {r["id"] for r in last}
+        rest = sorted((r for r in rows.values() if r["id"] not in placed), key=lambda r: (r["country"], r["id"]))
+        return (first + self._turns([r for r in rest if r["route_found"]]) + last
+                + self._turns([r for r in rest if not r["route_found"]]))
+
+    @staticmethod
+    def _turns(rows: list[dict]) -> list[dict]:
+        """The rows with the countries in turns, the country with the most plans first."""
+        by_country: dict[str, list[dict]] = {}
+        for r in rows:
+            by_country.setdefault(r["country"], []).append(r)
+        queues = sorted(by_country.values(), key=len, reverse=True)
         out = []
-        for found in (True, False):
-            by_country: dict[str, list[dict]] = {}
-            for r in rows:
-                if r["route_found"] == found:
-                    by_country.setdefault(r["country"], []).append(r)
-            queues = sorted(by_country.values(), key=len, reverse=True)
-            while any(queues):
-                for q in queues:
-                    if q:
-                        out.append(q.pop(0))
+        while any(queues):
+            for q in queues:
+                if q:
+                    out.append(q.pop(0))
         return out
 
     def open(self, pid: str) -> tuple[Plan, Reading, dict] | None:
