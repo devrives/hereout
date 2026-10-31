@@ -193,6 +193,15 @@ class Reading:
     cost_usd: float = 0.0
     usage: dict = field(default_factory=dict)
     plan_box: tuple[float, float, float, float] | None = None  # image pixels
+    # What the model gave, for the page: each exit of the main call with the
+    # result of the zoom check on it ("moved" with "to", "dropped" or
+    # "unchanged"; no "zoom" key when it was not checked). None for a saved reading.
+    trace: list[dict] | None = None
+    zoom: str | None = None  # the zoom check: "done", "none" (no suspect), "skipped", "failed" or "off"
+    # Set by Plan.use_reading: the exits as the code got them, and what the
+    # code did with each ({"at": (x, y)} or {"drop": "legend" | "off"}).
+    given: list[dict] | None = None
+    code: list[dict] | None = None
 
 
 def encode_image(img: np.ndarray) -> str:
@@ -319,19 +328,26 @@ class ModelClient:
         took = time.monotonic() - start
         reading = parse_answer(text, w, h)
         reading.cost_usd, reading.usage = cost, usage
+        reading.trace = [dict(e) for e in reading.exits]
         if not refine or took > ZOOM_SKIP_AFTER:
+            reading.zoom = "off" if not refine else "skipped"
             return reading
         suspects = suspect_exits(img, reading.exits)
+        reading.zoom = "done" if suspects else "none"
         if suspects:
             try:
-                reading.exits, extra = self.zoom_exits(img, reading.exits, suspects)
+                reading.exits, extra, checked = self.zoom_exits(img, reading.exits, suspects)
                 reading.cost_usd += extra
+                for i, result in checked.items():
+                    reading.trace[i].update(result)
             except (ModelError, SpendCapReached):
-                pass
+                reading.zoom = "failed"
         return reading
 
-    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]) -> tuple[list[dict], float]:
-        """Look again at crops around the suspect exits. Returns the exits after the look and its cost."""
+    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]) -> tuple[list[dict], float, dict]:
+        """Look again at crops around the suspect exits. Returns the exits after
+        the look, its cost, and for each suspect what the look did:
+        {"zoom": "moved", "to": (x, y)}, {"zoom": "dropped"} or {"zoom": "unchanged"}."""
         h, w = img.shape[:2]
         side = max(160, round(ZOOM_CROP * max(h, w)))
         crops = []
@@ -352,6 +368,7 @@ class ModelClient:
             answers = {}
         out = [dict(e) for e in exits]
         drop = set()
+        checked = {i: {"zoom": "unchanged"} for i in suspects}
         for n, (i, (c, x0, y0), (sheet, tx, ty, tw, th)) in enumerate(zip(suspects, crops, where), 1):
             a = answers.get(n)
             if not isinstance(a, dict):
@@ -373,5 +390,9 @@ class ModelClient:
             x, y = x0 + sx / tw * cw, y0 + sy / th * ch
             if np.hypot(x - exits[i]["x"], y - exits[i]["y"]) <= ZOOM_MAX_MOVE * max(h, w):
                 out[i]["x"], out[i]["y"] = x, y
+                checked[i] = {"zoom": "moved", "to": (x, y)}
         kept = [e for i, e in enumerate(out) if i not in drop]
-        return (kept or out), cost
+        if kept:
+            for i in drop:
+                checked[i] = {"zoom": "dropped"}
+        return (kept or out), cost, checked

@@ -383,8 +383,10 @@ function floorFrame() {
 }
 
 // The part of the photo in view now: all of it in Photo only.
+// The reading view (reading.js) shows all of the photo, as the model saw it.
 function shownFrame() {
-  return photoOnly || !view || !view.frame ? [0, 0, state.width, state.height] : view.frame;
+  const reading = typeof readingOn === "function" && readingOn();
+  return photoOnly || reading || !view || !view.frame ? [0, 0, state.width, state.height] : view.frame;
 }
 
 // Canvas pixels for each photo pixel: a frame gets as many canvas pixels as
@@ -442,6 +444,7 @@ function startCursor() {
 function draw() {
   if (!state) return;
   setFrame();
+  if (typeof readingOn === "function" && readingOn()) return drawReading();  // reading.js
   if (routesOnly) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, state.width, state.height);
@@ -1161,6 +1164,7 @@ function showPlan(answer, focusResult, push) {
     layout();
     buildField();
     showCredit();
+    if (typeof showReading === "function") showReading();  // reading.js
     update();
     explain();
     if ($("stage").classList.contains("big")) centreOnStart();
