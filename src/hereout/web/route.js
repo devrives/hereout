@@ -6,6 +6,9 @@
 // only (tests/test_network.py).
 const HereOutRoute = (() => {
   const SNAP_SHARE = 0.06;
+  const TAP_REACH_SHARE = 0.025;  // a tap on a wall moves to open floor this share of the grid away at most (Field.tapStart)
+  const TAP_EDGE_SHARE = 0.01;    // a tap this share of the grid outside the open floor box still counts (its outer wall)
+  const TAP_ISLAND_SHARE = 0.005; // ink apart from the walls up to this share of the grid cells is a symbol or a label on the floor
   const MARK_CLEAR_SHARE = 0.012;
   const SOFT_COST = 10.0;  // extra cost of a cell on a soft line, as in route.py
   const EXIT_REACH_SHARE = 0.015;  // an exit reaches the open cells this close, on each side of its line
@@ -399,6 +402,87 @@ const HereOutRoute = (() => {
       if (s === null) return false;
       const area = this.areas();
       return this.seeds[k].some(([g]) => area[g] === area[s]);
+    }
+
+    // The box [x0, y0, x1, y1] in pixels round all open cells, or null when
+    // no cell is open. Outside the floor box of the model every cell is
+    // wall, so this is the floor drawing as HereOut reads it. Browser only.
+    openBox() {
+      if (this._openBox !== undefined) return this._openBox;
+      const { gw, gh, blocked, scale } = this;
+      let c0 = gw, r0 = gh, c1 = -1, r1 = -1;
+      for (let r = 0; r < gh; r++) {
+        for (let c = 0; c < gw; c++) {
+          if (blocked[r * gw + c]) continue;
+          if (c < c0) c0 = c;
+          if (c > c1) c1 = c;
+          if (r < r0) r0 = r;
+          r1 = r;
+        }
+      }
+      this._openBox = c1 < 0 ? null : [c0 / scale, r0 / scale, (c1 + 1) / scale, (r1 + 1) / scale];
+      return this._openBox;
+    }
+
+    // Where a tap starts a route (browser only):
+    // { at: "open", cell } for a tap on open floor;
+    // { at: "moved", cell } for a tap on a wall or ink with open floor at
+    //   most TAP_REACH_SHARE of the grid away, or on an island of ink (a
+    //   symbol or a label on the floor, at most TAP_ISLAND_SHARE of the
+    //   cells): the nearest cell with a way out first, else the nearest
+    //   open cell;
+    // { at: "outside" } for a tap off the floor box (openBox), with
+    //   TAP_EDGE_SHARE of the grid to spare for its outer walls;
+    // { at: "wall" } for a tap in the box with no open floor that near.
+    tapStart(xy) {
+      const box = this.openBox();
+      const [x, y] = xy;
+      const edge = TAP_EDGE_SHARE * Math.max(this.gw, this.gh) / this.scale;
+      if (!box || x < box[0] - edge || y < box[1] - edge || x > box[2] + edge || y > box[3] + edge) return { at: "outside" };
+      const [r0, c0] = this.toCell(xy);
+      const { gw, gh, blocked, owner } = this;
+      if (!blocked[r0 * gw + c0]) return { at: "open", cell: r0 * gw + c0 };
+      const reach = Math.max(TAP_REACH_SHARE * Math.max(gw, gh), this.islandReach(r0 * gw + c0));
+      const span = Math.trunc(reach);
+      let open = -1, openD = Infinity, way = -1, wayD = Infinity;
+      for (let r = Math.max(0, r0 - span); r < Math.min(gh, r0 + span + 1); r++) {
+        for (let c = Math.max(0, c0 - span); c < Math.min(gw, c0 + span + 1); c++) {
+          const i = r * gw + c;
+          if (blocked[i]) continue;
+          const d = (r - r0) ** 2 + (c - c0) ** 2;
+          if (d > reach * reach) continue;
+          if (d < openD) { open = i; openD = d; }
+          if (owner[i] >= 0 && d < wayD) { way = i; wayD = d; }
+        }
+      }
+      if (way >= 0) return { at: "moved", cell: way };
+      if (open >= 0) return { at: "moved", cell: open };
+      return { at: "wall" };
+    }
+
+    // For a blocked cell on an island of ink (blocked cells with open
+    // floor all round, at most TAP_ISLAND_SHARE of the grid), the distance
+    // in cells within which open floor is sure to be: the size of the
+    // island. Else 0: the cell is on the walls or outside the drawing.
+    islandReach(i0) {
+      const { gw, gh, blocked } = this;
+      const most = TAP_ISLAND_SHARE * gw * gh;
+      const seen = new Set([i0]);
+      const todo = [i0];
+      let c0 = gw, r0 = gh, c1 = 0, r1 = 0;
+      while (todo.length) {
+        const i = todo.pop();
+        const r = Math.floor(i / gw), c = i - r * gw;
+        if (r === 0 || c === 0 || r === gh - 1 || c === gw - 1) return 0;
+        c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r);
+        for (const j of [i - 1, i + 1, i - gw, i + gw]) {
+          if (!blocked[j] || seen.has(j)) continue;
+          if (seen.size >= most) return 0;
+          seen.add(j);
+          todo.push(j);
+        }
+      }
+      return Math.max(c1 - c0, r1 - r0) + 2;
     }
 
     // The ways out as straight lines. Browser only.

@@ -93,6 +93,7 @@ function buildField() {
   view = { field, layer: null, walls: null, route: null, steps: [], error: null,
            toExit: (i) => { if (!single.has(i)) single.set(i, make([exitPoints()[i]])); return single.get(i); } };
   view.reachable = field.owner.some((o) => o >= 0);
+  view.frame = floorFrame();
   if (view.reachable) makeNetwork(field);
   else stopWorker();  // no ways out to make: the trees of the plan before are not wanted
 }
@@ -286,10 +287,8 @@ function mapLayer() {
   }
   tctx.putImageData(data, 0, 0);
 
-  const layer = document.createElement("canvas");
-  layer.width = state.width;
-  layer.height = state.height;
-  const l = layer.getContext("2d");
+  const l = frameLayer();
+  const layer = l.canvas;
   l.imageSmoothingEnabled = true;
   l.drawImage(tint, 0, 0, f.gw / f.scale, f.gh / f.scale);
 
@@ -298,7 +297,7 @@ function mapLayer() {
   // No lines while the worker makes them.
   const net = f._network || (f.waitForNetwork ? null : f.network());
   const legs = net ? net.legs : [];
-  const unit = Math.max(state.width, state.height) / 160;
+  const unit = frameUnit();
   const widths = [[], [], [], [], [], []];
   for (const leg of legs) widths[Math.min(5, Math.floor(Math.log2(leg.flow)))].push(leg);
   l.lineCap = l.lineJoin = "round";
@@ -321,11 +320,9 @@ function mapLayer() {
 // areas that the server found. The routes keep inside these walls.
 function wallLayer() {
   if (view.walls) return view.walls;
-  const layer = document.createElement("canvas");
-  layer.width = state.width;
-  layer.height = state.height;
-  const l = layer.getContext("2d");
-  const unit = Math.max(state.width, state.height) / 160;
+  const l = frameLayer();
+  const layer = l.canvas;
+  const unit = frameUnit();
   const { lines = [], blocks = [] } = state.walls || {};
   // Filled areas (hatching, solid ink) in light grey with a wall edge.
   l.fillStyle = BLOCK;
@@ -350,21 +347,112 @@ function wallLayer() {
   return layer;
 }
 
+// The plan view shows the floor drawing, not all of the photo: a photo
+// often has a frame, text panels and a legend round the sheet, and the plan
+// was small on a phone. The frame is the box of the open cells of the wall
+// grid (route.js openBox: every cell outside the model's floor box is wall)
+// and every exit, start and their marks, with a margin. "Photo only" shows
+// all of the photo. All drawing is in photo pixels; setFrame maps them.
+const FRAME_MARGIN = 0.05;  // share of the long side of the box: room for the exit marks and their labels
+const FRAME_TALL = 1.25;    // a frame is at most this tall for its width, or as tall as the photo
+const FRAME_ALL = 0.9;      // a box with this share of the photo on both sides shows all of it
+const FRAME_ZOOM = 3;       // the canvas has at most this many pixels for each photo pixel
+
+function floorFrame() {
+  const W = state.width, H = state.height, all = [0, 0, W, H];
+  const box = state.photo_map ? null : view.field.openBox();
+  if (!box) return all;
+  let [x0, y0, x1, y1] = box;
+  for (const [x, y] of [...exitPoints(), ...(state.start ? [state.start] : [])]) {
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  const m = FRAME_MARGIN * Math.max(x1 - x0, y1 - y0);
+  x0 -= m; y0 -= m; x1 += m; y1 += m;
+  // A tall narrow box becomes wider, so the plan does not run far down the page.
+  const tall = Math.max(H / W, FRAME_TALL);
+  if (y1 - y0 > tall * (x1 - x0)) {
+    const grow = ((y1 - y0) / tall - (x1 - x0)) / 2;
+    x0 -= grow; x1 += grow;
+  }
+  // Keep the box on the photo; a side that runs off moves the other side in.
+  const fit = (a, b, size) => (b - a >= size ? [0, size] : a < 0 ? [0, b - a] : b > size ? [size - (b - a), size] : [a, b]);
+  [x0, x1] = fit(x0, x1, W);
+  [y0, y1] = fit(y0, y1, H);
+  if (x1 - x0 >= FRAME_ALL * W && y1 - y0 >= FRAME_ALL * H) return all;
+  return [x0, y0, x1, y1].map(Math.round);
+}
+
+// The part of the photo in view now: all of it in Photo only.
+function shownFrame() {
+  return photoOnly || !view || !view.frame ? [0, 0, state.width, state.height] : view.frame;
+}
+
+// Canvas pixels for each photo pixel: a frame gets as many canvas pixels as
+// all of the photo, so the zoomed plan stays sharp.
+function frameScale(fr) {
+  return Math.min(FRAME_ZOOM, Math.max(state.width, state.height) / Math.max(fr[2] - fr[0], fr[3] - fr[1]));
+}
+
+// The size unit of the marks and lines: a share of the frame, so they look
+// the same on a zoomed plan as on all of the photo.
+function frameUnit() {
+  const fr = shownFrame();
+  return Math.max(fr[2] - fr[0], fr[3] - fr[1]) / 160;
+}
+
+// Size the canvas to the frame and map photo pixels onto it.
+function setFrame() {
+  const fr = shownFrame(), k = frameScale(fr);
+  canvas.width = Math.round((fr[2] - fr[0]) * k);
+  canvas.height = Math.round((fr[3] - fr[1]) * k);
+  ctx.setTransform(k, 0, 0, k, -fr[0] * k, -fr[1] * k);
+}
+
+// A layer canvas as big as the plan canvas, in photo pixels.
+function frameLayer() {
+  const fr = shownFrame(), k = frameScale(fr);
+  const layer = document.createElement("canvas");
+  layer.width = Math.round((fr[2] - fr[0]) * k);
+  layer.height = Math.round((fr[3] - fr[1]) * k);
+  const l = layer.getContext("2d");
+  l.setTransform(k, 0, 0, k, -fr[0] * k, -fr[1] * k);
+  return l;
+}
+
+// A layer from frameLayer goes on the canvas pixel for pixel.
+function drawLayer(layer) {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+}
+
+// A photo point in CSS pixels from the top left of the canvas.
+function toCanvasCss(p) {
+  const [x0, y0, x1, y1] = shownFrame();
+  return [(p[0] - x0) / (x1 - x0) * canvas.clientWidth, (p[1] - y0) / (y1 - y0) * canvas.clientHeight];
+}
+
+// The keyboard marker starts at the start, else in the middle of the view.
+function startCursor() {
+  const [x0, y0, x1, y1] = shownFrame();
+  return state.start ? [...state.start] : [(x0 + x1) / 2, (y0 + y1) / 2];
+}
+
 function draw() {
   if (!state) return;
-  canvas.width = state.width;
-  canvas.height = state.height;
+  setFrame();
   if (routesOnly) {
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(wallLayer(), 0, 0);
+    ctx.fillRect(0, 0, state.width, state.height);
+    drawLayer(wallLayer());
   } else {
     ctx.drawImage(img, 0, 0);
   }
-  const unit = Math.max(state.width, state.height) / 160;
+  const unit = frameUnit();
   if (!photoOnly) {
     if (showMap && view.reachable) {
-      ctx.drawImage(mapLayer(), 0, 0);
+      drawLayer(mapLayer());
       drawArrows(unit);
     }
     drawMarks(unit);
@@ -572,7 +660,8 @@ function youLabelAt(here, r, exitR) {
   ];
   // The white halo of the text and the frame of an exit take some room too.
   const pad = r / 3 + exitR * 4 / 3;
-  const onPlan = ([x0, y0, x1, y1]) => x0 >= 0 && y0 >= 0 && x1 <= state.width && y1 <= state.height;
+  const fr = shownFrame();
+  const onPlan = ([x0, y0, x1, y1]) => x0 >= fr[0] && y0 >= fr[1] && x1 <= fr[2] && y1 <= fr[3];
   const free = ([x0, y0, x1, y1]) => state.exits.every((e) =>
     e.x + pad < x0 || e.x - pad > x1 || e.y + pad < y0 || e.y - pad > y1);
   return places.find((p) => onPlan(p.box) && free(p.box)) || places.find((p) => onPlan(p.box)) || places[0];
@@ -667,8 +756,7 @@ function select(i) {
   const mid = pathMiddle(step.path);
   scrollToPoint(mid);
   // On a phone the plan is above the steps: bring the leg into the window.
-  const box = canvas.getBoundingClientRect();
-  const y = box.top + mid[1] / state.height * box.height;
+  const y = canvas.getBoundingClientRect().top + toCanvasCss(mid)[1];
   if (y < 0 || y > window.innerHeight) $("stage").scrollIntoView({ block: "nearest", behavior: smoothScroll() });
 }
 
@@ -762,6 +850,7 @@ function showAnswer() {
 
 // Find the route again and show everything that depends on it.
 function update() {
+  clearRefusal();
   findRoute();
   // The steps first: they clear the step selection that draw() shows (a11y review).
   showSteps();
@@ -891,6 +980,7 @@ $("show-routes").addEventListener("click", () => {
 });
 
 function startMarking() {
+  clearRefusal();
   marking = true;
   $("fix-text").textContent = "Cancel";
   $("fix-hint").textContent = addExit
@@ -943,10 +1033,42 @@ function setStart(x, y) {
   explain("tap");
 }
 
+// A tap off the floor drawing gives no route, and the old route stays. A tap
+// on a wall or on ink next to open floor starts on that floor (route.js
+// Field.tapStart). The keyboard marker follows the same rules.
+const OFF_PLAN = "That spot is outside the floor plan. Tap a corridor or a room on the plan.";
+const TAP_TEXT = $("tap-text").textContent;
+function startFromTap(x, y) {
+  const t = view.field.tapStart([x, y]);
+  if (t.at === "outside") { refuseTap(OFF_PLAN); return; }
+  if (t.at === "wall") { refuseTap(ROUTE_ERRORS["start is inside a wall"]); return; }
+  if (t.at === "moved") [x, y] = view.field.toPx(t.cell);
+  setStart(x, y);
+}
+
+// The message goes under the plan, where the eyes are after a tap, and to
+// the live status line (in the answer card) for a screen reader. The card
+// line stays hidden then, so the message shows once.
+function refuseTap(text) {
+  $("tap-text").textContent = text;
+  $("tap-text").hidden = false;
+  $("tap-hint").classList.add("refused");
+  $("plan-status").classList.add("sr");
+  sayPlan(text);
+}
+
+function clearRefusal() {
+  if (!$("tap-hint").classList.contains("refused")) return;
+  $("tap-hint").classList.remove("refused");
+  $("tap-text").textContent = TAP_TEXT;
+  $("tap-text").hidden = !state || !state.start || marking;
+  if (view) showAnswer();
+}
+
 function place(x, y) {
   if (marking) setExit(x, y);
   else if (state.photo_map && state.exits.length) sayPlan(photoMapText());
-  else if (state.exits.length) setStart(x, y);
+  else if (state.exits.length) startFromTap(x, y);
   else sayPlan('Mark an exit first: tap "Mark the exit".');
 }
 
@@ -1431,21 +1553,23 @@ showGallery();
 canvas.addEventListener("click", (ev) => {
   if (!state) return;
   const box = canvas.getBoundingClientRect();
-  place((ev.clientX - box.left) * (canvas.width / box.width),
-        (ev.clientY - box.top) * (canvas.height / box.height));
+  const [x0, y0, x1, y1] = shownFrame();
+  place(x0 + (ev.clientX - box.left) * ((x1 - x0) / box.width),
+        y0 + (ev.clientY - box.top) * ((y1 - y0) / box.height));
 });
 
 // Keyboard: arrow keys move a cross, Enter or Space places the start or the exit.
 canvas.addEventListener("keydown", (ev) => {
   if (!state) return;
-  const step = Math.max(state.width, state.height) * (ev.shiftKey ? 0.05 : 0.01);
+  const fr = shownFrame();
+  const step = Math.max(fr[2] - fr[0], fr[3] - fr[1]) * (ev.shiftKey ? 0.05 : 0.01);
   const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[ev.key];
-  if (!cursor) cursor = state.start ? [...state.start] : [state.width / 2, state.height / 2];
+  if (!cursor) cursor = startCursor();
   if (move) {
     keyboard = true;
     $("kbd-hint").hidden = false;
-    cursor = [Math.min(state.width, Math.max(0, cursor[0] + move[0])),
-              Math.min(state.height, Math.max(0, cursor[1] + move[1]))];
+    cursor = [Math.min(fr[2], Math.max(fr[0], cursor[0] + move[0])),
+              Math.min(fr[3], Math.max(fr[1], cursor[1] + move[1]))];
     draw();
     scrollToPoint(cursor);
     sayMarker();
@@ -1466,7 +1590,7 @@ canvas.addEventListener("focus", () => {
   const kbd = canvas.matches(":focus-visible");
   $("kbd-hint").hidden = !kbd;
   if (kbd && state) {
-    if (!cursor) cursor = state.start ? [...state.start] : [state.width / 2, state.height / 2];
+    if (!cursor) cursor = startCursor();
     keyboard = true;
   }
   draw();
@@ -1480,12 +1604,15 @@ function sayMarker() {
   markerTimer = setTimeout(() => {
     if (!cursor || !state) return;
     const [x, y] = cursor;
-    const col = ["left", "middle", "right"][Math.min(2, Math.floor(3 * x / state.width))];
-    const row = ["top", "middle", "bottom"][Math.min(2, Math.floor(3 * y / state.height))];
+    const [x0, y0, x1, y1] = shownFrame();
+    const col = ["left", "middle", "right"][Math.max(0, Math.min(2, Math.floor(3 * (x - x0) / (x1 - x0))))];
+    const row = ["top", "middle", "bottom"][Math.max(0, Math.min(2, Math.floor(3 * (y - y0) / (y1 - y0))))];
     const at = row === col ? "middle" : `${row} ${col}`;
     let near = -1, best = Infinity;
     state.exits.forEach((e, i) => { const d = Math.hypot(e.x - x, e.y - y); if (d < best) { best = d; near = i; } });
-    $("marker-status").textContent = `Marker: ${at} of the plan` + (near >= 0 ? `, closest exit mark ${exitName(near)}.` : ".");
+    // Enter there gives no route: say so before the user presses it.
+    const off = !marking && !state.photo_map && view && view.field.tapStart([x, y]).at === "outside" ? ", outside the floor plan" : "";
+    $("marker-status").textContent = `Marker: ${at} of the plan${off}` + (near >= 0 ? `, closest exit mark ${exitName(near)}.` : ".");
   }, 400);
 }
 canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; draw(); });
@@ -1494,15 +1621,16 @@ canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; draw(); });
 function centreOnStart() {
   if (!state || !state.start) return;
   const st = $("stage");
-  st.scrollLeft = state.start[0] / state.width * canvas.clientWidth - st.clientWidth / 2;
-  st.scrollTop = state.start[1] / state.height * canvas.clientHeight - st.clientHeight / 2;
+  const [x, y] = toCanvasCss(state.start);
+  st.scrollLeft = x - st.clientWidth / 2;
+  st.scrollTop = y - st.clientHeight / 2;
 }
 
 // In the larger plan, scroll so that a plan point is in the middle of the view.
 function scrollToPoint(p) {
   const st = $("stage");
   if (!st.classList.contains("big") || !p) return;
-  const x = p[0] / state.width * canvas.clientWidth, y = p[1] / state.height * canvas.clientHeight;
+  const [x, y] = toCanvasCss(p);
   if (x < st.scrollLeft + 40 || x > st.scrollLeft + st.clientWidth - 40) st.scrollLeft = x - st.clientWidth / 2;
   if (y < st.scrollTop + 40 || y > st.scrollTop + st.clientHeight - 40) st.scrollTop = y - st.clientHeight / 2;
 }
