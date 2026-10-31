@@ -1345,6 +1345,31 @@ function openSample(gid, push) {
   return loadPlan(() => fetch(`/api/gallery/${encodeURIComponent(gid)}${SET}`, { method: "POST" }), "Opening the sample plan…", push);
 }
 
+// The example on the start page opens its sample plan with the start of its
+// picture. The start is not in the address: a sample from the gallery or from
+// a link opens with no start, and the user taps it (start-from-tap).
+function openExample(gid, start) {
+  return loadPlan(async () => {
+    const r = await fetch(`/api/gallery/${encodeURIComponent(gid)}`, { method: "POST" });
+    if (!r.ok) return r;
+    const answer = await r.json();
+    answer.start = start;
+    return { ok: true, json: async () => answer };
+  }, "Opening the example…", true);
+}
+
+function setUpExample() {
+  const fig = $("example");
+  if (!fig) return;  // the server has no saved image of the example plan
+  if (SET) { fig.remove(); return; }  // the review set has its own plans
+  $("example-open").addEventListener("click", (ev) => {
+    if (ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+    ev.preventDefault();
+    openExample(fig.dataset.sample, fig.dataset.start.split(",").map(Number));
+  });
+}
+setUpExample();
+
 // The open sample is marked in the gallery and named in the address, so it can be shared.
 function markOpenSample(push) {
   const gid = sampleId(state && state.id);

@@ -43,6 +43,7 @@ class Gallery:
         self.thumbs_url = thumbs_url
         self.answers_url = thumbs_url.rsplit("/", 1)[0] + "/answers"
         self.code = code_hash()
+        self._paths: dict[tuple[str, str], Path] = {}
         self.items: dict[str, dict] = {}
         for p in sorted((folder / "items").glob("*.json")):
             item = json.loads(p.read_text())
@@ -131,10 +132,19 @@ class Gallery:
 
     def answer_path(self, pid: str) -> Path:
         """Where the saved answer for the current code, item and image goes."""
-        h = hashlib.sha256(self.code.encode())
-        h.update(json.dumps(self.items[pid], sort_keys=True).encode())
-        h.update((self.folder / "plans" / f"{pid}.jpg").read_bytes())
-        return self.folder / "answers" / f"{pid}.{h.hexdigest()[:24]}.json"
+        key = (pid, self.code)
+        if key not in self._paths:  # the start page asks for it on each visit (saved_image_url)
+            h = hashlib.sha256(self.code.encode())
+            h.update(json.dumps(self.items[pid], sort_keys=True).encode())
+            h.update((self.folder / "plans" / f"{pid}.jpg").read_bytes())
+            self._paths[key] = self.folder / "answers" / f"{pid}.{h.hexdigest()[:24]}.json"
+        return self._paths[key]
+
+    def saved_image_url(self, pid: str) -> str | None:
+        """The URL of the saved plan image for the current code, or None."""
+        if pid not in self.items or not self.answer_path(pid).with_suffix(".webp").exists():
+            return None
+        return f"{self.answers_url}/{self.answer_path(pid).stem}.webp"
 
     def saved_answer(self, pid: str) -> bytes | None:
         """The saved answer as JSON, or None when there is none for the current code."""
