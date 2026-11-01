@@ -30,6 +30,7 @@
   --exit: #3dffa0;   /* the exit marks on the plan (app.js EXIT) */
   --route: #5aa2ff;  /* the route on the plan (app.js ROUTE) */
   --lit: #ff9a3d;    /* the step the user taps (app.js LIT) */
+  --done: #5b6f86;   /* the legs before the lit step (app.js DONE) */
   --reading: #d29bff;
   color-scheme: dark;
 }
@@ -176,6 +177,32 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
   @keyframes prompt-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 }
 
+/* The current step, right under the plan (app.js showNow): the plan and the
+   instruction are in view together. It sticks to the foot of the screen
+   while its place is below it. Its size does not change from step to step. */
+.now-card { position: sticky; bottom: var(--bar-room, 0px); z-index: 2; margin: 10px 0 0; padding: 12px 12px 14px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 22px; }
+.now-top { display: flex; align-items: center; gap: 12px; padding-inline-start: 4px; }
+.badge.now-badge { min-width: 40px; height: 40px; border-radius: 12px; font-size: 1.2rem; box-shadow: 0 0 16px rgb(61 255 160 / 0.3); }
+.now-head { flex: 1; margin: 0; color: var(--muted); font-size: 0.95rem; font-weight: 550; min-width: 0; }
+.now-round { flex: none; width: 48px; min-height: 48px; padding: 0; }
+.now-step { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.now-text { flex: 1; display: flex; align-items: center; gap: 12px; margin: 0; min-width: 0; min-height: 4.2em;
+  font-size: 1.08rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.now-go { flex: none; width: 56px; min-height: 64px; padding: 0; border-radius: 18px; background: var(--raise); }
+.now-go .ico { width: 26px; height: 26px; }
+.now-go.gone { visibility: hidden; }
+[dir="rtl"] .flip { transform: scaleX(-1); }
+/* A turn: one outline glyph for each kind of step, in the step list and in the card. */
+.turn { width: 28px; height: 28px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.now-text .turn { width: 36px; height: 36px; color: var(--route); }
+.now-text.lit .turn { color: var(--lit); }
+.now-text .turn.door { color: var(--exit); }
+@media (max-width: 600px) {
+  /* On a phone the card is the foot of the plan, from edge to edge. */
+  .now-card { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; padding: 10px 12px 12px; }
+}
+
 /* The plan and its controls */
 .view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 .seg { display: flex; flex: 1 1 auto; min-width: min-content; gap: 2px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
@@ -239,7 +266,11 @@ canvas:focus-visible { outline: none; }
 #steps li { counter-increment: step; display: flex; align-items: center; gap: 12px; margin: 0; min-height: 48px; border-top: 1px solid var(--line); }
 #steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%;
   border: 1.5px solid var(--route); color: var(--route); font: 600 0.8rem "Geist Mono", ui-monospace, monospace; }
-button.step { display: block; flex: 1; width: 100%; text-align: start; font-weight: 450; padding: 10px 4px; min-height: 48px; border: 0; border-radius: 10px; background: transparent; color: #d5e2db; }
+button.step { display: flex; justify-content: flex-start; gap: 12px; flex: 1; width: 100%; text-align: start; font-weight: 450; padding: 10px 4px; min-height: 48px; border: 0; border-radius: 10px; background: transparent; color: #d5e2db; }
+#steps .turn { width: 24px; height: 24px; color: var(--muted); }
+#steps button.step[aria-pressed="true"] .turn { color: var(--lit); }
+#steps .turn.door { color: var(--exit); }
+#steps li.arrive { gap: 16px; padding-inline-end: 4px; }
 button.step:hover { background: var(--raise); }
 button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background: rgb(255 154 61 / 0.12); padding-inline-start: 12px; }
 #steps li:has(button.step[aria-pressed="true"])::before { border-color: var(--lit); background: var(--lit); color: var(--accent-fg); }
@@ -248,12 +279,15 @@ button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background:
 .actions button { flex: 1 1 auto; }
 #fix-hint { margin: 10px 0 0; }
 #exits-wrap h3 { margin: 0 0 12px; }
-.exits { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }
+.exits { display: flex; flex-wrap: wrap; gap: 8px; }
 /* One square for each exit, like its mark on the plan. The name is in the label. */
-.exits button { min-height: 46px; padding: 0 4px; border-radius: 12px; border: 0; background: var(--exit); color: var(--accent-fg); font: 700 1.1rem "Geist Mono", ui-monospace, monospace; }
+.exits button { min-width: 46px; min-height: 46px; padding: 0 4px; border-radius: 12px; border: 0; background: var(--exit); color: var(--accent-fg); font: 700 1.1rem "Geist Mono", ui-monospace, monospace; }
 .exits button:hover { background: #8dffc7; }
 .exits button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--route); }
 .exits button:focus-visible { outline-offset: 8px; }
+/* The nearest exit and the exit of the second way say so beside their number. */
+.exits button.tagged { gap: 10px; padding: 0 16px 0 14px; }
+.exits .tag { font: 600 0.9rem/1.2 "Geist", system-ui, sans-serif; letter-spacing: 0; }
 .exits button.dead { background: transparent; color: var(--muted); border: 1.5px dashed #6f8279; }
 #exits-note { margin: 10px 0 0; font-size: 0.9rem; }
 .muted { color: var(--muted); margin: 0 0 12px; }
@@ -360,7 +394,7 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 .look-view .look-crops { padding: 12px 16px 16px; }
 .read-legend { display: none; }
 .result.reading .read-legend { display: flex; }
-.result.reading #legend { display: none; }
+.result.reading #legend, .result.reading .now-card { display: none; }
 .read-legend i { background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
 .sw-rbox { height: 12px !important; background: #ffffff !important; outline: 2px dashed #6a1b9a; outline-offset: -2px; }
 .sw-rpt { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 3px solid #6a1b9a; }

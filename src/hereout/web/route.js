@@ -2220,7 +2220,9 @@ const HereOutRoute = (() => {
         text = aside ? `Turn ${turn.replace("slight", "slightly")}, step ${aside}, then walk a ${length} way.` : `Turn ${turn.replace("slight", "slightly")} and walk a ${length} way.`;
         say = aside ? { key: "turn_aside", turn, aside, length } : { key: "turn", turn, length };
       }
-      steps.push({ kind: "walk", turn, length, text, say, from: a, to: b, path: points.slice(idx[i], idx[i + 1] + 1) });
+      // head: the heading of the walk in degrees, clockwise from the top of
+      // the plan; aside: its side step. The page points the first move with them.
+      steps.push({ kind: "walk", turn, length, text, say, from: a, to: b, path: points.slice(idx[i], idx[i + 1] + 1), head, aside });
       prev = end;
       i++;
     }

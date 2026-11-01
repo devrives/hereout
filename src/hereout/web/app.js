@@ -46,6 +46,7 @@ const EXIT = "#3dffa0";
 const EXIT_INK = "#03140b";
 const EXIT_GLOW = "rgba(61, 255, 160, 0.75)";
 const LIT = "#ff9a3d";
+const DONE = "#5b6f86";  // the legs before the lit step: walked, so dimmed
 const DARK = "#07100c";  // the ground of the page: the edge of every mark
 const VEIL = "rgba(7, 16, 12, 0.6)";  // over the photo in the escape map, so the marks stand out
 const ARROW_GAP = 12;   // plan units between two arrows on a way out
@@ -141,6 +142,7 @@ function retext() {
   showBackup();
   showExits();
   showAnswer();
+  showNow();
   sayPlanSoon();
   showWords();
 }
@@ -171,10 +173,7 @@ function sayPlanSoon() {
 function renameExits() {
   if (!state || !view) return;
   showAnswer();
-  [...$("exits").children].forEach((b, i) => {
-    b.title = b.classList.contains("dead") ? t("exit_dead", { exit: exitName(i) }) : exitName(i);
-    b.setAttribute("aria-label", b.title);
-  });
+  [...$("exits").children].forEach((b, i) => nameExitButton(b, i));
   showBackup();
   clearTimeout(sayTimer);
   const said = planSaid();
@@ -382,7 +381,7 @@ function updateAfterWait() {
   const how = view.pendingHow;
   view.pendingHow = null;
   update();
-  if (how === "tap" && view.route) startRouteDraw();  // the route of a tap that waited for the worker
+  if (how === "tap" && view.route) { startRouteDraw(); showNowInView(); }  // the route of a tap that waited for the worker
   if (exitAt >= 0) $("exits").children[exitAt]?.focus();
   if (state.start && how) explain(how);
 }
@@ -476,6 +475,7 @@ function findRoute() {
   view.steps = [];
   view.error = null;
   view.pending = false;
+  view.near = null;
   if (!state.start || !state.exits.length) return;
   const f = view.field, start = state.start;
   // While the worker makes the trees this start needs, wait for them.
@@ -488,44 +488,57 @@ function findRoute() {
   // The ways out lead to a chosen exit too. Where they do not, the grid
   // route of a field to that exit is the answer.
   const to = (k) => f.wayRoute(start, k) || view.toExit(k).route(start);
-  let main;
-  try {
-    const k = state.exitChoice;
-    const r = k >= 0 ? to(k) : f.wayRoute(start);
-    if (f.waitForNetwork && !f._network) { view.pending = true; return; }
-    main = { points: r.points, exitIndex: k >= 0 ? k : r.exitIndex, length: r.length };
-    // "Nearest" is by the cost of the way, as for the second exit below; the
-    // map lines can lead a spot to an exit a little farther away.
-    const near = k >= 0 ? -1 : f.nearestExit(start);
-    if (near >= 0 && near !== main.exitIndex) { const r = to(near); main = { points: r.points, exitIndex: near, length: r.length }; }
-  } catch (e) {
-    if (!(e instanceof R.NoRoute)) throw e;
-    view.error = e.message;
-    return;
-  }
   // A second way out, in case the first exit is blocked: the nearest other
   // exit whose way does not pass the door of the first one. With no such
   // exit there is no second way: "if it is blocked" must not lead past that door.
   const door = f.doorRadius() / 2;
   const passes = (pts, i) => pts.slice(1, -1).some(([x, y]) => Math.hypot(x - state.exits[i].x, y - state.exits[i].y) < door);
-  let backup = null;
-  for (const k of f.otherExits(start, main.exitIndex).slice(0, OTHER_TRIES)) {
-    let r;
-    try { r = to(k); } catch (e) { if (!(e instanceof R.NoRoute)) throw e; continue; }
-    if (!passes(r.points, main.exitIndex)) { backup = { points: r.points, exitIndex: k, length: r.length }; break; }
-  }
-  // The solid route is the shorter one, so "nearest" stays true on the plan.
-  // After a swap, the second way must keep clear of the door of the new first exit too.
   // A route on the ways out gives the length of its way before it moved
   // onto the drawn lines (route.js).
   const len = (r) => r.length ?? r.points.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - r.points[i][0], q[1] - r.points[i][1]), 0);
-  if (backup && state.exitChoice < 0 && len(backup) < len(main)) {
-    [main, backup] = [backup, main];
-    if (passes(backup.points, main.exitIndex)) backup = null;
+  // The route and the second way to exit k, or to the nearest exit (k = -1).
+  // null while the worker makes the ways out. A start with no way throws NoRoute.
+  const ways = (k) => {
+    const r = k >= 0 ? to(k) : f.wayRoute(start);
+    if (f.waitForNetwork && !f._network) return null;
+    let main = { points: r.points, exitIndex: k >= 0 ? k : r.exitIndex, length: r.length };
+    // "Nearest" is by the cost of the way, as for the second exit below; the
+    // map lines can lead a spot to an exit a little farther away.
+    const near = k >= 0 ? -1 : f.nearestExit(start);
+    if (near >= 0 && near !== main.exitIndex) { const r = to(near); main = { points: r.points, exitIndex: near, length: r.length }; }
+    let backup = null;
+    for (const j of f.otherExits(start, main.exitIndex).slice(0, OTHER_TRIES)) {
+      let r;
+      try { r = to(j); } catch (e) { if (!(e instanceof R.NoRoute)) throw e; continue; }
+      if (!passes(r.points, main.exitIndex)) { backup = { points: r.points, exitIndex: j, length: r.length }; break; }
+    }
+    // The solid route is the shorter one, so "nearest" stays true on the plan.
+    // After a swap, the second way must keep clear of the door of the new first exit too.
+    if (backup && k < 0 && len(backup) < len(main)) {
+      [main, backup] = [backup, main];
+      if (passes(backup.points, main.exitIndex)) backup = null;
+    }
+    return { main, backup };
+  };
+  let w;
+  try {
+    w = ways(state.exitChoice);
+  } catch (e) {
+    if (!(e instanceof R.NoRoute)) throw e;
+    view.error = e.message;
+    return;
   }
-  view.route = main;
-  view.backup = backup;
-  view.steps = R.directions(main.points, state.width, state.height);
+  if (!w) { view.pending = true; return; }
+  view.route = w.main;
+  view.backup = w.backup;
+  view.steps = R.directions(w.main.points, state.width, state.height);
+  // The exit buttons name the nearest exit and the exit of the second way
+  // from this start. A chosen exit does not change them, so the buttons stay.
+  let first = state.exitChoice < 0 ? w : null;
+  if (!first) {
+    try { first = ways(-1); } catch (e) { if (!(e instanceof R.NoRoute)) throw e; }
+  }
+  view.near = first ? { main: first.main.exitIndex, backup: first.backup ? first.backup.exitIndex : -1 } : null;
 }
 
 // The escape map: colour by the cost to the nearest exit, and the ways out
@@ -1017,16 +1030,16 @@ function drawMarks(unit, rv = null) {
 
   // The route and YOU go over the exits, so a short route stays visible.
   // The route draws in from YOU after a tap (routeDrawn).
+  // With a step lit, the legs before it are walked: they are dimmed, and
+  // the rest of the route keeps its glow (Mappedin, research brief 2).
   const pts = !rv && view.route && view.route.points && partOfLine(view.route.points, draw);
   if (pts && pts.length > 1) {
-    ctx.lineJoin = ctx.lineCap = "round";
-    for (const [color, width] of [[ROUTE_GLOW, unit * 3.4], [DARK, unit * 1.9], [ROUTE, unit * 1.25], [ROUTE_CORE, unit * 0.3]]) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (const p of pts.slice(1)) ctx.lineTo(p[0], p[1]);
-      ctx.stroke();
+    const split = draw === 1 ? routeSplit() : null;
+    if (split) {
+      strokeLine(split.done, [[DARK, unit * 1.6], [DONE, unit * 1.0]]);
+      strokeLine(split.rest, ROUTE_LINE(unit));
+    } else {
+      strokeLine(pts, ROUTE_LINE(unit));
     }
   }
 
@@ -1034,45 +1047,118 @@ function drawMarks(unit, rv = null) {
   if (used >= 0 && draw === 1) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
 
   if (rv) return;
-  const step = view.steps[selected];
-  if (step && step.kind === "walk") {
-    ctx.lineCap = "round";
-    for (const [color, width] of [[DARK, unit * 3.2], [LIT, unit * 2]]) {
+  const step = draw === 1 ? view.steps[selected] : null;
+  if (step && step.kind === "walk") strokeLine(step.path, [[DARK, unit * 3.2], [LIT, unit * 2]]);
+  // The last step: a ring in the lit colour round the exit.
+  if (step && step.kind === "arrive" && used >= 0) {
+    const e = state.exits[used], r = unit * 2.2 * 1.75;
+    for (const [color, width] of [[DARK, unit * 1.3], [LIT, unit * 0.7]]) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.beginPath();
-      ctx.moveTo(step.path[0][0], step.path[0][1]);
-      for (const p of step.path.slice(1)) ctx.lineTo(p[0], p[1]);
+      ctx.roundRect(e.x - r, e.y - r, r * 2, r * 2, r * 0.35);
       ctx.stroke();
     }
   }
-  let you = null;
+  // A short arrow at YOU points the first move (research brief 2, pattern 8).
+  const r = unit * 2.4;
+  const tip = here && view.route ? firstMove(here, r) : null;
+  const at = here ? youLabelAt(here, r, unit * 2.2, tip && tip.at) : null;
+  if (draw === 1 && view.steps.length) stepDots(unit, here, used, at && at.box);
   if (here) {
-    const r = unit * 2.4;
     hereMark(here[0], here[1], r);
-    const at = youLabelAt(here, r, unit * 2.2);
+    if (tip) moveArrow(here, tip, r);
     label(t("you"), at.x, at.y, r, at.baseline, at.align);
-    you = [Math.min(at.box[0], here[0] - r), Math.min(at.box[1], here[1] - r), Math.max(at.box[2], here[0] + r), Math.max(at.box[3], here[1] + r)];
   }
-  if (step && step.kind === "walk") {
-    // The number goes above the middle of the longest leg, else below, right
-    // or left of it, where it covers neither YOU (a11y review) nor an exit
-    // mark (ux review). With no such place, step 1 has no number: YOU marks
-    // where it starts.
-    const [x, y] = longestMiddle(step.path), r = unit * 2.4, gap = unit * 2.5;
-    ctx.font = `600 ${Math.round(r * 1.6)}px Geist, system-ui, sans-serif`;
-    const w = ctx.measureText(String(selected + 1)).width, h = r * 1.6, pad = r / 3;
-    const marks = state.exits.map((e) => [e.x - unit * 2.2, e.y - unit * 2.2, e.x + unit * 2.2, e.y + unit * 2.2]);
-    const covers = ([x0, y0, x1, y1]) => [you, ...marks].some((m) => m && x0 - pad < m[2] && x1 + pad > m[0] && y0 - pad < m[3] && y1 + pad > m[1]);
-    const places = [
-      { x, y: y - gap, baseline: "bottom", align: "center", box: [x - w / 2, y - gap - h, x + w / 2, y - gap] },
-      { x, y: y + gap, baseline: "top", align: "center", box: [x - w / 2, y + gap, x + w / 2, y + gap + h] },
-      { x: x + gap, y, baseline: "middle", align: "left", box: [x + gap, y - h / 2, x + gap + w, y + h / 2] },
-      { x: x - gap, y, baseline: "middle", align: "right", box: [x - gap - w, y - h / 2, x - gap, y + h / 2] },
-    ];
-    const at = places.find((p) => !covers(p.box)) || (selected > 0 ? places[0] : null);
-    if (at) label(String(selected + 1), at.x, at.y, r, at.baseline, at.align);
+}
+
+// The layers of the route line: glow, dark edge, blue, light core.
+const ROUTE_LINE = (unit) => [[ROUTE_GLOW, unit * 3.4], [DARK, unit * 1.9], [ROUTE, unit * 1.25], [ROUTE_CORE, unit * 0.3]];
+
+function strokeLine(pts, layers) {
+  if (!pts || pts.length < 2) return;
+  ctx.lineJoin = ctx.lineCap = "round";
+  for (const [color, width] of layers) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (const p of pts.slice(1)) ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
   }
+}
+
+// The route split at the lit step: the legs before it and the legs from it
+// on, from the paths of the steps (route.js directions). null with step 1
+// or the last step lit, or no step lit: then the whole route shows as one.
+function routeSplit() {
+  const k = selected, steps = view.steps;
+  if (!(k > 0) || !steps[k] || steps[k].kind !== "walk") return null;
+  const join = (paths) => paths.reduce((a, p) => a.concat(a.length ? p.slice(1) : p), []);
+  const walks = steps.map((s, j) => [s, j]).filter(([s]) => s.kind === "walk");
+  return { done: join(walks.filter(([, j]) => j < k).map(([s]) => s.path)),
+           rest: join(walks.filter(([, j]) => j >= k).map(([s]) => s.path)) };
+}
+
+// A small numbered dot where each step starts, the same number as in the
+// step list. Step 1 starts at YOU, and the last step is the exit: they have
+// none. A dot that would cover YOU, the exit or another dot is left out;
+// the dot of the lit step always shows.
+function stepDots(unit, here, used, youBox) {
+  const r = unit * 2.1;
+  const exit = used >= 0 ? state.exits[used] : null;
+  const split = routeSplit();  // dots of walked legs are dimmed, as the legs are
+  const ids = view.steps.map((s, j) => j).filter((j) => j > 0 && view.steps[j].kind === "walk");
+  ids.sort((a, b) => (a === selected) - (b === selected));  // the lit dot last, on top
+  const shown = [];
+  for (const j of ids) {
+    const [x, y] = view.steps[j].from;
+    const off = (p, d) => Math.hypot(x - p[0], y - p[1]) >= d;
+    const onLabel = youBox && x + r > youBox[0] && x - r < youBox[2] && y + r > youBox[1] && y - r < youBox[3];
+    if (j !== selected && ((here && !off(here, unit * 6)) || (exit && !off([exit.x, exit.y], unit * 4.5)) ||
+        onLabel || shown.some((p) => !off(p, r * 2.2)))) continue;
+    shown.push([x, y]);
+    const lit = j === selected, done = !!split && j < selected;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = lit ? LIT : DARK;
+    ctx.fill();
+    ctx.lineWidth = unit * 0.35;
+    ctx.strokeStyle = lit ? DARK : done ? DONE : ROUTE;
+    ctx.stroke();
+    ctx.font = `600 ${Math.round(r * 1.3)}px "Geist Mono", ui-monospace, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = lit ? EXIT_INK : done ? DONE : ROUTE_CORE;
+    ctx.fillText(String(j + 1), x, y + r * 0.08);
+  }
+}
+
+// The direction of the first move from YOU: the heading of step 1, or its
+// side step when it starts with one (route.js directions). Returns the
+// angle of the arrow and its tip.
+function firstMove(here, r) {
+  const s = view.steps[0];
+  if (!s || s.kind !== "walk" || typeof s.head !== "number") return null;
+  const deg = s.head + (s.say && s.say.key === "start_aside" ? (s.aside === "right" ? 90 : -90) : 0);
+  const a = (deg - 90) * Math.PI / 180;
+  return { a, at: [here[0] + Math.cos(a) * r * 3.3, here[1] + Math.sin(a) * r * 3.3] };
+}
+
+function moveArrow(here, tip, r) {
+  const c = Math.cos(tip.a), s = Math.sin(tip.a);
+  const bx = here[0] + c * r * 2.05, by = here[1] + s * r * 2.05, w = r * 0.95;
+  ctx.beginPath();
+  ctx.moveTo(tip.at[0], tip.at[1]);
+  ctx.lineTo(bx - s * w, by + c * w);
+  ctx.lineTo(bx + s * w, by - c * w);
+  ctx.closePath();
+  ctx.lineJoin = "round";
+  ctx.lineWidth = r / 3;
+  ctx.strokeStyle = DARK;
+  ctx.stroke();
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
 }
 
 // YOU: a white dot with a dark edge and a soft ring round it.
@@ -1121,7 +1207,7 @@ function exitMark(x, y, r, n, used, k = 1) {
 
 // The place of the YOU label: above the mark, else below, right or left,
 // whichever first stays on the plan and covers no exit mark (its number).
-function youLabelAt(here, r, exitR) {
+function youLabelAt(here, r, exitR, tip = null) {
   ctx.font = `600 ${Math.round(r * 1.6)}px Geist, system-ui, sans-serif`;
   const w = ctx.measureText(t("you")).width, h = r * 1.6, gap = r * 1.8;
   const [x, y] = here;
@@ -1135,8 +1221,10 @@ function youLabelAt(here, r, exitR) {
   const pad = r / 3 + exitR * 4 / 3;
   const fr = shownFrame();
   const onPlan = ([x0, y0, x1, y1]) => x0 >= fr[0] && y0 >= fr[1] && x1 <= fr[2] && y1 <= fr[3];
+  // The arrow of the first move (tip) keeps clear of the label too.
   const free = ([x0, y0, x1, y1]) => state.exits.every((e) =>
-    e.x + pad < x0 || e.x - pad > x1 || e.y + pad < y0 || e.y - pad > y1);
+    e.x + pad < x0 || e.x - pad > x1 || e.y + pad < y0 || e.y - pad > y1) &&
+    !(tip && tip[0] > x0 - r && tip[0] < x1 + r && tip[1] > y0 - r && tip[1] < y1 + r);
   return places.find((p) => onPlan(p.box) && free(p.box)) || places.find((p) => onPlan(p.box)) || places[0];
 }
 
@@ -1163,22 +1251,64 @@ function cross(x, y, r) {
   }
 }
 
+// Turn icons (DESIGN.md): one outline glyph for each kind of step, left of
+// its text in the step list and in the card of the current step.
+const SVG_NS = "http://www.w3.org/2000/svg";
+const TURN_PATHS = {
+  straight: ["M12 20V5", "m6 11 6-6 6 6"],
+  left: ["M17 20v-7a3 3 0 0 0-3-3H6", "m10 6-4 4 4 4"],
+  right: ["M7 20v-7a3 3 0 0 1 3-3h8", "m14 6 4 4-4 4"],
+  "slight left": ["M16 21v-7.5L8 6", "M8 12V6h6"],
+  "slight right": ["M8 21v-7.5L16 6", "M10 6h6v6"],
+  back: ["M16 20V10a4 4 0 0 0-8 0v6", "m5 13 3 3 3-3"],
+  arrive: ["M3 21h18", "M5 21V5a2 2 0 0 1 2-2h7.5", "M17 13.5V21", "M14 7h7m-3-3 3 3-3 3"],
+};
+// The first step names a side of the plan, not a turn: its arrow points to that side.
+const SIDE_ANGLE = { top: 0, "top right": 45, right: 90, "bottom right": 135, bottom: 180, "bottom left": 225, left: 270, "top left": 315 };
+
+function turnIcon(step, i) {
+  const kind = step.kind === "arrive" ? "arrive" : i === 0 ? "straight" : step.turn;
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("class", kind === "arrive" ? "turn door" : "turn");
+  const g = document.createElementNS(SVG_NS, "g");
+  const side = i === 0 && step.say ? SIDE_ANGLE[step.say.side] : undefined;
+  if (side) g.setAttribute("transform", `rotate(${side} 12 12)`);
+  for (const d of TURN_PATHS[kind] || TURN_PATHS.straight) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    g.append(path);
+  }
+  svg.append(g);
+  return svg;
+}
+
+function stepRow(s, i) {
+  const span = document.createElement("span");
+  span.textContent = stepText(s);
+  return [turnIcon(s, i), span];
+}
+
+// With a route, step 1 is the current step: the card under the plan shows
+// it, and the plan lights its leg once the route has drawn in.
 function showSteps() {
   const list = $("steps");
   list.replaceChildren();
-  selected = -1;
+  selected = view.route && view.steps.length ? 0 : -1;
   view.steps.forEach((s, i) => {
     const li = document.createElement("li");
     if (s.kind === "walk") {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "step";
-      b.textContent = stepText(s);
-      b.setAttribute("aria-pressed", "false");
-      b.addEventListener("click", () => select(selected === i && !speaking ? -1 : i));
+      b.append(...stepRow(s, i));
+      b.setAttribute("aria-pressed", String(i === selected));
+      b.addEventListener("click", () => select(i));
       li.append(b);
     } else {
-      li.textContent = stepText(s);
+      li.className = "arrive";
+      li.append(...stepRow(s, i));
     }
     list.append(li);
   });
@@ -1195,6 +1325,57 @@ function showSteps() {
   stopSpeaking();
 }
 
+// The card of the current step under the plan (DESIGN.md "Current step"):
+// the exit, "step 2 of 5", the turn and the words of the step, with buttons
+// for the step before and after it. The plan lights the same step.
+function showNow() {
+  const card = $("now-card");
+  const on = !!(state && view && view.route && state.start && view.steps.length && !state.photo_map);
+  card.hidden = !on;
+  if (!on) return;
+  const n = view.steps.length, i = Math.min(n - 1, Math.max(0, selected)), s = view.steps[i];
+  const exit = view.route.exitIndex + 1;
+  $("now-num").textContent = String(exit);
+  $("now-head").textContent = `${t("exit_n", { n: exit })} · ${t("step_of", { i: i + 1, count: n })}`;
+  const text = $("now-text");
+  text.replaceChildren(...stepRow(s, i));
+  text.classList.toggle("lit", selected >= 0 && s.kind === "walk");
+  // At either end the button keeps its place, so the card does not move.
+  $("step-prev").classList.toggle("gone", i === 0);
+  $("step-next").classList.toggle("gone", i === n - 1);
+  for (const id of ["step-prev", "step-next", "now-speak"]) $(id).title = $(id).getAttribute("aria-label");
+  $("now-speak").hidden = !canSpeak;
+}
+
+// The step before or after the current one. The new step goes to the live
+// line of the plan once; the focus stays on the button, or goes to the
+// other button when this one has nothing more to show.
+function stepBy(d) {
+  if (!view || !view.steps.length) return;
+  const n = view.steps.length;
+  const i = Math.min(n - 1, Math.max(0, Math.max(0, selected) + d));
+  select(i);
+  $("marker-status").textContent = t("step_said", { i: i + 1, count: n, text: stepText(view.steps[i]) });
+  const [mine, other] = d < 0 ? ["step-prev", "step-next"] : ["step-next", "step-prev"];
+  if (document.activeElement === $(mine) && $(mine).classList.contains("gone")) $(other).focus();
+}
+$("step-prev").addEventListener("click", () => stepBy(-1));
+$("step-next").addEventListener("click", () => stepBy(1));
+
+// After a tap, the card comes into view under the plan, so the plan and
+// the step show together. The top of the plan stays in view.
+function showNowInView() {
+  const card = $("now-card");
+  if (card.hidden) return;
+  const stage = $("stage").getBoundingClientRect();
+  const bar = $("upload-bar");
+  const room = window.innerHeight - (bar.classList.contains("float") ? bar.offsetHeight : 0);
+  // The card can stick to the foot of the screen: measure its own place under the plan.
+  const bottom = stage.bottom + parseFloat(getComputedStyle(card).marginTop) + card.offsetHeight;
+  const by = Math.min(bottom + 8 - room, stage.top);
+  if (by > 4) window.scrollBy({ top: by, behavior: smoothScroll() });
+}
+
 // The point halfway along the path of a step: the step follows the route
 // with its side steps, not the straight line from its start to its end.
 function pathMiddle(path) {
@@ -1208,23 +1389,13 @@ function pathMiddle(path) {
   return path[path.length - 1];
 }
 
-// The middle of the longest leg of the path of a step: its number goes
-// there, off the short side steps that its words name.
-function longestMiddle(path) {
-  let k = 1;
-  for (let j = 2; j < path.length; j++) {
-    if (Math.hypot(path[j][0] - path[j - 1][0], path[j][1] - path[j - 1][1]) >
-        Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1])) k = j;
-  }
-  return [(path[k - 1][0] + path[k][0]) / 2, (path[k - 1][1] + path[k][1]) / 2];
-}
-
 // Show one step on the plan. -1 shows none.
 function select(i) {
   selected = i;
   $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
   if (photoOnly) setPhotoOnly(false);
   draw();
+  showNow();
   const step = view.steps[i];
   if (!step || step.kind !== "walk") return;
   const mid = pathMiddle(step.path);
@@ -1251,7 +1422,7 @@ function exitName(i) {
 
 // One button for each exit, in number order, so the route can go to another
 // exit without placing marks on the picture. The list does not move when the
-// route changes.
+// route changes. The nearest exit and the exit of the second way say so.
 function showExits() {
   const box = $("exits");
   box.replaceChildren();
@@ -1261,34 +1432,79 @@ function showExits() {
   $("exits-wrap").hidden = state.exits.length < 2 || !open.some(Boolean);
   $("exits-note").hidden = !open.some((o) => !o);
   if ($("exits-wrap").hidden) return;
+  const near = view.near;
   state.exits.forEach((e, i) => {
     const b = document.createElement("button");
     b.type = "button";
     // The number, as on the plan. The name is in the label and the tooltip.
-    b.textContent = String(i + 1);
-    b.title = open[i] ? exitName(i) : t("exit_dead", { exit: exitName(i) });
-    b.setAttribute("aria-label", b.title);
+    const num = document.createElement("span");
+    num.textContent = String(i + 1);
+    b.append(num);
+    const tag = !near || !open[i] ? "" : i === near.main ? "near" : i === near.backup ? "second" : "";
+    if (tag) {
+      b.dataset.tag = tag;
+      b.classList.add("tagged");
+      const word = document.createElement("span");
+      word.className = "tag";
+      word.textContent = t(`exit_tag_${tag}`);
+      b.append(word);
+    }
     b.classList.toggle("dead", !open[i]);
+    nameExitButton(b, i);
     b.setAttribute("aria-pressed", String(i === current));
-    b.addEventListener("click", () => {
-      state.exitChoice = i;
-      update();
-      remember();
-      if (view.pending) {
-        view.pendingHow = "exit-button";
-        sayPlan(finding);
-        $("exits").children[i].focus();
-        return;
-      }
-      sayPlan(view.route ? () => I.join([t("msg_route_to", { exit: exitName(i) }), otherWay(), t("msg_check")])
-                         : () => t("msg_no_way_to", { exit: exitName(i) }));
-      if (!view.route) { $("exits").children[i].focus(); return; }
-      // On a phone, the plan with the new route comes into view; the steps take the focus.
-      if (narrow()) $("stage").scrollIntoView({ block: "start" });
-      $("steps").focus({ preventScroll: narrow() });
-    });
+    b.addEventListener("click", () => chooseExit(i, "button"));
     box.append(b);
   });
+}
+
+function nameExitButton(b, i) {
+  const name = b.classList.contains("dead") ? t("exit_dead", { exit: exitName(i) }) : exitName(i);
+  b.title = b.dataset.tag ? t("exit_tagged", { exit: name, tag: t(`exit_tag_${b.dataset.tag}`) }) : name;
+  b.setAttribute("aria-label", b.title);
+}
+
+// The route to exit i, from its exit button ("button") or from a tap on its
+// mark or on the dashed second way ("plan").
+function chooseExit(i, from) {
+  state.exitChoice = i;
+  update();
+  remember();
+  if (view.pending) {
+    view.pendingHow = "exit-button";
+    sayPlan(finding);
+    if (from === "button") $("exits").children[i].focus();
+    return;
+  }
+  sayPlan(view.route ? () => I.join([t("msg_route_to", { exit: exitName(i) }), otherWay(), t("msg_check")])
+                     : () => t("msg_no_way_to", { exit: exitName(i) }));
+  // A tap on the plan keeps the focus there; the card shows the new first step.
+  if (from === "plan") { if (view.route) { startRouteDraw(); showNowInView(); } return; }
+  if (!view.route) { $("exits").children[i].focus(); return; }
+  // On a phone, the plan with the new route comes into view; the steps take the focus.
+  if (narrow()) $("stage").scrollIntoView({ block: "start" });
+  $("steps").focus({ preventScroll: narrow() });
+}
+
+// A tap on an exit mark, or on the dashed line of the second way, while a
+// route shows: the route goes to that exit, as its exit button does. A tap
+// where the dashed line runs beside the route is a start, as before.
+// perCss: photo pixels for each CSS pixel of the canvas.
+function pickedExit(x, y, perCss) {
+  if (!state || !state.start || !view || !view.route || view.pending || marking || state.photo_map || photoOnly) return -1;
+  if (state.exits.length < 2 || (typeof readingOn === "function" && readingOn())) return -1;
+  const unit = frameUnit(), used = view.route.exitIndex;
+  const reach = Math.max(unit * 2.2 * 1.25, 16 * perCss);
+  let best = -1, bestD = reach;
+  state.exits.forEach((e, i) => {
+    const d = Math.hypot(e.x - x, e.y - y);
+    if (i !== used && d < bestD) { best = i; bestD = d; }
+  });
+  if (best >= 0) return best;
+  const b = view.backup;
+  if (!b || b.points.length < 2) return -1;
+  const gap = (pts) => Math.min(...pts.slice(1).map((q, i) => segmentGap([x, y], pts[i], q)));
+  const db = gap(b.points);
+  return db < Math.max(unit * 1.5, 14 * perCss) && db + unit < gap(view.route.points) ? b.exitIndex : -1;
 }
 
 function showCredit() {
@@ -1343,6 +1559,7 @@ function update() {
   $("tap-text").hidden = !state.start || marking;
   showLegend();
   showStages();
+  showNow();
 }
 
 function showLegend() {
@@ -1519,6 +1736,7 @@ function setStart(x, y) {
   startRouteDraw();
   remember();
   explain("tap");
+  showNowInView();
 }
 
 // A tap off the floor drawing gives no route, and the old route stays. A tap
@@ -2089,8 +2307,11 @@ canvas.addEventListener("click", (ev) => {
   if (!state) return;
   const box = canvas.getBoundingClientRect();
   const [x0, y0, x1, y1] = shownFrame();
-  place(x0 + (ev.clientX - box.left) * ((x1 - x0) / box.width),
-        y0 + (ev.clientY - box.top) * ((y1 - y0) / box.height));
+  const x = x0 + (ev.clientX - box.left) * ((x1 - x0) / box.width);
+  const y = y0 + (ev.clientY - box.top) * ((y1 - y0) / box.height);
+  const k = pickedExit(x, y, (x1 - x0) / box.width);
+  if (k >= 0) { clearRefusal(); chooseExit(k, "plan"); return; }
+  place(x, y);
 });
 
 // Keyboard: arrow keys move a cross, Enter or Space places the start or the exit.
@@ -2212,12 +2433,24 @@ $("speak").addEventListener("click", () => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = tag;
     if (voice) u.voice = voice;
-    if (i > 0) u.onstart = () => select(i - 1);
+    if (i > 0 && i <= view.steps.length) u.onstart = () => select(i - 1);
     if (i === lines.length - 1) u.onend = stopSpeaking;
     speechSynthesis.speak(u);
   });
   speaking = true;
   $("speak-text").textContent = t("speak_stop");
+});
+
+// The speaker in the card reads the current step only.
+$("now-speak").addEventListener("click", () => {
+  if (!canSpeak || !view || !view.steps.length) return;
+  stopSpeaking();
+  const tag = I.SPEECH[lang] || lang;
+  const voice = voiceFor(tag);
+  const u = new SpeechSynthesisUtterance(stepText(view.steps[Math.min(view.steps.length - 1, Math.max(0, selected))]));
+  u.lang = tag;
+  if (voice) u.voice = voice;
+  speechSynthesis.speak(u);
 });
 
 function lastPlan(key = STORE_KEY) {
