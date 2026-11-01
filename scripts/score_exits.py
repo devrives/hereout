@@ -1,7 +1,7 @@
 """Score the exits of a run of scripts/run_set.py against hand labels.
 
 Usage:
-  uv run python scripts/score_exits.py RUN_DIR LABELS.json [--out FILE] [--points final|model] [--overlays DIR]
+  uv run python scripts/score_exits.py RUN_DIR LABELS.json [--out FILE] [--points final|model] [--overlays DIR] [--gallery]
 
 RUN_DIR is the output folder of scripts/run_set.py (items/<id>.json, plans/<id>.jpg).
 LABELS.json holds, for each photo, the final exits that a person (or an agent)
@@ -14,6 +14,12 @@ dropped legend points and placed each exit on the drawing, which are the
 exits the browser routes to. "model" scores the points that Muse Spark gave
 (after the second look), from item["read"]; a run made before run_set.py
 saved "read" has no such points, and the script stops with a message.
+
+Gallery. With --gallery, RUN_DIR is the gallery folder. Its items come from
+the first run (2026-10-27): reading.exits holds the points of the model, and
+there is no "read". "model" scores those points. "final" places them with the
+current code (pipeline.Plan.of_reading, as the server does when it opens a
+gallery plan), so a change of the code shows in the score with no model call.
 
 Matching. Each predicted exit can match one label and each label one predicted
 exit (an optimal one-to-one assignment, the Hungarian method). A pair can match
@@ -211,6 +217,38 @@ def load_items(run: Path) -> dict[str, dict]:
     return {p.stem: json.loads(p.read_text()) for p in sorted((run / "items").glob("*.json"))}
 
 
+def place_with_code(image_path: Path, item: dict) -> list[tuple[float, float]]:
+    """The final exits of a gallery item: its model points through the current code."""
+    import cv2
+
+    from hereout.pipeline import Plan
+    from hereout.reader import Reading
+
+    r = item["reading"]
+    reading = Reading(exits=[dict(e) for e in r.get("exits") or []],
+                      plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None)
+    Plan.of_reading(cv2.imread(str(image_path), cv2.IMREAD_COLOR), reading, item.get("text_boxes"))
+    return [(float(e["x"]), float(e["y"])) for e in reading.exits]
+
+
+def gallery_items(run: Path, ids, place=place_with_code) -> dict[str, dict]:
+    """The gallery items of the labelled photos in the form of a run_set.py run:
+    "read" holds the model points, reading.exits the exits after the code."""
+    items = {}
+    for pid in ids:
+        path = run / "items" / f"{pid}.json"
+        if not path.exists():
+            continue
+        item = json.loads(path.read_text())
+        if item.get("reading"):
+            model = [(float(e["x"]), float(e["y"])) for e in item["reading"].get("exits") or []]
+            item["read"] = {"exits": [{"at": list(p)} for p in model]}
+            final = place(run / "plans" / f"{pid}.jpg", item)
+            item["reading"] = {**item["reading"], "exits": [{"x": x, "y": y, "label": ""} for x, y in final]}
+        items[pid] = item
+    return items
+
+
 def table(result: dict, routes: dict, items: dict[str, dict]) -> str:
     main = result["at"][str(SHARE)]
     lines = [f"points: {result['points']}   labels: {result['labels']}   run: {result['run']}", f"radius R = max(share * L, {MIN_RADIUS_PX:.0f} px), L = long side of the labelled floor box",
@@ -270,10 +308,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", help="JSON output (default RUN/score-<points>.json)")
     ap.add_argument("--points", choices=["final", "model"], default="final")
     ap.add_argument("--overlays", help="folder for one image per photo: labels, radius and predictions")
+    ap.add_argument("--gallery", action="store_true",
+                    help="RUN is the gallery folder: model points in reading.exits, final points from the current code")
     args = ap.parse_args(argv)
     run, labels_path = Path(args.run), Path(args.labels)
+    if args.gallery and not args.out:
+        raise SystemExit("--gallery needs --out: the gallery folder is read-only")
     labels = json.loads(labels_path.read_text())
-    items = load_items(run)
+    items = gallery_items(run, labels["photos"]) if args.gallery else load_items(run)
     shares = [SHARE / 2, SHARE, SHARE * 2]
     result = {"run": str(run), "labels": str(labels_path), "points": args.points,
               "radius": f"max(share * long side of the labelled floor box, {MIN_RADIUS_PX} px)",

@@ -135,3 +135,21 @@ def test_other_plan_size_is_not_scored():
     r = se.score_run({"a": it}, labels, 0.05)
     assert r["photos"]["a"]["frame_mismatch"] == [[1200, 900], [1600, 1200]]
     assert r["photos_judged"] == 0
+
+
+def test_gallery_items_take_model_points_and_place_them(tmp_path):
+    # A gallery item keeps the model's points in reading.exits and has no "read".
+    (tmp_path / "items").mkdir()
+    (tmp_path / "items" / "g.json").write_text(json.dumps(item("g", [(100, 100), (300, 300)])))
+    placed = lambda path, it: [(x + 1, y) for x, y in ((e["x"], e["y"]) for e in it["reading"]["exits"])][:1]
+    items = se.gallery_items(tmp_path, ["g", "missing"], place=placed)
+    assert set(items) == {"g"}
+    assert se.predicted(items["g"], "model") == [(100.0, 100.0), (300.0, 300.0)]
+    assert se.predicted(items["g"], "final") == [(101.0, 100.0)]
+
+
+def test_gallery_needs_out(tmp_path):
+    labels = tmp_path / "labels.json"
+    labels.write_text(json.dumps({"photos": {}}))
+    with pytest.raises(SystemExit):
+        se.main([str(tmp_path), str(labels), "--gallery"])
