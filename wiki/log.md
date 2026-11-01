@@ -389,3 +389,4 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/afterglow-redesign.md`: the dark Afterglow look, the reveal of a plan, the stage strip, the tap prompt and the new example.
 - Rewrote `DESIGN.md` for direction B (owner, 2026-11-01).
 - Source: the owner request of 2026-11-01, the direction canvas, the UX and accessibility reviews, and the code.
+- Updated `decisions/demo-video.md`: the fifth video records the real page after the redesign (RU-commons_000164, hub `film.mjs`).

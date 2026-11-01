@@ -324,7 +324,7 @@ def test_demo_video_needs_the_file_and_the_credits(tmp_path):
     shown = demo_page(page, video, g)
     assert " hidden" not in shown and 'src="/video/demo.mp4?v=40' in shown and "poster=" not in shown
     assert DEMO_LINK in shown
-    assert "cropped, marks and route drawn on top, shown in a motion graphic of HereOut&#x27;s result" in shown
+    assert "cropped, dimmed, marks, ways out and route drawn on top, shown in a recording of the HereOut page" in shown
     # A plan that the gallery does not know has no credit: the block goes.
     assert demo_page(page.replace("XX-test_1", "XX-gone"), video, g) == "<p>a</p>\n<p>b</p>"
     (video / "demo-poster.webp").write_bytes(b"RIFF")

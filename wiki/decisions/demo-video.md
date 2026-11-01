@@ -43,3 +43,6 @@ sources:
 - On 2026-11-01 the owner asked for a motion graphic in place of the screen video: one sample, with its route drawn slowly.
 - The fourth video (1 min 19 s, about 4 MB) is a motion graphic of RU-commons_000338. `motion.mjs` in the hub takes the real result from the live page and draws it frame by frame.
 - The route goes from the middle hall to the left exit door, the way the printed arrows point. The first render used a tap that went to a false exit, so it did not ship.
+- The owner found that Exit 4 of the fourth video is no exit (2026-11-01). The owner asked for a more stylish video on the refined page, in the order exits, ways out, tap, route.
+- The fifth video (51 s) records the real page after the [Afterglow redesign](afterglow-redesign.md), with RU-commons_000164. The hub script `film.mjs` drives the page clock with Playwright, so the reveal runs slowly. A camera moves over the page, and a caption band says what each part does.
+- The fifth video records a local server with no model key, so it makes no model call. The Korean card needs no call. The plan words in Korean need a call, so the video does not show them.

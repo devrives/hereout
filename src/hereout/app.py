@@ -126,7 +126,7 @@ def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
         st = (folder / name).stat()
         return f"/video/{name}?v={st.st_size:x}{int(st.st_mtime):x}"
     poster = f' poster="{url("demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
-    credits = "".join(f"<li>{credit_html(gallery.items[i]['credit'], ['cropped', 'marks and route drawn on top', "shown in a motion graphic of HereOut's result"])}</li>"
+    credits = "".join(f"<li>{credit_html(gallery.items[i]['credit'], ['cropped', 'dimmed', 'marks, ways out and route drawn on top', 'shown in a recording of the HereOut page'])}</li>"
                       for i in ids)
     return (page.replace('src="/video/demo.mp4"', f'src="{url("demo.mp4")}"{poster}', 1)
                 .replace(DEMO_TAG, DEMO_TAG.removesuffix(" hidden"), 1)
