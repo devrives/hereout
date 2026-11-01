@@ -586,7 +586,10 @@ function wallLayer() {
     l.stroke();
   }
   l.lineCap = "round";
-  for (const [x0, y0, x1, y1, width] of lines) {
+  // Only the lines on the building: a line on a legend or a text panel
+  // floats off the plan (route.js buildingLines).
+  const onBuilding = R.buildingLines(view.field, lines, state.width, state.height);
+  for (const [x0, y0, x1, y1, width] of lines.filter((_, i) => onBuilding[i])) {
     l.lineWidth = Math.max(width, unit * 0.45);
     l.beginPath();
     l.moveTo(x0, y0);

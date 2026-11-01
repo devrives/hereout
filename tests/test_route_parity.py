@@ -82,10 +82,15 @@ def test_js_matches_python():
 
 
 def step_cases():
-    """Routes whose steps split a turn back and fold a slanted staircase."""
+    """Routes whose steps split a turn back and fold a slanted staircase or a staircase of right angles."""
     rng = np.random.default_rng(11)
     out = [[(100, 50), (100, 300), (80, 300), (80, 200)],
-           [(200, 100), (900, 100), (900, 146), (700, 146), (700, 170)]]
+           [(200, 100), (900, 100), (900, 146), (700, 146), (700, 170)],
+           # A staircase of right angles on a diagonal (DE-commons_000022), an L with a jog, jogs on a way up.
+           [(468, 912), (467.5, 877.5), (442.5, 877.5), (442.5, 862.5), (422.5, 862.5), (422.5, 842.5),
+            (402.5, 842.5), (402.5, 817.5), (316, 817.5), (316, 827)],
+           [(500, 300), (430, 300), (430, 330), (422, 330), (422, 400)],
+           [(400, 600), (400, 575), (405, 575), (405, 550), (410, 550), (410, 525), (415, 525), (415, 500)]]
     for _ in range(40):
         p, pts = np.array([800.0, 450.0]), []
         for _ in range(int(rng.integers(6, 40))):
@@ -105,3 +110,8 @@ def test_js_steps_match_python():
     js = json.loads(subprocess.run([NODE, "-e", script, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
                                    input=json.dumps(cs), capture_output=True, text=True, check=True).stdout)
     assert js == [[x["text"] for x in directions(c, 1600, 900)] for c in cs]
+    # Without the staircase of right angles too (the count for the choice of route).
+    script = script.replace("R.directions(p, 1600, 900)", "R.directions(p, 1600, 900, false)")
+    js = json.loads(subprocess.run([NODE, "-e", script, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                   input=json.dumps(cs), capture_output=True, text=True, check=True).stdout)
+    assert js == [[x["text"] for x in directions(c, 1600, 900, stairs=False)] for c in cs]
