@@ -356,3 +356,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/exit-y-fix.md`: the dev set, the fix, the checks on the point of the model, the rules and the prompt that did not ship.
 - Updated `index.md`: the new page.
 - Source: the agent branch judge2-acc, the dev labels and the tests.
+
+## [2026-11-01] ingest | Demo video at phone size
+
+- Updated `decisions/demo-video.md`: the phone layout, the reasons from the second judge review, the owner choice of samples only.
+- Source: the owner words of 2026-11-01, the judge review and the new video.
