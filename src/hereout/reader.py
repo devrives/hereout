@@ -31,7 +31,8 @@ DEFAULT_MODEL = "meta-models/muse-spark-open-1026"
 MAX_IMAGE_SIDE = 1600
 MAX_TOKENS = 12000  # the model reasons first; the answer itself is short
 # Low reasoning effort: on 30 gallery plans it was 1.9 times faster and 2.5
-# times cheaper than the default, with the same points.
+# times cheaper than the default, with the same points. That test had the old
+# "you are here" call too (wiki/decisions/start-from-tap.md).
 DEFAULT_EFFORT = "low"
 USER_AGENT = "HereOut/0.1 (+https://hereout.devrives.com/)"
 
