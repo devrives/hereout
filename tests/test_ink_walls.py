@@ -2,11 +2,13 @@
 
 import cv2
 import numpy as np
+import pytest
 
 from hereout import ink_walls as iw
 from hereout.ink_walls import (beyond_exits, door_arcs, faded_ends, footprints, ink_walls, legend_exits, outdoor_areas,
                                 outdoor_ways, place_exits, room_doors, split_strokes)
 from hereout.photo_map import is_photo_map
+from hereout.voids import void_mask, x_voids
 from hereout.legend import drop_legend_exits, drop_text_exits, text_block_exits
 from hereout.route import Field, NoRoute, blocked_grid, soft_grid
 from hereout.walls import stroke_width
@@ -360,3 +362,45 @@ def test_exit_below_a_title_block_stays():
     cv2.rectangle(img, (40, 140), (900, 760), BLACK, 6)
     exits = [{"x": 400, "y": 120, "label": "A"}, {"x": 900, "y": 400, "label": "B"}]
     assert text_block_exits(img, text, exits) == set()
+
+
+def hall_with_shaft(cross=True):
+    """A hall with a lift shaft in its middle: a rectangle of thick walls,
+    crossed by an X when cross is True."""
+    img = np.full((800, 1000, 3), PAPER, np.uint8)
+    cv2.rectangle(img, (50, 50), (950, 750), BLACK, 10)
+    cv2.rectangle(img, (380, 280), (620, 520), BLACK, 10)
+    if cross:
+        cv2.line(img, (385, 285), (615, 515), BLACK, 2)
+        cv2.line(img, (615, 285), (385, 515), BLACK, 2)
+    return img
+
+
+def test_x_crossed_rectangle_is_a_void():
+    """A lift shaft drawn with an X is found; a plain room, an X with no
+    frame and a frame with one diagonal are not."""
+    (x0, y0, x1, y1), = x_voids(hall_with_shaft())
+    assert abs(x0 - 385) <= 3 and abs(y0 - 285) <= 3 and abs(x1 - 615) <= 3 and abs(y1 - 515) <= 3
+    assert x_voids(hall_with_shaft(cross=False)) == []
+    img = np.full((800, 1000, 3), PAPER, np.uint8)
+    cv2.line(img, (385, 285), (615, 515), BLACK, 2)
+    cv2.line(img, (615, 285), (385, 515), BLACK, 2)
+    assert x_voids(img) == []
+    img = hall_with_shaft(cross=False)
+    cv2.line(img, (385, 285), (615, 515), BLACK, 2)
+    assert x_voids(img) == []
+
+
+def test_no_route_enters_a_void():
+    """Inside the shaft is wall: a tap there gets no route, and no door is
+    cut into the shaft. An exit point inside the rectangle keeps it open."""
+    img = hall_with_shaft()
+    exit_ = (950, 400)
+    walls, soft, placed, _ = ink_walls(img, (40, 40, 960, 760), [], [exit_])
+    assert walls[400, 450] and walls[350, 500]
+    with pytest.raises(NoRoute):
+        route(walls, soft, (450, 400), placed[0])
+    r = route(walls, soft, (200, 400), placed[0])
+    assert not any(385 < x < 615 and 285 < y < 515 for x, y in r.points)
+    assert not void_mask(img, (40, 40, 960, 760), [(500, 300)]).any()
+    assert void_mask(img, (40, 40, 960, 760), [exit_])[400, 500]
