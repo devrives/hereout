@@ -40,11 +40,12 @@ const zoomMoved = (row) => row.zoom === "moved" &&
 
 // What happened to one exit point, in words.
 function readFate(row) {
-  if (row.zoom === "dropped") return "dropped by the zoom check";
+  if (row.zoom === "dropped") return `dropped by the zoom check (crop ${row.crop})`;
   if (row.drop === "legend") return "dropped by HereOut: in the legend";
   if (row.drop) return "dropped by HereOut: not on the drawing";
   const parts = [`Exit ${row.exit + 1}`];
-  if (row.zoom) parts.push(zoomMoved(row) ? "moved by the zoom check" : "kept by the zoom check");
+  const crop = row.crop ? ` (crop ${row.crop})` : "";
+  if (row.zoom) parts.push((zoomMoved(row) ? "moved by the zoom check" : "kept by the zoom check") + crop);
   if (row.placed_at) parts.push("moved onto the building by HereOut");
   return parts.join(", ");
 }
@@ -66,12 +67,133 @@ function readZoomText(read) {
       const moved = count(zoomMoved), dropped = count((r) => r.zoom === "dropped");
       const kept = checked - moved - dropped;
       const what = [moved && `${moved} moved`, dropped && `${dropped} dropped`, kept && `${kept} kept`].filter(Boolean).join(", ");
-      return `Points far from any green or red plan mark got a second Muse Spark call on zoomed crops: ${checked} checked, ${what}.`;
+      return `Points far from any green or red plan mark got a second Muse Spark call on numbered, zoomed crops: ${checked} checked, ${what}.`;
     }
     default:
       return "";
   }
 }
+
+// The second look: the sheets of numbered crops that the zoom call sent, and
+// what came back for each crop. Crop n is on sheet (n - 1) / 4 (reader.ZOOM_PER_SHEET).
+const LOOK_PER_SHEET = 4;
+let lookOpener = null;
+
+// What came back for one crop: a short word, and why.
+function lookResult(row) {
+  if (row.zoom === "dropped") return ["Dropped", "no exit in this crop"];
+  if (row.zoom === "moved") return zoomMoved(row) ? ["Moved", "the model pointed to a new spot"] : ["Kept", "the model pointed to the same spot"];
+  switch (row.why) {
+    case "too far": return ["Kept", "the model pointed more than 7% of the plan away, so HereOut did not use that point"];
+    case "off the crop": return ["Kept", "the model pointed outside this crop, so HereOut did not use that point"];
+    case "last exit": return ["Kept", "the model saw no exit, but one exit must stay"];
+    default: return ["No answer", "the first point stays"];
+  }
+}
+
+function lookItems(rows) {
+  return rows.map((row) => {
+    const li = document.createElement("li");
+    const n = document.createElement("span");
+    n.className = "lk";
+    n.setAttribute("aria-hidden", "true");
+    n.textContent = String(row.crop);
+    const text = document.createElement("span");
+    const [word, why] = lookResult(row);
+    const b = document.createElement("strong");
+    b.textContent = word;
+    const label = row.label.trim() ? `“${row.label.trim()}”` : "(no label)";
+    const then = "exit" in row ? ` Now Exit ${row.exit + 1}.` : row.zoom === "dropped" ? "" : " Not used by HereOut.";
+    const sr = document.createElement("span");
+    sr.className = "sr";
+    sr.textContent = `Crop ${row.crop}: `;
+    const rest = document.createElement("span");
+    rest.dir = "auto";
+    rest.textContent = `: ${label}, ${why}.${then}`;
+    text.append(sr, b, rest);
+    li.append(n, text);
+    return li;
+  });
+}
+
+// The sheet image, with a ring where the model pointed in each crop. The
+// image stays as the model saw it: the rings are on top, in the page.
+function lookPicture(img, rows) {
+  const pic = document.createElement("span");
+  pic.className = "look-pic";
+  pic.append(img);
+  for (const row of rows) {
+    if (!row.seen) continue;
+    const ring = document.createElement("span");
+    ring.className = "look-pt" + (row.zoom === "moved" ? "" : " unused");
+    ring.setAttribute("aria-hidden", "true");
+    ring.style.left = `${row.seen[0] * 100}%`;
+    ring.style.top = `${row.seen[1] * 100}%`;
+    pic.append(ring);
+  }
+  return pic;
+}
+
+function showLook(read) {
+  const sheets = (read.zoom === "done" && read.sheets) || [];
+  $("look-wrap").hidden = !sheets.length;
+  const checked = read.exits.filter((r) => r.crop).sort((a, b) => a.crop - b.crop);
+  $("look-sheets").replaceChildren(...sheets.map((url, i) => {
+    const rows = checked.filter((r) => Math.floor((r.crop - 1) / LOOK_PER_SHEET) === i);
+    const first = i * LOOK_PER_SHEET + 1, last = first + Math.max(0, rows.length - 1);
+    const crops = rows.length > 1 ? `crops ${first} to ${last}` : `crop ${first}`;
+    const head = `Sheet ${i + 1} of ${sheets.length}: ${crops}`;
+    const li = document.createElement("li");
+    li.className = "look-sheet";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "look-open";
+    open.setAttribute("aria-haspopup", "dialog");
+    const img = document.createElement("img");
+    img.src = url;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.alt = `${head}, as Muse Spark saw them. Open larger.`;
+    open.append(lookPicture(img, rows));
+    open.addEventListener("click", () => openLook(url, head, rows, open));
+    const list = document.createElement("ol");
+    list.className = "look-crops";
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", `What came back for ${crops}`);
+    list.append(...lookItems(rows));
+    li.append(open, list);
+    return li;
+  }));
+}
+
+function openLook(url, head, rows, opener) {
+  const view = $("look-view");
+  lookOpener = opener;
+  $("look-view-head").textContent = head;
+  const img = document.createElement("img");
+  img.id = "look-view-img";
+  img.src = url;
+  img.alt = `${head}: zoomed parts of the plan photo, each with its number in a black box and a magenta cross on the first exit point.`;
+  $("look-view-pic").replaceChildren(lookPicture(img, rows));
+  $("look-view-crops").replaceChildren(...lookItems(rows));
+  if (typeof view.showModal === "function") view.showModal();
+  else view.setAttribute("open", "");
+  $("look-view-close").focus();
+}
+
+function closeLook() {
+  const view = $("look-view");
+  if (typeof view.close === "function") view.close();
+  else view.removeAttribute("open");
+}
+
+$("look-view-close").addEventListener("click", closeLook);
+// A click on the backdrop (outside the box) closes the view; Escape closes a dialog by itself.
+$("look-view").addEventListener("click", (ev) => { if (ev.target === $("look-view")) closeLook(); });
+$("look-view").addEventListener("close", () => {
+  if (lookOpener && document.contains(lookOpener)) lookOpener.focus();
+  lookOpener = null;
+});
 
 function showReading() {
   const read = state && state.read;
@@ -102,6 +224,7 @@ function showReading() {
     return li;
   }));
   $("read-zoom").textContent = readZoomText(read);
+  showLook(read);
   const has = (f) => read.exits.some(f);
   $("rl-box").hidden = !read.box;
   $("rl-zoom").hidden = !has(zoomMoved);
