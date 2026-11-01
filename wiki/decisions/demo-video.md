@@ -40,3 +40,6 @@ sources:
 - The first video had its captions in the header of the page, at 18 px. On a phone they were about 5 px, and they hid the photo button. The owner asked for a new video (2026-11-01).
 - The second judge review (2026-11-01) found blank and still frames, a small plan in a desktop frame and no view of the second look. The owner chose gallery samples only, with no shots of a real phone (2026-11-01).
 - The third video (2026-11-01) is 2 min 22 s long and about 8 MB. It shows a Russian plan, the language change and the words of the plan. Then it shows the second look on a German plan, the code view, the exit scores and "Mark the exit". The video has no page loads.
+- On 2026-11-01 the owner asked for a motion graphic in place of the screen video: one sample, with its route drawn slowly.
+- The fourth video (1 min 19 s, about 4 MB) is a motion graphic of RU-commons_000338. `motion.mjs` in the hub takes the real result from the live page and draws it frame by frame.
+- The route goes from the middle hall to the left exit door, the way the printed arrows point. The first render used a tap that went to a false exit, so it did not ship.

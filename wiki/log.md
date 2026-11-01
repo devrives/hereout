@@ -366,3 +366,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/judge-round-2.md`: the score of the third judge agent and the change of the first plans.
 - Source: the judge report of 2026-11-01.
+
+## [2026-11-01] ingest | Demo video as a motion graphic
+
+- Updated `decisions/demo-video.md`: the owner request, the motion graphic and the check of the route.
+- Source: the owner words of 2026-11-01 and the fact-check of the first render.
