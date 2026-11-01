@@ -36,7 +36,7 @@
   <section id="intro" class="intro" aria-labelledby="intro-head">
     <h1 id="intro-head">Your way out, drawn on the plan</h1>
     <p class="lead">In front of an evacuation plan you don't know? HereOut finds the exits on your photo.</p>
-    <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video (2 min 22 s)</a></p>
+    <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video (1 min 19 s)</a></p>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
@@ -176,26 +176,27 @@
       <ul id="credits"></ul>
     </details>
   </section>
-  <section id="demo" class="demo" hidden aria-labelledby="demo-head" data-samples="RU-commons_000338,DE-commons_000022,CN-commons_000098">
+  <section id="demo" class="demo" hidden aria-labelledby="demo-head" data-samples="RU-commons_000338">
     <h2 id="demo-head">Demo video</h2>
-    <p class="muted">2 min 22 s, no sound: the site at phone size, with captions beside it.</p>
+    <p class="muted">1 min 19 s, no sound: one sample plan, with its route drawn again slowly and the captions beside it.</p>
     <video controls playsinline preload="none" width="1920" height="1080" src="/video/demo.mp4" aria-labelledby="demo-head"></video>
     <details class="transcript">
       <summary>Text of the video, with what it shows</summary>
       <ol>
-        <li>A fire evacuation plan in Russian. Where is the way out? HereOut found the exits with Muse Spark and drew the route from where I tapped. <em>On screen: a phone outline with the evacuation plan of a church floor in Russia. A blue route goes from the YOU dot in the lower left hall to Exit 4, the bottom stair, with a dashed route to Exit 2. The card says “Nearest exit: Exit 4: EXIT bottom stair”.</em></li>
-        <li>Tap where you stand. The route stays inside the walls. The first step names a side of the plan, not your left or right. No metres: a photo has no reliable scale. Tap a step to see it on the plan. Exit blocked? The route to another exit is one tap away. <em>On screen: a tap in the upper left room gives a route to Exit 1 at the top. The steps say “Start toward the right of the plan and walk a medium way”, “Turn left and walk a short way” and “Then you reach the exit”. A tap on step 2 marks its leg on the plan. Then “Route to Exit 2” draws the route to the left exit.</em></li>
-        <li>Pick your language. Steps, exit names and messages change. “What the plan says”: the plan's own title, instructions and legend, translated by Muse Spark. Each item keeps the original text under it, to compare with the plan. English and 12 more languages. Arabic reads right to left. <em>On screen: the language changes from English to Español. The steps and the exit name (“Salida 2: SALIDA a la izquierda”) are in Spanish. “Lo que dice el plano” gives the title, the instructions and the legend of the plan in Spanish, each with the Russian text under it. Then the language changes to Arabic, and the plan card reads right to left.</em></li>
-        <li>Muse Spark (muse-spark-open-1026, on Baseten) is asked for the floor box and every final exit. Exits far from any green or red mark get a second look: numbered, zoomed crops in one more call. Here the exit in crop 1 was on the sauna. The model moved it onto the staircase. The model never picks your start. Your tap does. <em>On screen: a hotel floor plan from Germany. The card “What Muse Spark read” lists the three exit points with the labels of the model, and “Show the reading on the plan” draws the floor box and the numbered points on the whole photo. The sheet of the second look opens large: crop 1 has a magenta cross on the sauna and a ring on the staircase, with “Moved: ‘Staircase west’, the model pointed to a new spot. Now Exit 3.” Then a tap in the west wing gives a route to Exit 3.</em></li>
-        <li>Everything else is code. Walls come from the ink (OpenCV), with RapidOCR text boxes kept out. Every route is worked out in your browser. <em>On screen: “Routes only” on the same plan: the wall lines that the code found, the escape map, the ways out and the route, with no photo.</em></li>
-        <li>It is not always right. On 26 test photos outside the gallery, it found 53 % of the labelled exits (an AI agent marked the exits by eye; a found exit is within 5 % of the plan's size). About half of the exits it gave were wrong. So every route says: check it against the plan. If an exit looks wrong, mark the real one. HereOut routes to it. <em>On screen: a tap in the south corridor gives a route to Exit 2, at the end of the corridor, and the card says “Check the route and the exits against the plan.” Then “Mark the exit”, a tap on the door of the south staircase, and a new route to that EXIT mark.</em></li>
-        <li>203 real plans to try, from 24 countries and regions. hereout.devrives.com. Muse Spark through Baseten. Built solo during the Meta hackathon. <em>On screen: the start page with the example route on a metro station plan from China, then the gallery of sample plans.</em></li>
+        <li>A fire evacuation plan in Russian. Where is the way out? <em>On screen: the photo of the evacuation plan of a church floor in Russia, with its Russian title, instructions and legend.</em></li>
+        <li>Muse Spark, Meta's model, finds the exits on the photo. <em>On screen: the view moves in to the floor drawing. Four green exit marks, numbered 1 to 4, appear one by one. Beside the plan: “Exit 1: EXIT top”, “Exit 2: EXIT left”, “Exit 3: EXIT right” and “Exit 4: EXIT bottom stair”.</em></li>
+        <li>You tap where you stand. <em>On screen: a red ring where the tap is, in the middle hall beside the arrow of the printed middle line, then the blue YOU dot with a soft pulse.</em></li>
+        <li>Code finds the walls. Your browser draws the route to the nearest exit, with steps. <em>On screen: “Nearest exit: Exit 2: EXIT left”. The blue route draws slowly: up a short way to the printed green cross line, a stop at the turn, then left along that line, the way its arrow points, to Exit 2 at the left door. Each step comes into the list when its part of the route draws: “Start toward the top of the plan and walk a short way.”, “Turn left and walk a medium way.” and “Then you reach the exit.”</em></li>
+        <li>Each step covers one part of the route. <em>On screen: step 1, then step 2, is lit in orange in the list and on the plan.</em></li>
+        <li>If it is blocked, use Exit 3: EXIT right (dashed line). <em>On screen: a dashed blue route draws from the turn to the right along the same line, the way its arrow points, to Exit 3 at the right door. The same sentence joins the list.</em></li>
+        <li>English and 12 more languages. Here: Spanish. <em>On screen: the card changes to Spanish: “Salida más cercana”, “Salida 2: SALIDA a la izquierda”, the three steps and the sentence for the dashed route. On the plan, YOU changes to “ESTÁ AQUÍ”.</em></li>
+        <li>“What the plan says”: Muse Spark translates the plan's own words. The Russian original stays under each one. <em>On screen: “Lo que dice el plano”: the first two instructions of the plan in Spanish, “Llame al 01, 112 e indique dirección, qué ha pasado, dónde se ha iniciado el incendio y su nombre” and “Evacúe a las personas, siga las señales de dirección, lleve consigo a los heridos”, each with its Russian text under it.</em></li>
+        <li>HereOut. hereout.devrives.com. Exits and plan words by Muse Spark, through Baseten. Built solo during the Meta hackathon. Check every route against the plan. <em>On screen: the end card with the HereOut logo.</em></li>
       </ol>
     </details>
     <details class="credits">
-      <summary>Photos in the video</summary>
+      <summary>Photo in the video</summary>
       <ul id="demo-credits"></ul>
-      <p>The gallery previews in the video have their credits under “Photo credits” in the gallery.</p>
     </details>
   </section>
 </main>
