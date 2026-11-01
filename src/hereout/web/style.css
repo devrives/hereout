@@ -286,6 +286,35 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 #show-read[aria-pressed="true"] { border-color: #6a1b9a; box-shadow: inset 0 0 0 1.5px #6a1b9a; }
 #read-zoom { margin: 12px 0 8px; font-size: 0.9rem; }
 .read > p:last-child { margin: 0; font-size: 0.9rem; }
+/* The second look: the sheets of numbered crops, and what came back for each. */
+.look h4 { margin: 16px 0 4px; font-size: 1rem; }
+.look > p { margin: 0 0 10px; font-size: 0.9rem; }
+.look-sheets { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.look-sheet { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 12px; align-items: start; }
+.look-open { display: block; width: 128px; min-width: 44px; min-height: 44px; padding: 0; overflow: hidden; border-radius: 8px; background: #ffffff; }
+.look-open img { display: block; width: 100%; height: auto; }
+.look-pic { position: relative; display: block; }
+.look-pt { position: absolute; width: 12px; height: 12px; border: 2.5px solid #0a7d3b; border-radius: 50%; transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 1.5px #ffffff, inset 0 0 0 1px #ffffff; pointer-events: none; }
+.look-pt.unused { border-style: dashed; border-color: #b3261e; }
+.look-view .look-pt { width: 30px; height: 30px; border-width: 3.5px; }
+.look-key { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; white-space: nowrap; }
+.look-key .look-pt { position: static; transform: none; flex: none; }
+.look-open:hover { border-color: #6a1b9a; }
+.look-crops { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
+.look-crops li { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
+.look-crops .lk { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 4px;
+  background: #000000; color: #ffffff; font-size: 0.8rem; font-weight: 800; }
+.look-view { width: min(96vw, 760px); max-width: none; max-height: 94vh; padding: 0; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--card); color: var(--fg); }
+.look-view::backdrop { background: rgb(0 0 0 / 0.6); }
+.look-view-bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 8px 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+.look-view-bar h3 { margin: 0; font-size: 1rem; }
+.look-view-pic { padding: 12px 12px 0; }
+.look-view-pic .look-pic { width: fit-content; max-width: 100%; margin: 0 auto; }
+#look-view-img { display: block; max-width: 100%; max-height: 66vh; width: auto; height: auto; background: #ffffff; }
+.look-view .look-crops { padding: 12px 16px 16px; }
 .read-legend { display: none; }
 .result.reading .read-legend { display: flex; }
 .result.reading #legend { display: none; }

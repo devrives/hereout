@@ -94,7 +94,10 @@ def route_result(image_path: Path, reading: Reading) -> dict:
     image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
     if is_photo_map(image, reading.plan_box):
         return {"route_found": False, "route_error": "photo map", "open_with_way": 0.0}
-    plan = Plan.of(image, reading.plan_box)
+    # The walls with the exits, as the page gets them (Plan.use_reading): the
+    # doors at the exits open only then. Without them, an exit moved onto its
+    # door by the zoom check closed most of the floor.
+    plan = Plan.of(image, reading.plan_box, exits=reading.exits)
     blocked, scale = blocked_grid(plan.walls)
     field = Field(blocked, scale, [(e["x"], e["y"]) for e in reading.exits], soft=soft_grid(plan.soft, blocked))
     owner = np.array(field.owner).reshape(blocked.shape)

@@ -157,6 +157,12 @@ def test_zoom_moves_and_drops_suspect_exits(tmp_path):
     assert [t.get("zoom") for t in reading.trace] == [None, "moved", "dropped"]
     assert [round(v) for v in reading.trace[1]["to"]] == [320, 200]
     assert (round(reading.trace[1]["x"]), round(reading.trace[1]["y"])) == (300, 200)
+    # Each checked exit has the number of its crop; the page shows the sheets that the call sent.
+    assert [t.get("crop") for t in reading.trace] == [None, 1, 2]
+    # Where the model pointed, as a share of the sheet: the page draws it on the sheet.
+    assert reading.trace[1]["seen"] == pytest.approx((0.314, 0.5), abs=0.002)
+    assert "seen" not in reading.trace[2]
+    assert len(reading.sheets) == 1 and reading.sheets[0].shape[:2] == (496, 968)
 
 
 def test_no_zoom_after_a_slow_main_call(tmp_path, monkeypatch):
@@ -215,7 +221,8 @@ def test_zoom_ignores_a_large_move(tmp_path):
     client, _ = make_client(tmp_path, handler)
     reading = client.read_plan(plan_with_sign())
     assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(300, 200)]
-    assert reading.trace[0]["zoom"] == "unchanged"
+    assert reading.trace[0]["zoom"] == "unchanged" and reading.trace[0]["why"] == "too far"
+    assert reading.trace[0]["seen"] == pytest.approx((0.9, 0.9), abs=0.002)
 
 
 def test_zoom_keeps_one_exit_when_it_drops_all(tmp_path):
@@ -229,6 +236,7 @@ def test_zoom_keeps_one_exit_when_it_drops_all(tmp_path):
     client, _ = make_client(tmp_path, handler)
     reading = client.read_plan(plan_with_sign())
     assert len(reading.exits) == 1 and reading.trace[0]["zoom"] == "unchanged"
+    assert reading.trace[0]["why"] == "last exit"
 
 
 def test_failed_zoom_keeps_the_points(tmp_path):
@@ -243,6 +251,7 @@ def test_failed_zoom_keeps_the_points(tmp_path):
     client, _ = make_client(tmp_path, handler)
     reading = client.read_plan(plan_with_sign())
     assert reading.zoom == "failed" and len(reading.exits) == 1 and "zoom" not in reading.trace[0]
+    assert reading.sheets == []
 
 
 def test_no_suspect_no_zoom(tmp_path):
@@ -257,3 +266,17 @@ def test_no_suspect_no_zoom(tmp_path):
     reading = client.read_plan(plan_with_sign())
     assert len(asked) == 1 and reading.zoom == "none"
 
+
+
+def test_zoom_without_an_entry_is_no_answer(tmp_path):
+    first = '{"final_exits": [{"x": 750, "y": 667}]}'
+
+    def handler(request):
+        content = json.loads(request.content)["messages"][0]["content"]
+        return httpx.Response(200, json=answer('{"exits": []}' if len(content) > 2 else first))
+
+    client, _ = make_client(tmp_path, handler)
+    reading = client.read_plan(plan_with_sign())
+    t = reading.trace[0]
+    assert {k: t[k] for k in ("zoom", "why", "crop")} == {"zoom": "unchanged", "why": "no answer", "crop": 1}
+    assert len(reading.exits) == 1

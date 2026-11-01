@@ -131,8 +131,21 @@
         <button id="show-read" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span id="show-read-text">Show the reading on the plan</span></button>
         <ol id="read-exits" class="read-exits" role="list" aria-labelledby="read-head"></ol>
         <p id="read-zoom" class="muted"></p>
+        <div id="look-wrap" class="look" hidden>
+          <h4 id="look-head">The second look: what Muse Spark saw</h4>
+          <p class="muted">Each numbered crop is centred on an exit point from the first call (magenta cross). The model gave a new point or "no exit" for each crop. <span class="look-key"><i class="look-pt" aria-hidden="true"></i> where it pointed</span> <span class="look-key"><i class="look-pt unused" aria-hidden="true"></i> a point HereOut did not use</span></p>
+          <ul id="look-sheets" class="look-sheets" role="list" aria-labelledby="look-head"></ul>
+        </div>
         <p class="muted">Muse Spark's part ends here. HereOut's own code finds the walls in the ink (OpenCV, with RapidOCR text detection to skip lettering) and works out every route in your browser.</p>
       </div>
+      <dialog id="look-view" class="look-view" aria-labelledby="look-view-head">
+        <div class="look-view-bar">
+          <h3 id="look-view-head"></h3>
+          <button id="look-view-close" type="button">Close</button>
+        </div>
+        <div id="look-view-pic" class="look-view-pic"></div>
+        <ol id="look-view-crops" class="look-crops" role="list" aria-label="What came back for each crop"></ol>
+      </dialog>
       <button id="back-to-samples" type="button" hidden>Back to the samples</button>
       <p id="credit" class="credit" hidden></p>
     </div>
