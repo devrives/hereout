@@ -79,3 +79,29 @@ def test_js_matches_python():
             assert ra["steps"] == rp["steps"]
             assert np.allclose(ra["points"], rp["points"])
     assert n_routes >= 20  # the cases must reach exits, or the test proves little
+
+
+def step_cases():
+    """Routes whose steps split a turn back and fold a slanted staircase."""
+    rng = np.random.default_rng(11)
+    out = [[(100, 50), (100, 300), (80, 300), (80, 200)],
+           [(200, 100), (900, 100), (900, 146), (700, 146), (700, 170)]]
+    for _ in range(40):
+        p, pts = np.array([800.0, 450.0]), []
+        for _ in range(int(rng.integers(6, 40))):
+            pts.append(tuple(p))
+            p = p + rng.choice([[20, 0], [-20, 0], [0, 20], [0, -20], [20, 20], [-20, 20], [20, -20], [-20, -20]]) \
+                * rng.integers(1, 6)
+        out.append([(float(x), float(y)) for x, y in pts])
+    return out
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_js_steps_match_python():
+    cs = step_cases()
+    script = ("const R = require(process.argv[1]); let s = ''; process.stdin.on('data', (c) => { s += c; });"
+              "process.stdin.on('end', () => process.stdout.write(JSON.stringify(JSON.parse(s).map("
+              "(p) => R.directions(p, 1600, 900).map((x) => x.text)))));")
+    js = json.loads(subprocess.run([NODE, "-e", script, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                   input=json.dumps(cs), capture_output=True, text=True, check=True).stdout)
+    assert js == [[x["text"] for x in directions(c, 1600, 900)] for c in cs]
