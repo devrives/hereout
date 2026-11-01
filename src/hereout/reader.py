@@ -24,6 +24,8 @@ import cv2
 import httpx
 import numpy as np
 
+from .exit_fix import fix_exits
+
 API_URL = "https://inference.baseten.co/v1/chat/completions"
 DEFAULT_MODEL = "meta-models/muse-spark-open-1026"
 MAX_IMAGE_SIDE = 1600
@@ -431,6 +433,7 @@ class ModelClient:
                     raise
         took = time.monotonic() - start
         reading = parse_answer(text, w, h)
+        reading.exits = fix_exits(reading.exits, h)  # the main call puts its exits a little too low
         reading.cost_usd, reading.usage = cost, usage
         reading.trace = [dict(e) for e in reading.exits]
         if not refine or took > ZOOM_SKIP_AFTER:

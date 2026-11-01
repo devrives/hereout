@@ -117,6 +117,7 @@ Evaluation on a photo set (the folder must be outside the repository):
 ```sh
 uv run --env-file .env python scripts/run_set.py <index.csv> <out folder> --workers 2   # paid: one or two model calls per photo
 uv run python scripts/score_exits.py <out folder> <labels.json> --overlays <out folder>/score
+uv run python scripts/score_exits.py <gallery folder> <labels.json> --gallery --out <file>   # saved gallery readings, no model call
 ```
 
 ## Project layout
