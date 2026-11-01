@@ -110,3 +110,8 @@ def test_js_steps_match_python():
     js = json.loads(subprocess.run([NODE, "-e", script, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
                                    input=json.dumps(cs), capture_output=True, text=True, check=True).stdout)
     assert js == [[x["text"] for x in directions(c, 1600, 900)] for c in cs]
+    # Without the staircase of right angles too (the count for the choice of route).
+    script = script.replace("R.directions(p, 1600, 900)", "R.directions(p, 1600, 900, false)")
+    js = json.loads(subprocess.run([NODE, "-e", script, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                   input=json.dumps(cs), capture_output=True, text=True, check=True).stdout)
+    assert js == [[x["text"] for x in directions(c, 1600, 900, stairs=False)] for c in cs]

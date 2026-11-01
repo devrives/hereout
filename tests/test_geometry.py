@@ -192,6 +192,26 @@ def test_directions_square_jogs_on_a_long_way_keep_the_main_way():
     assert walks[0]["text"] == "Start toward the top of the plan and walk a short way."
 
 
+def test_one_cell_jogs_on_a_way_up_are_not_a_staircase():
+    """A route has a point on each grid cell. A way up with one-cell jogs to
+    the right (JP-commons_000219) is not a diagonal: its runs, not its
+    cells, count, and its smaller way is too small. The walk keeps the
+    heading of its main way."""
+    from hereout.steps import _walk_headings
+    moves = [(0, -5)] * 4 + [(5, -5), (5, 0)] + [(0, -5)] * 4 + [(5, 0), (0, -5), (5, 0), (5, 0)]
+    pts = [(482.0, 832.0)]
+    for dx, dy in moves:
+        pts.append((pts[-1][0] + dx, pts[-1][1] + dy))
+    assert _walk_headings(pts, 0, len(pts) - 1, 2181.0)[:2] == (0.0, 0.0)
+
+
+def test_route_choice_count_leaves_out_the_staircase():
+    """stairs=False gives the steps without the staircase of right angles,
+    which route.js uses to choose between two routes."""
+    walks = [s["text"] for s in directions(SQUARE_STAIRCASE, 1011, 1600, stairs=False) if s["kind"] == "walk"]
+    assert len(walks) == 6 and walks[1] == "Turn left and walk a short way."
+
+
 def test_directions_zigzag_takes_the_main_way():
     """Short legs across a long walk down: the legs down add up, so the walk
     goes down and the turn after it is a right angle."""
