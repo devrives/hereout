@@ -10,9 +10,9 @@ services:
       HEREOUT_SPEND_CAP_USD: "60"
       HEREOUT_GALLERY: /gallery
       HEREOUT_VIDEO: /video
-      # The owner's test pages (/review/, ?set=review) stay off on the live site.
+      # /review/ holds the one sample run of 2026-11-01 (owner; wiki/decisions/sample-run.md).
       # This line wins over an entry in .env.
-      HEREOUT_REVIEW: "0"
+      HEREOUT_REVIEW: "1"
       # Translations of the sample plans' words (src/hereout/translate.py), on the spend volume.
       HEREOUT_TEXT_CACHE: /data/translations
     volumes:

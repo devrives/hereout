@@ -415,3 +415,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/current-step-card.md` (the walk count, the dots, no card on wide screens) and `decisions/start-page-loop.md` (the lead, the loop with no header, no layout shift).
 - Updated `DESIGN.md`: the token `done`, the view control, the steps, the card, the dots and the start page parts.
 - Source: the findings of the judge agent and the two reviewers (owner, 2026-11-01), the browser checks at 195, 390 and 1280, and the code.
+
+## [2026-11-01] ingest | One sample run on /review
+
+- Added `decisions/sample-run.md`: the 203 sample photos once through the page of a local server, the results on `/review/`, and `HEREOUT_REVIEW` set to 1 on the live server.
+- Source: `scripts/site_run.mjs`, the run output and the owner request of 2026-11-01.
