@@ -13,8 +13,10 @@ onto the green or red route marks more often than away from them, and it does
 not move the exits of the upper half. The zoom call gives points on its own
 sheets and is not changed. The box of the floor drawing is not changed: a fix
 of the box too was a little worse on the labels. ModelClient.read_plan applies
-the fix before the zoom check, so the trace of the page shows the fixed points.
-A saved reading (the gallery) keeps the points it was saved with.
+the fix before the zoom check. Each fixed exit keeps the point of the model in
+"model", so the page shows the model's own point and the fix as a move by the
+code, and the legend and text checks also look at the model's point. A saved
+reading (the gallery) keeps the points it was saved with.
 """
 
 from __future__ import annotations
@@ -30,4 +32,4 @@ def grid_y(v: float) -> float:
 
 def fix_exits(exits: list[dict], height: int) -> list[dict]:
     """The exits of the main call (pixels of an image of this height) with grid_y on each y."""
-    return [{**e, "y": grid_y(e["y"] / height * 1000) / 1000 * height} for e in exits]
+    return [{**e, "y": grid_y(e["y"] / height * 1000) / 1000 * height, "model": (e["x"], e["y"])} for e in exits]

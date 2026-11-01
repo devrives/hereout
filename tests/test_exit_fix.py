@@ -44,3 +44,17 @@ def test_read_plan_fixes_main_exits_but_not_the_box(tmp_path):
     assert reading.exits[0]["y"] == pytest.approx(grid_y(900) / 2)
     assert reading.plan_box == pytest.approx((0, 50, 400, 450))
     assert json.loads(json.dumps(reading.trace))[0]["y"] == pytest.approx(reading.exits[0]["y"])
+
+
+def test_fixed_exit_keeps_the_model_point_for_the_page_and_the_legend_check():
+    from hereout.pipeline import model_reading
+    from hereout.reader import Reading
+    exits = fix_exits([{"x": 100.0, "y": 900.0, "label": "A"}], 1000)
+    assert exits[0]["model"] == (100.0, 900.0) and exits[0]["y"] < 900.0
+    r = Reading(exits)
+    r.trace = [dict(e) for e in exits]
+    r.given = list(exits)
+    r.code = [{"at": (exits[0]["x"], exits[0]["y"])}]
+    row = model_reading(r)["exits"][0]
+    # The page shows the model's own point, and the fix as a move by the code.
+    assert row["at"] == [100, 900] and row["placed_at"] == [100, round(exits[0]["y"])]

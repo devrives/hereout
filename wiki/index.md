@@ -25,6 +25,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Polish for the judging criteria](decisions/judge-polish.md): accepted; a route example, plans open on the floor, tap checks, the Muse Spark reading.
 - [Muse Spark reads the words on the plan and translates the plan view](decisions/plan-language.md): accepted; plan words, translation into 12 languages, plan card catalogue.
 - [The second look on the gallery samples](decisions/second-look-on-samples.md): accepted; the zoom check on saved readings, crop sheets in the card.
+- [Move the low exits of the main call up a little](decisions/exit-y-fix.md): accepted; a y fix from a labelled dev set of 30 gallery plans.
 - [Judge review 2](decisions/judge-round-2.md): accepted; test pages off, text-block exits, X-marked voids, step fixes, exit scores on labelled photos.
 - [Demo video on the start page](decisions/demo-video.md): accepted; an MP4 file outside the repository, with the caption text and the photo credits.
 - [Fast first tap and smaller sample plans](decisions/page-speed.md): accepted; the worker makes the trees to single exits, faster loops, sample images as WebP files.

@@ -57,9 +57,15 @@ class Plan:
         if self.text is None:
             self.text = text_boxes(self.image)
         given = list(reading.exits)
-        exits = drop_legend_exits(self.image, self.text, given, reading.plan_box)
+        # An exit goes when its point or the model's own point (exit_fix) is in a legend or a text block.
+        def both(drop, exits: list[dict], *args) -> list[dict]:
+            raw = [{**e, "x": e["model"][0], "y": e["model"][1]} if e.get("model") else e for e in exits]
+            kept = {id(e) for e in drop(self.image, self.text, exits, *args)}
+            kept_raw = {id(e) for e in drop(self.image, self.text, raw, *args)}
+            return [e for e, r in zip(exits, raw) if id(e) in kept and id(r) in kept_raw] or exits
+        exits = both(drop_legend_exits, given, reading.plan_box)
         legend = {id(e) for e in given} - {id(e) for e in exits}
-        exits = drop_text_exits(self.image, self.text, exits)
+        exits = both(drop_text_exits, exits)
         # Walls found in an aerial photo are roofs and trees: the page shows
         # the exits and points to the printed route.
         self.photo_map = is_photo_map(self.image, reading.plan_box)
@@ -169,13 +175,15 @@ def model_reading(reading: Reading) -> dict:
     pt = lambda p: [round(p[0]), round(p[1])]
     rows, j, n = [], 0, 0
     for t in trace:
-        row = {"label": str(t.get("label", "")), "at": pt((t["x"], t["y"]))}
+        # The model's own point; a fix of exit_fix shows as a move by the code.
+        own = tuple(t["model"]) if t.get("model") else (t["x"], t["y"])
+        row = {"label": str(t.get("label", "")), "at": pt(own)}
         if t.get("zoom"):
             row["zoom"] = t["zoom"]
             for k in ("crop", "why", "seen"):
                 if t.get(k) is not None:
                     row[k] = list(t[k]) if k == "seen" else t[k]
-        last = (t["x"], t["y"])
+        last = own
         if t.get("zoom") == "moved":
             last = t["to"]
             row["zoom_at"] = pt(last)

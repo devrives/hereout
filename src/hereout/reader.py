@@ -513,6 +513,7 @@ class ModelClient:
             x, y = x0 + sx / tw * cw, y0 + sy / th * ch
             if np.hypot(x - exits[i]["x"], y - exits[i]["y"]) <= ZOOM_MAX_MOVE * max(h, w):
                 out[i]["x"], out[i]["y"] = x, y
+                out[i].pop("model", None)  # the zoom point replaces the first point (exit_fix)
                 checked[i] = {"zoom": "moved", "to": (x, y), "crop": n, "seen": seen}
             else:
                 checked[i].update(why="too far", seen=seen)

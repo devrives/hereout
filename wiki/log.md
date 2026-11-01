@@ -350,3 +350,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/plan-language.md`: three hand fixes of the catalogue, English names for labels in another script, the language row on a phone.
 - Source: the ux and a11y reviews of 2026-11-01 and the code.
+
+## [2026-11-01] ingest | Exit y fix from a dev set
+
+- Added `decisions/exit-y-fix.md`: the dev set, the fix, the checks on the point of the model, the rules and the prompt that did not ship.
+- Updated `index.md`: the new page.
+- Source: the agent branch judge2-acc, the dev labels and the tests.
