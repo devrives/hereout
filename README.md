@@ -9,9 +9,8 @@ Entry for the Meta Global AI Developer Hackathon (2026-10-26 to 2026-11-04 ET).
 ## Try it
 
 1. Open <https://hereout.devrives.com/>.
-2. Pick a plan from the gallery: 203 open-licensed photos of real posted plans. A gallery plan opens from a saved reading, so it makes no model call. Or upload your own photo of a plan.
+2. Pick a plan from the gallery: 203 open-licensed photos of real posted plans. A gallery plan opens from a saved reading, so it makes no model call for the exits. Or upload your own photo of a plan.
 3. Tap where you stand on the plan. The route and the steps appear. Tap another spot for another route.
-
 4. Pick a language in the plan card, or let the browser pick it: Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Japanese, Korean, Simplified Chinese, Hindi or Arabic. "What the plan says" shows the plan's own title, legend and instructions, translated, each with its original text under it.
 5. Open "What Muse Spark read" to see the floor box and exit points that the model gave, what the second look did with each one (with the zoomed crops the model saw), and what the code changed after the model.
 
@@ -47,7 +46,7 @@ flowchart TD
 | Settings | `reasoning_effort: low`, `temperature: 0`, `max_tokens: 12000` | `DEFAULT_EFFORT`, `MAX_TOKENS` |
 | First call | `PROMPT`: the whole plan image (long side at most 1600 px); asks for the "final exits" and the box of the "floor drawing", as 0 to 1000 grid points, in JSON. A final exit is the end of an escape route: a door in the outer wall or the door of a protected staircase; on a plan with several levels, the exits of every level. | `PROMPT`, `parse_answer` |
 | Second look | `ZOOM_PROMPT`: only for exits farther than 1.5 % of the long side from any green or red mark. Crops of 18 % of the long side around each suspect exit, marked with a cross, four to a sheet, with the full image. The model keeps, moves (at most 7 % of the long side) or drops each one. Skipped when the first call took more than 30 s. | `suspect_exits`, `zoom_exits`, `ZOOM_*` |
-| Text read | `TEXT_PROMPT`: the same image, in parallel with the first call, so it adds no wait. It gives the plan's language, title, legend entries and printed instructions (12 at most), each with its original text and an English text, and no positions. The plan opens without the words when the call fails. | `read_text`, `parse_plan_text` |
+| Text read | `TEXT_PROMPT`: the same image, in parallel with the first call; the plan waits for it at most 2 s, and later words reach the page when the read ends. It gives the plan's language, title, legend entries and printed instructions (12 legend entries and instructions at most), each with its original text and an English text, and no positions. The plan opens without the words when the call fails. | `read_text`, `parse_plan_text` |
 | Translation | `TRANSLATE_PROMPT`: a text-only call that translates the plan words and the exit labels into one of 12 languages, on demand. Gallery answers stay in a disk cache; the words of an uploaded photo stay in memory only. English needs no call, except for exit labels in another script. | `translate`, `src/hereout/translate.py` |
 | Plan card texts | The texts of the plan card (steps, labels, messages) were translated once per language by Muse Spark with `scripts/translate_ui.py`. Three hand fixes after review (two Arabic steps, two Korean texts) are listed in `wiki/decisions/plan-language.md`. | `src/hereout/web/i18n/` |
 | Time limits | 45 s for the first call (one more try on a timeout or a 5xx answer), 25 s for the second look | `CALL_TIMEOUT`, `ZOOM_TIMEOUT`, `MAIN_TRIES` |
@@ -60,9 +59,9 @@ On the 203 gallery plans, the second look was run on the saved readings (`script
 
 ## Evaluation
 
-**Photo set.** 28 photos of posted plans from Wikimedia Commons, 14 countries, none of them in the gallery that the code was tuned on: each photo that was in the gallery or near one (by title, source address or a perceptual hash) was left out. The photos are not in this repository.
+**Photo set.** 28 photos of posted plans from Wikimedia Commons, 14 countries and regions, none of them in the gallery that the code was tuned on: each photo that was in the gallery or near one (by title, source address or a perceptual hash) was left out. The photos are not in this repository.
 
-**Labels.** Every final exit of each photo, as a point, by the definition in `PROMPT`. Each label is "sure" (the plan marks it: a route end, an exit sign, a legend exit icon) or "unsure" (the drawing suggests an exit but does not show it clearly). The labeller was an AI agent (Claude), by eye from the photos with zoomed crops of each part of each plan, on 2026-11-01, before any model reading of these photos was opened. After the first scoring, each miss and false exit was checked on an overlay; one label was added (an outer door with no route, as "unsure"). Each change is logged in the labels file.
+**Labels.** Every final exit of each photo, as a point, by the definition in `PROMPT`. Each label is "sure" (the plan marks it: a route end, an exit sign, a legend exit icon) or "unsure" (the drawing suggests an exit but does not show it clearly). The labeller was an AI agent (Claude). It labelled by eye from the photos, with zoomed crops of each part of each plan, on 2026-11-01. The labeller saw no model reading of these photos before it labelled them. After the first scoring, each miss and false exit was checked on an overlay; one label was added (an outer door with no route, as "unsure"). Each change is logged in the labels file.
 
 | | Count |
 |---|---|
@@ -83,11 +82,11 @@ On the 203 gallery plans, the second look was run on the saved readings (`script
 
 "Photos with a route" means that the code found a way out for at least half of the open floor (`route_found` in `scripts/run_set.py`). It does not mean that the route is right.
 
-One run of each. Two reads of the same photo can differ, so a change of a few hundredths is within noise.
+Each code version was run once. Two reads of the same photo can differ, so a change of a few hundredths is within noise.
 
-**Dev set.** The code was tuned on a separate dev set: 30 gallery plans picked at random by country (seed 20261101), labelled the same way before any reading was opened. On it, Muse Spark's exits in the lower half of the image were consistently a little too low, so `exit_fix.py` moves them up by 10 % of their distance below the middle (dev set, 5 %: precision 0.357 to 0.391, recall 0.348 to 0.383). A new prompt scored within the noise between two reads and did not ship. The holdout photos were never used to choose a rule.
+**Dev set.** The code was tuned on a separate dev set: 30 gallery plans picked at random by country (seed 20261101), labelled the same way, by agents that had not seen the readings. On it, Muse Spark's exits in the lower half of the image were consistently a little too low, so `exit_fix.py` moves them up by 10 % of their distance below the middle (dev set, 5 %: precision 0.357 to 0.391, recall 0.348 to 0.383, four reads; better on both random halves of the dev set, and no read got worse). A new prompt scored within the noise between two reads and did not ship. No exit rule was chosen on the holdout photos. Only the time limits of the model calls, and the skip of the second look after a slow first call, came from their slow calls on 2026-10-29.
 
-What the misses and false exits on the 2026-10-29 run were, from the overlays: points on the sign or the name plate beside a stair instead of its door, points on the paper or the street outside the building, the same exit given twice (stair and sign), direction signs along a corridor taken as exits, and staircases on a ground floor where every printed route goes past them to the main door. Some points are on the right door but just outside R, which is why the scores at 10 % are higher.
+On the overlays of the 2026-10-29 run, the misses and false exits were points on the sign or the name plate beside a stair instead of its door, points on the paper or the street outside the building, the same exit given twice (stair and sign), direction signs along a corridor taken as exits, and staircases on a ground floor where every printed route goes past them to the main door. Some points are on the right door but just outside R, which is why the scores at 10 % are higher.
 
 ## Limits
 
@@ -162,4 +161,4 @@ wiki/             decisions, components and history (why and when)
 
 ## Built during the hackathon
 
-All code in this repository was written during the hackathon; the first commit is from 2026-10-27. The `wiki/` folder records each decision and its reason.
+All code in this repository was written during the hackathon; the first commit is from 2026-10-27 00:59 CET (2026-10-26 ET). The `wiki/` folder records each decision and its reason.
