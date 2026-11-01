@@ -418,5 +418,5 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 ## [2026-11-01] ingest | One sample run on /review
 
-- Added `decisions/sample-run.md`: the 203 sample photos once through the page of a local server, the results on `/review/`, and `HEREOUT_REVIEW` set to 1 on the live server.
+- Added `decisions/sample-run.md`: the 203 sample photos once through the page of a local server. The results are on `/review/`, and the live server has `HEREOUT_REVIEW` set to 1.
 - Source: `scripts/site_run.mjs`, the run output and the owner request of 2026-11-01.
