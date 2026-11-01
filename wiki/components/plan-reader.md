@@ -50,6 +50,9 @@ The plan reader changes a photo of a posted evacuation plan into a route and spo
 - The exit in use goes over the route again, so its number shows.
 - The page keeps the last answer in the session storage of the browser, so a reload shows it again.
 - After the first call, a second call zooms on the suspect exits. A suspect exit is far from any green or red mark. Why: [Check the exits with numbered marks](../decisions/exit-mark-check.md).
+- The gallery plans get the same second look from `scripts/zoom_saved.py`. The card shows the crops that the model saw. Why: [The second look on the gallery samples](../decisions/second-look-on-samples.md).
+- A third call reads the words on the plan beside the first call. A text-only call translates the plan words and the exit labels into the language of the user. Why: [Muse Spark reads the words on the plan](../decisions/plan-language.md).
+- Exits on a line of running text go, and a rectangle crossed by an X is wall. Why: [Judge review 2](../decisions/judge-round-2.md).
 - The page opens a review set with `?set=review`. Its plans are in the gallery folder `review/gallery/`, read with code under test.
 - The server shows the `review/` folder of the gallery at `/review/`. Test scripts write pages there for the owner, for example a comparison of two prompts (owner request, 2026-10-28). The pages are outside the repository, because they show plan photos.
 - Reviews of the fixes with no model call (2026-10-27): ux and accessibility. Their entries are in the hub `review-ledger/`.

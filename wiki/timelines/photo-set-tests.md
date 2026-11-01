@@ -27,3 +27,5 @@ sources:
 - 2026-10-29: The page sends the photo in one request through Cloudflare and waits for the answer.
 - 2026-10-29: `scripts/run_set.py` failed on two photos after the model call, because it did not know the licences "CC BY 3.0" and "Public domain". The script now knows them.
 - 2026-10-30: The owner accepted the two proposals for slow photos. See [Upload as a job; no zoom call after a slow main call](../decisions/slow-reads.md).
+- 2026-11-01: An agent (Claude) labelled the exits of the 28 holdout photos by eye, before it opened the model output. The labels are outside the repository.
+- 2026-11-01: `scripts/score_exits.py` scored the 2026-10-29 run against the labels. At a radius of 5 % of the floor box: precision 0.42, recall 0.52. See [Judge review 2](../decisions/judge-round-2.md).

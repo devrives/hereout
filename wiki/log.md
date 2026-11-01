@@ -337,3 +337,11 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/demo-video.md`: the captions are in a strip under the page picture, and the video is 2 min 20 s long.
 - Source: the owner words of 2026-11-01 and the new video.
+
+## [2026-11-01] ingest | Judge review 2
+
+- Added `decisions/plan-language.md`: the text read, the translation endpoint and cache, the plan card catalogue in 12 languages.
+- Added `decisions/second-look-on-samples.md`: the zoom check on the saved gallery readings and the crop sheets in the card.
+- Added `decisions/judge-round-2.md`: test pages off, text-block exits, X-marked voids, step fixes, gallery order, exit labels and scores.
+- Updated `components/plan-reader.md`, `timelines/photo-set-tests.md` and `index.md`.
+- Source: the owner words of 2026-11-01, the judge review, the agent branches and the tests.
