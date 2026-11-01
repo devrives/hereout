@@ -51,6 +51,25 @@ def test_answer_carries_the_reading_of_the_model():
         assert [e["x"], e["y"]] == row.get("placed_at", row.get("zoom_at", row["at"]))
 
 
+def test_exit_on_a_text_block_is_dropped_as_text():
+    """An exit on the instruction lines under the plan goes, and the reading says why."""
+    img = np.full((500, 600, 3), 255, np.uint8)
+    img[40:300, 40:44] = img[40:300, 556:560] = img[40:44, 40:560] = img[296:300, 40:560] = 0
+    text = []
+    for i in range(4):
+        top = 340 + i * 26
+        for cx in range(64, 500, 14):
+            img[top + 4:top + 14, cx:cx + 8] = 0
+        text.append([[60, top], [510, top], [510, top + 18], [60, top + 18]])
+    reading = Reading([{"x": 300, "y": 44, "label": "Top"}, {"x": 200, "y": 375, "label": "Text"}],
+                      plan_box=(30, 30, 570, 460))
+    plan = Plan(img, np.zeros(img.shape[:2], bool), text=text)
+    plan.use_reading(reading)
+    rows = answer(None, plan, reading, None)["read"]["exits"]
+    assert rows[1]["drop"] == "text" and rows[0]["exit"] == 0
+    assert [e["label"] for e in reading.exits] == ["Top"]
+
+
 def test_no_reading_no_block():
     img = np.full((100, 100, 3), 255, np.uint8)
     plan = Plan(img, np.zeros(img.shape[:2], bool), text=[])

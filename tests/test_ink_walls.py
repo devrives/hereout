@@ -7,7 +7,7 @@ from hereout import ink_walls as iw
 from hereout.ink_walls import (beyond_exits, door_arcs, faded_ends, footprints, ink_walls, legend_exits, outdoor_areas,
                                 outdoor_ways, place_exits, room_doors, split_strokes)
 from hereout.photo_map import is_photo_map
-from hereout.legend import drop_legend_exits
+from hereout.legend import drop_legend_exits, drop_text_exits, text_block_exits
 from hereout.route import Field, NoRoute, blocked_grid, soft_grid
 from hereout.walls import stroke_width
 
@@ -311,3 +311,52 @@ def test_closed_room_gets_a_door():
     assert door[:, 445:455].any()
     walls = hard & ~door
     assert route(walls, np.zeros_like(walls), (700, 250), (100, 250)).exit_index == 0
+
+
+def _paragraph(img, x, y, lines, width, height=18):
+    """Lines of running text: dark marks in long text boxes."""
+    boxes = []
+    for i in range(lines):
+        top = y + i * (height + 8)
+        for cx in range(x + 4, x + width - 10, 14):
+            cv2.rectangle(img, (cx, top + 4), (cx + 8, top + height - 4), BLACK, -1)
+        boxes.append([[x, top], [x + width, top], [x + width, top + height], [x, top + height]])
+    return boxes
+
+
+def test_exit_on_a_text_block_is_dropped():
+    """An exit on a line of the instructions under the plan goes, also when
+    the floor box of the model takes in the text. A short exit label (two
+    short lines) is not running text: its exit stays."""
+    img = np.full((800, 1000, 3), PAPER, np.uint8)
+    cv2.rectangle(img, (40, 40), (900, 560), BLACK, 6)       # the floor drawing
+    text = _paragraph(img, 60, 620, 5, 700)                   # the instructions under it
+    label = [[[600, 300], [660, 300], [660, 318], [600, 318]], [[600, 322], [670, 322], [670, 340], [600, 340]]]
+    exits = [{"x": 900, "y": 300, "label": "A"}, {"x": 200, "y": 672, "label": "B"},
+             {"x": 630, "y": 330, "label": "C"}]
+    assert text_block_exits(img, text + label, exits) == {1}
+    assert [e["label"] for e in drop_text_exits(img, text + label, exits)] == ["A", "C"]
+    # At least one exit stays.
+    assert drop_text_exits(img, text, exits[1:2]) == exits[1:2]
+
+
+def test_text_with_a_drawing_is_not_a_text_block():
+    """Long names in a drawing are not running text: walls cross their area."""
+    img = np.full((800, 1000, 3), PAPER, np.uint8)
+    text = [b for i in range(5) for b in _paragraph(img, 60, 620 + i * 26, 1, 700 if i % 2 else 560)]
+    for x in range(632, 760, 24):  # walls through the ends of the long names
+        cv2.line(img, (x, 600), (x, 760), BLACK, 5)
+    exits = [{"x": 900, "y": 300, "label": "A"}, {"x": 200, "y": 672, "label": "B"}]
+    assert text_block_exits(img, text, exits) == set()
+    plain = np.full((800, 1000, 3), PAPER, np.uint8)
+    assert text_block_exits(plain, [b for i in range(5) for b in _paragraph(plain, 60, 620 + i * 26, 1, 700 if i % 2 else 560)],
+                            exits) == {1}
+
+
+def test_exit_below_a_title_block_stays():
+    """An exit at a door just under the title lines is not on the text."""
+    img = np.full((800, 1000, 3), PAPER, np.uint8)
+    text = _paragraph(img, 60, 40, 3, 700)
+    cv2.rectangle(img, (40, 140), (900, 760), BLACK, 6)
+    exits = [{"x": 400, "y": 120, "label": "A"}, {"x": 900, "y": 400, "label": "B"}]
+    assert text_block_exits(img, text, exits) == set()
