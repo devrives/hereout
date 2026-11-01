@@ -6,11 +6,10 @@
 <meta name="robots" content="noindex">
 <title>HereOut</title>
 <meta name="description" content="Photograph a posted evacuation plan and see a route from where you stand to the nearest exit.">
-<meta name="theme-color" content="#f3f5f2" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0e1a16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#07100c">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-<link rel="preload" href="/static/fonts/plus-jakarta-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/early.js"></script>
 </head>
@@ -34,28 +33,32 @@
 </header>
 <main class="layout">
   <section id="intro" class="intro" aria-labelledby="intro-head">
-    <h1 id="intro-head">Your way out, drawn on the plan</h1>
-    <p class="lead">In front of an evacuation plan you don't know? HereOut finds the exits on your photo.</p>
-    <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video (1 min 19 s)</a></p>
+    <h1 id="intro-head">Your <em>way out</em>, drawn on the plan.</h1>
+    <p class="lead">Photograph the posted evacuation plan. Tap where you stand. Follow the route to the nearest exit.</p>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
       <span id="shoot-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Take a photo of the plan</span>
     </label>
-    <figure id="example" class="example" hidden data-sample="CN-commons_000098" data-start="1083,573">
-      <a id="example-open" class="example-open" href="/?sample=CN-commons_000098">
-        <span class="example-pic" style="--aspect: 1260 / 680; --w: 126.984%; --x: -23.810%; --y: -41.176%">
-          <img class="example-photo" src="/gallery/example-photo" alt="" fetchpriority="high">
-          <img class="example-marks" src="/static/example-marks.webp" alt="A route drawn from a YOU mark in the hall to Exit 2, with Exits 1 and 3 marked.">
-        </span>
-        <span class="example-bar"><span>Example: a metro station plan from China</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
-      </a>
-      <figcaption id="example-credit" class="credit"></figcaption>
-    </figure>
-    <ol class="howto" role="list">
-      <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span>Photograph the posted plan</li>
-      <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>Tap where you stand</li>
-      <li><span class="n" aria-hidden="true"><svg class="ico" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span>See the route to the nearest exit</li>
+    <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video</a></p>
+  </section>
+  <figure id="example" class="example hero" hidden data-sample="RU-commons_000164" data-start="720,950">
+    <a id="example-open" class="example-open" href="/?sample=RU-commons_000164">
+      <span class="example-pic" style="--aspect: 780 / 1080; --w: 153.846%; --x: -37.179%; --y: -15.741%">
+        <img class="example-photo" src="/gallery/example-photo" alt="" fetchpriority="high">
+        <img class="example-marks" src="/static/example-marks.webp" alt="A museum floor plan from Moscow, dimmed, with four numbered exits, the ways out glowing green and a blue route from YOU to Exit 4.">
+      </span>
+      <span class="example-bar"><span>Example: a museum plan from Russia</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
+    </a>
+    <figcaption id="example-credit" class="credit"></figcaption>
+  </figure>
+  <section class="how" aria-labelledby="how-head">
+    <h2 id="how-head" class="sr">From photo to route</h2>
+    <ol role="list">
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h7.5"/><path d="M17 13.5V21"/><path d="M14 7h7m-3-3 3 3-3 3"/></svg><h3>Exits</h3><p>Muse Spark finds each exit on your photo.</p></li>
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18h6V8h10"/><path d="m16 4 4 4-4 4"/><path d="M4 12h3"/></svg><h3>Ways out</h3><p>Code reads the walls and draws every way to an exit.</p></li>
+      <li><svg class="ico i-you" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg><h3>You</h3><p>You tap where you stand on the plan.</p></li>
+      <li><svg class="ico i-route" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21 12 2z"/></svg><h3>Route</h3><p>Your browser finds the route to the nearest exit, turn by turn.</p></li>
     </ol>
   </section>
   <div class="status-wrap">
@@ -72,6 +75,12 @@
   <section id="result" class="result" hidden aria-labelledby="result-head">
     <h2 id="result-head" class="sr" tabindex="-1" data-t="result_head">Plan and route</h2>
     <div class="plan-col">
+      <ol id="stages" class="stages" role="list" aria-hidden="true">
+        <li data-stage="exits"><span data-t="stage_exits">Exits</span></li>
+        <li data-stage="ways"><span data-t="stage_ways">Ways out</span></li>
+        <li data-stage="you"><span data-t="stage_you">You</span></li>
+        <li data-stage="route"><span data-t="stage_route">Route</span></li>
+      </ol>
       <div class="view" role="group" aria-label="What the plan shows" data-t-label="view_group">
         <div class="seg">
           <button id="show-map" type="button" aria-pressed="true" data-t="view_map">Escape map</button>
@@ -82,6 +91,7 @@
       </div>
       <div class="stage" id="stage" role="region" aria-label="Plan" data-t-label="stage">
         <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
+        <p id="tap-prompt" class="tap-prompt" aria-hidden="true" hidden><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg><span data-t="tap_prompt">Tap where you stand</span></p>
       </div>
       <div id="legend" class="legend" hidden>
         <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i><span data-t="legend_wall">Wall, as HereOut reads it</span></span>
@@ -166,10 +176,10 @@
     </div>
   </section>
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
-    <h2 id="gallery-head">No plan nearby? Try a real one</h2>
-    <p class="muted"><span id="gallery-count"></span> open-licensed photos of posted plans from <span id="gallery-countries"></span> countries and regions. HereOut read each one with Muse Spark.</p>
+    <h2 id="gallery-head"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span><span id="gallery-count"></span> real plans from <span id="gallery-countries"></span> countries and regions</span></h2>
+    <p class="muted">Open-licensed photos of posted plans. Muse Spark read each one.</p>
     <ul id="gallery" class="gallery"></ul>
-    <button id="gallery-more" type="button" hidden></button>
+    <button id="gallery-more" type="button" hidden><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
     <details class="credits">
       <summary>Photo credits</summary>
       <p class="muted">Each preview is a resized copy of the photo, some with the perspective corrected. Photos under a ShareAlike licence are shared under the same licence.</p>

@@ -383,3 +383,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `DESIGN.md` at the root: the design file of the page in the Google DESIGN.md format. It holds the tokens from `src/hereout/web/style.css`, the short design rules, the gaps from the house rules and the table of screens.
 - Reason: the kit skill `core:design-foundation` (owner request, 2026-11-01).
 - Source: `src/hereout/web/style.css`, `src/hereout/web/index.html` and `decisions/page-layout-a.md`.
+
+## [2026-11-01] ingest | Afterglow redesign
+
+- Added `decisions/afterglow-redesign.md`: the dark Afterglow look, the reveal of a plan, the stage strip, the tap prompt and the new example.
+- Rewrote `DESIGN.md` for direction B (owner, 2026-11-01).
+- Source: the owner request of 2026-11-01, the direction canvas, the UX and accessibility reviews, and the code.

@@ -35,7 +35,8 @@ const view = viewArg.split(",").map(Number);
 const WIDTH = 1000;  // px of the image: sharp at 2x on the widest place it shows
 
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+// Reduced motion: the plan shows at once, with no reveal or route draw-in (app.js startReveal).
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
 const errors = [];
 page.on("pageerror", (e) => errors.push(String(e)));
 await page.goto(`${base}/?sample=${encodeURIComponent(id)}`);
@@ -51,7 +52,9 @@ const result = await page.evaluate(({ v, width, withPhoto }) => {
     const c = document.createElement("canvas");
     c.width = width;
     c.height = Math.round(width * (v[3] - v[1]) / (v[2] - v[0]));
-    c.getContext("2d").drawImage(src, v[0], v[1], v[2] - v[0], v[3] - v[1], 0, 0, c.width, c.height);
+    // The canvas shows the frame of the plan (app.js shownFrame), k canvas pixels for each photo pixel.
+    const fr = shownFrame(), k = frameScale(fr);
+    c.getContext("2d").drawImage(src, (v[0] - fr[0]) * k, (v[1] - fr[1]) * k, (v[2] - v[0]) * k, (v[3] - v[1]) * k, 0, 0, c.width, c.height);
     return c;
   };
   const both = withPhoto ? crop(canvas).toDataURL("image/png") : null;

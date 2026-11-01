@@ -34,10 +34,20 @@ const SET = new URLSearchParams(location.search).get("set") === "review" ? "?set
 const STORE_KEY = `hereout:last${SET}`;  // the review set keeps its own last plan
 const PHOTO_KEY = "hereout:photo";  // the plan of the last photo, so Back after a sample finds it
 
-// Map colours: green near an exit, yellow far from one.
-const NEAR = [10, 125, 59], FAR_C = [245, 190, 20];
-const MAP_ALPHA = 110;
-const ROUTE = "#1b5fd1";
+// The marks glow over the dimmed photo (DESIGN.md, Afterglow). Each colour
+// is the custom property of the same name in style.css.
+// Map colours: the floor glows green near an exit and fades far from one.
+const NEAR = [61, 255, 160];
+const MAP_ALPHA = 54;
+const ROUTE = "#5aa2ff";
+const ROUTE_GLOW = "rgba(90, 162, 255, 0.32)";
+const ROUTE_CORE = "#d6e7ff";  // a thin light line in the middle of the route
+const EXIT = "#3dffa0";
+const EXIT_INK = "#03140b";
+const EXIT_GLOW = "rgba(61, 255, 160, 0.75)";
+const LIT = "#ff9a3d";
+const DARK = "#07100c";  // the ground of the page: the edge of every mark
+const VEIL = "rgba(7, 16, 12, 0.6)";  // over the photo in the escape map, so the marks stand out
 const ARROW_GAP = 12;   // plan units between two arrows on a way out
 const ARROW_SIZE = 1.1; // plan units: half the width of an arrow head
 const OTHER_TRIES = 3;  // exits tried for the second way out
@@ -46,9 +56,10 @@ const ARROW_CLEAR = 2;  // plan units: no arrow this close to a route
 const ARROW_APART = 4;  // arrow sizes: no head this close to another head (two heads meet at a split or join)
 const ARROW_KEEP = 5;   // plan units: a line this long keeps one head, also near other heads
 const ARROW_START = 8;  // plan units: no arrow this close to the start, where it can point away from the route
-const WALL = "#7a818b";  // lighter than the ways out, so a way and a wall differ in more than hue
-const BLOCK = "#d3d6db";  // a filled area of the plan, in Routes only
-const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contrast over a photo
+const WALL = "#7d9188";  // darker than the ways out, so a way and a wall differ in more than hue
+const BLOCK = "#18251f";  // a filled area of the plan, in Routes only
+const WAY = "#3dffa0";  // the ways out
+const WAY_GLOW = "rgba(61, 255, 160, 0.22)";
 
 // The language of the plan card (i18n.js), from the address (lang=) or the
 // browser. The start page stays English. Muse Spark translated the catalogue
@@ -371,6 +382,7 @@ function updateAfterWait() {
   const how = view.pendingHow;
   view.pendingHow = null;
   update();
+  if (how === "tap" && view.route) startRouteDraw();  // the route of a tap that waited for the worker
   if (exitAt >= 0) $("exits").children[exitAt]?.focus();
   if (state.start && how) explain(how);
 }
@@ -518,8 +530,8 @@ function findRoute() {
 
 // The escape map: colour by the cost to the nearest exit, and the ways out
 // as lines. Made once for each field.
-function mapLayer() {
-  if (view.layer) return view.layer;
+function tintLayer() {
+  if (view.tint) return view.tint;
   const f = view.field;
   const n = f.gw * f.gh;
   const tint = document.createElement("canvas");
@@ -532,38 +544,91 @@ function mapLayer() {
   for (let i = 0; i < n; i++) {
     if (f.owner[i] < 0) continue;
     const t = max ? Math.sqrt(f.dist[i] / max) : 0;
-    for (let k = 0; k < 3; k++) data.data[i * 4 + k] = NEAR[k] + (FAR_C[k] - NEAR[k]) * t;
-    data.data[i * 4 + 3] = MAP_ALPHA;
+    for (let k = 0; k < 3; k++) data.data[i * 4 + k] = NEAR[k];
+    data.data[i * 4 + 3] = MAP_ALPHA * (1 - t);
   }
   tctx.putImageData(data, 0, 0);
 
   const l = frameLayer();
-  const layer = l.canvas;
   l.imageSmoothingEnabled = true;
   l.drawImage(tint, 0, 0, f.gw / f.scale, f.gh / f.scale);
+  view.tint = l.canvas;
+  return view.tint;
+}
 
-  // The ways out: straight lines from door to door to the exits, wider where
-  // more doors and rooms drain through them.
-  // No lines while the worker makes them.
-  const net = f._network || (f.waitForNetwork ? null : f.network());
-  const legs = net ? net.legs : [];
+// The ways out, or null while the worker makes them.
+function network() {
+  const f = view.field;
+  return f._network || (f.waitForNetwork ? null : f.network());
+}
+
+// The ways out: straight lines from door to door to the exits, wider where
+// more doors and rooms drain through them, with a soft glow. With share < 1
+// (the reveal), each line grows out from its exit side: a line shows from
+// its end near the exit when the front is past it.
+function drawWays(l, share = 1) {
+  const net = network();
+  if (!net) return;
   const unit = frameUnit();
   const widths = [[], [], [], [], [], []];
-  for (const leg of legs) widths[Math.min(5, Math.floor(Math.log2(leg.flow)))].push(leg);
+  for (const leg of net.legs) widths[Math.min(5, Math.floor(Math.log2(leg.flow)))].push(leg);
+  const front = share < 1 ? share * wayDepth(net).max : Infinity;
   l.lineCap = l.lineJoin = "round";
-  l.strokeStyle = WAY;
-  widths.forEach((group, b) => {
-    l.lineWidth = unit * (0.7 + 0.16 * b);
-    l.beginPath();
-    for (const { a, b: z } of group) {
-      l.moveTo(a[0], a[1]);
-      l.lineTo(z[0], z[1]);
-    }
-    l.stroke();
-  });
+  for (const [color, grow] of [[WAY_GLOW, 2.6], [WAY, 1]]) {
+    l.strokeStyle = color;
+    widths.forEach((group, b) => {
+      l.lineWidth = unit * (0.45 + 0.12 * b) * grow;
+      l.beginPath();
+      for (const leg of group) {
+        const { a, b: z } = leg;
+        if (front === Infinity) { l.moveTo(a[0], a[1]); l.lineTo(z[0], z[1]); continue; }
+        const d = wayDepth(net).of.get(leg);
+        if (front <= d.near) continue;
+        const k = Math.min(1, (front - d.near) / Math.max(1e-6, d.far - d.near));
+        l.moveTo(z[0], z[1]);
+        l.lineTo(z[0] + (a[0] - z[0]) * k, z[1] + (a[1] - z[1]) * k);
+      }
+      l.stroke();
+    });
+  }
+}
 
-  view.layer = layer;
-  return layer;
+// How far each end of a way-out line is from its exit, along the floor (the
+// distance of the field), for the reveal. The end b is the end toward the exit.
+function wayDepth(net) {
+  if (net._depth) return net._depth;
+  const f = view.field;
+  const exits = exitPoints();
+  const at = ([x, y]) => {
+    const c = Math.floor(x * f.scale), r = Math.floor(y * f.scale);
+    const d = c >= 0 && r >= 0 && c < f.gw && r < f.gh ? f.dist[r * f.gw + c] : Infinity;
+    if (Number.isFinite(d)) return d / f.scale;
+    return Math.min(...exits.map(([ex, ey]) => Math.hypot(x - ex, y - ey)));
+  };
+  const of = new Map();
+  let max = 0;
+  for (const leg of net.legs) {
+    const near = at(leg.b), far = Math.max(near, at(leg.a));
+    of.set(leg, { near, far });
+    max = Math.max(max, far);
+  }
+  net._depth = { of, max: max || 1 };
+  return net._depth;
+}
+
+function mapLayer() {
+  if (view.layer) return view.layer;
+  const l = frameLayer();
+  l.drawImage(tintLayer(), 0, 0, l.canvas.width, l.canvas.height, ...shownFrame().slice(0, 2), ...frameSize());
+  drawWays(l);
+  view.layer = l.canvas;
+  return view.layer;
+}
+
+// The width and height of the frame in photo pixels.
+function frameSize() {
+  const fr = shownFrame();
+  return [fr[2] - fr[0], fr[3] - fr[1]];
 }
 
 // The walls as HereOut reads them: the straight wall lines and the filled
@@ -701,21 +766,36 @@ function draw() {
   setFrame();
   if (typeof readingOn === "function" && readingOn()) return drawReading();  // reading.js
   if (routesOnly) {
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = DARK;
     ctx.fillRect(0, 0, state.width, state.height);
     drawLayer(wallLayer());
   } else {
     ctx.drawImage(img, 0, 0);
+    if (!photoOnly) {
+      ctx.fillStyle = VEIL;
+      ctx.fillRect(0, 0, state.width, state.height);
+    }
   }
   const unit = frameUnit();
   if (!photoOnly) {
+    const rv = revealNow();
     if (showMap && view.reachable) {
-      drawLayer(mapLayer());
-      drawArrows(unit);
+      if (rv) {
+        // The reveal: the floor tint and the ways out grow in after the exits.
+        ctx.save();
+        ctx.globalAlpha = rv.ways;
+        drawLayer(tintLayer());
+        ctx.restore();
+        if (rv.ways > 0) drawWays(ctx, rv.ways);
+      } else {
+        drawLayer(mapLayer());
+        drawArrows(unit);
+      }
     }
-    drawMarks(unit);
+    drawMarks(unit, rv);
   }
   if (cursor && keyboard && document.activeElement === canvas) cross(cursor[0], cursor[1], unit * 4);
+  showStages();
 }
 
 // Arrows toward the exits, as on a printed plan. Each line of the tree runs
@@ -737,7 +817,7 @@ function drawArrows(unit) {
   const gap = unit * ARROW_GAP;
   const s = unit * ARROW_SIZE;
   ctx.fillStyle = WAY;
-  ctx.strokeStyle = "#ffffff";
+  ctx.strokeStyle = DARK;
   ctx.lineWidth = unit * 0.3;
   ctx.lineJoin = "miter";
   ctx.beginPath();
@@ -787,11 +867,124 @@ function segmentGap(p, a, b) {
   return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
 }
 
-function drawMarks(unit) {
+// The reveal (owner, 2026-11-01): a plan opens in the order of the work.
+// First the exits that Muse Spark found, one by one; then every way out,
+// which grows out from the exits; then the plan asks for the tap. After a
+// tap the route draws in from YOU, and the second way out follows it. A tap
+// during the reveal ends it. With reduced motion, everything shows at once.
+const REVEAL_EXIT = 280;  // ms between two exits
+const REVEAL_GROW = 360;  // ms: one exit grows in
+const REVEAL_WAYS = 1800; // ms: the ways out grow from the exits to the far rooms
+const ROUTE_SPEED = 0.45; // shares of the frame for each second: the route draws in
+const ROUTE_MIN = 900, ROUTE_MAX = 1800;  // ms
+let reveal = null;     // { t0, waysAt } while the plan opens
+let routeAnim = null;  // { t0, ms, start, exit } while the route draws in
+let frameAsked = false;
+const stillMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const easeOut = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
+const easeInOut = (k) => { k = Math.min(1, Math.max(0, k)); return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; };
+
+function startReveal() {
+  reveal = null;
+  // The example opens with its start: it plays the reveal, then draws its route.
+  if (stillMotion() || (state.start && !exampleStart()) || state.photo_map || !state.exits.length) return;
+  reveal = { t0: performance.now(), waysAt: null };
+  animate();
+}
+
+function startRouteDraw() {
+  routeAnim = null;
+  const r = view.route;
+  if (stillMotion() || !r || r.points.length < 2) return;
+  const len = r.points.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - r.points[i][0], q[1] - r.points[i][1]), 0);
+  const [w, h] = frameSize();
+  const ms = Math.min(ROUTE_MAX, Math.max(ROUTE_MIN, len / Math.max(w, h) / ROUTE_SPEED * 1000));
+  routeAnim = { t0: performance.now(), ms, start: state.start, exit: r.exitIndex };
+  animate();
+}
+
+// One frame of the motion, then the next while any motion runs.
+function animate() {
+  if (frameAsked) return;
+  frameAsked = true;
+  requestAnimationFrame(() => {
+    frameAsked = false;
+    if (!state || !view || (!reveal && !routeAnim)) return;
+    draw();
+    showStages();
+    if (reveal || routeAnim) animate();
+  });
+}
+
+// What the reveal shows now: a share (0 to 1) for each exit and for the ways
+// out, or null when the plan shows everything.
+function revealNow() {
+  if (!reveal) return null;
+  const now = performance.now() - reveal.t0;
+  const exits = state.exits.map((_, i) => easeOut((now - i * REVEAL_EXIT) / REVEAL_GROW));
+  const exitsDone = (state.exits.length - 1) * REVEAL_EXIT + REVEAL_GROW;
+  // The ways out wait for the worker.
+  if (reveal.waysAt === null && now >= exitsDone && (!view.reachable || network())) reveal.waysAt = now;
+  const ways = reveal.waysAt === null ? 0 : easeOut((now - reveal.waysAt) / REVEAL_WAYS);
+  if (ways >= 1 || (reveal.waysAt !== null && !view.reachable)) {
+    reveal = null;
+    if (state.start) startRouteDraw();  // the example: its route draws in now
+    return null;
+  }
+  return { exits, ways, stage: reveal.waysAt === null ? "exits" : "ways" };
+}
+
+// The share of the route that shows: 1 when no route draws in.
+function routeDrawn() {
+  if (!routeAnim) return 1;
+  // update() finds the route again (a new object): the draw goes on while the start and the exit stay.
+  if (routeAnim.start !== state.start || !view.route || routeAnim.exit !== view.route.exitIndex) { routeAnim = null; return 1; }
+  const k = easeInOut((performance.now() - routeAnim.t0) / routeAnim.ms);
+  if (k >= 1) { routeAnim = null; return 1; }
+  return k;
+}
+
+// The first share of a line of points, by length.
+function partOfLine(pts, share) {
+  if (share >= 1) return pts;
+  const lens = pts.slice(1).map((q, i) => Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]));
+  let left = lens.reduce((a, b) => a + b, 0) * share;
+  const out = [pts[0]];
+  for (let i = 0; i < lens.length; i++) {
+    if (left >= lens[i]) { out.push(pts[i + 1]); left -= lens[i]; continue; }
+    const k = lens[i] ? left / lens[i] : 0;
+    out.push([pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k]);
+    break;
+  }
+  return out;
+}
+
+// The four parts above the plan: what the plan shows now is lit.
+const STAGES = ["exits", "ways", "you", "route"];
+function showStages() {
+  const el = $("stages");
+  el.hidden = !state || !!state.photo_map || !state.exits.length;
+  if (el.hidden) { $("tap-prompt").hidden = true; return; }
+  const rv = reveal && revealNow();
+  const now = rv ? rv.stage : !state.start ? "you" : view.route ? "route" : "you";
+  const at = STAGES.indexOf(now);
+  [...el.children].forEach((li, i) => {
+    li.classList.toggle("done", i < at);
+    li.classList.toggle("now", i === at);
+  });
+  // The plan waits for the tap: it says so on the plan, where the eyes are (ux review).
+  $("tap-prompt").hidden = !(now === "you" && !state.start && !marking && !photoOnly && view.reachable);
+}
+
+function drawMarks(unit, rv = null) {
   // Exit and the start (YOU) differ in shape and label, not only in colour.
   const here = state.start;
   const used = view.route ? view.route.exitIndex : -1;
-  state.exits.forEach((e, i) => exitMark(e.x, e.y, unit * 2.2, i + 1, i === used));
+  // In the reveal each exit grows in after the one before.
+  state.exits.forEach((e, i) => {
+    const k = rv ? rv.exits[i] : 1;
+    if (k > 0) exitMark(e.x, e.y, unit * 2.2 * k, i + 1, i === used, k);
+  });
   // With two or more exits the numbers and the legend name them, and a row
   // of "EXIT" words would hide the plan.
   if (state.exits.length === 1) {
@@ -802,10 +995,12 @@ function drawMarks(unit) {
 
   // The second way out: dashed, under the route, so the route stays on top
   // where the two share a corridor.
-  const alt = view.backup && view.backup.points;
+  // In the reveal the route and YOU wait (the example has a start).
+  const draw = rv ? 0 : routeDrawn();
+  const alt = draw === 1 && view.backup && view.backup.points;
   if (alt && alt.length > 1) {
     ctx.lineJoin = ctx.lineCap = "round";
-    for (const [color, width, dash] of [["#ffffff", unit * 1.5, []], [ROUTE, unit * 0.8, [unit * 1.6, unit * 1.2]]]) {
+    for (const [color, width, dash] of [[DARK, unit * 1.5, []], [ROUTE, unit * 0.8, [unit * 1.6, unit * 1.2]]]) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.setLineDash(dash);
@@ -821,10 +1016,11 @@ function drawMarks(unit) {
   }
 
   // The route and YOU go over the exits, so a short route stays visible.
-  const pts = view.route && view.route.points;
+  // The route draws in from YOU after a tap (routeDrawn).
+  const pts = !rv && view.route && view.route.points && partOfLine(view.route.points, draw);
   if (pts && pts.length > 1) {
     ctx.lineJoin = ctx.lineCap = "round";
-    for (const [color, width] of [["#ffffff", unit * 2], [ROUTE, unit * 1.1]]) {
+    for (const [color, width] of [[ROUTE_GLOW, unit * 3.4], [DARK, unit * 1.9], [ROUTE, unit * 1.25], [ROUTE_CORE, unit * 0.3]]) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.beginPath();
@@ -835,12 +1031,13 @@ function drawMarks(unit) {
   }
 
   // The exit in use goes over the route again, so its number shows.
-  if (used >= 0) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
+  if (used >= 0 && draw === 1) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
 
+  if (rv) return;
   const step = view.steps[selected];
   if (step && step.kind === "walk") {
     ctx.lineCap = "round";
-    for (const [color, width] of [["#ffffff", unit * 3.2], ["#d9480f", unit * 2]]) {
+    for (const [color, width] of [[DARK, unit * 3.2], [LIT, unit * 2]]) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.beginPath();
@@ -863,7 +1060,7 @@ function drawMarks(unit) {
     // mark (ux review). With no such place, step 1 has no number: YOU marks
     // where it starts.
     const [x, y] = longestMiddle(step.path), r = unit * 2.4, gap = unit * 2.5;
-    ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
+    ctx.font = `600 ${Math.round(r * 1.6)}px Geist, system-ui, sans-serif`;
     const w = ctx.measureText(String(selected + 1)).width, h = r * 1.6, pad = r / 3;
     const marks = state.exits.map((e) => [e.x - unit * 2.2, e.y - unit * 2.2, e.x + unit * 2.2, e.y + unit * 2.2]);
     const covers = ([x0, y0, x1, y1]) => [you, ...marks].some((m) => m && x0 - pad < m[2] && x1 + pad > m[0] && y0 - pad < m[3] && y1 + pad > m[1]);
@@ -878,36 +1075,54 @@ function drawMarks(unit) {
   }
 }
 
+// YOU: a white dot with a dark edge and a soft ring round it.
 function hereMark(x, y, r) {
   ctx.beginPath();
+  ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
+  ctx.fill();
+  ctx.lineWidth = r / 5;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+  ctx.stroke();
+  ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
-  ctx.fillStyle = ROUTE;
+  ctx.fillStyle = "#ffffff";
   ctx.fill();
   ctx.lineWidth = r / 2.5;
-  ctx.strokeStyle = "#ffffff";
+  ctx.strokeStyle = DARK;
   ctx.stroke();
 }
 
 // The number matches the exit buttons below the plan. The exit the route
-// goes to has a frame in the route colour.
-function exitMark(x, y, r, n, used) {
-  ctx.fillStyle = "#0a7d3b";
-  ctx.lineWidth = used ? r / 1.6 : r / 2.5;
-  ctx.strokeStyle = used ? ROUTE : "#ffffff";
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
-  ctx.strokeRect(x - r, y - r, r * 2, r * 2);
+// goes to has a frame in the route colour. A mark glows; k (the reveal)
+// makes the glow stronger while the mark grows in.
+function exitMark(x, y, r, n, used, k = 1) {
+  const px = ctx.getTransform().a;  // canvas pixels for each photo pixel: the blur is in canvas pixels
+  const corner = r * 0.3;
+  const box = () => { ctx.beginPath(); ctx.roundRect(x - r, y - r, r * 2, r * 2, corner); };
+  ctx.save();
+  ctx.shadowColor = EXIT_GLOW;
+  ctx.shadowBlur = r * px * (k < 1 ? 2.4 - k : 1.1);
+  ctx.fillStyle = EXIT;
+  box();
+  ctx.fill();
+  ctx.restore();
+  ctx.lineWidth = used ? r / 1.6 : r / 4;
+  ctx.strokeStyle = used ? ROUTE : DARK;
+  box();
+  ctx.stroke();
   if (state.exits.length < 2) return;
-  ctx.font = `bold ${Math.round(r * (n > 9 ? 1.1 : 1.4))}px system-ui, sans-serif`;
+  ctx.font = `600 ${Math.round(r * (n > 9 ? 1.1 : 1.35))}px "Geist Mono", ui-monospace, monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#ffffff";
+  ctx.fillStyle = EXIT_INK;
   ctx.fillText(String(n), x, y + r * 0.08);
 }
 
 // The place of the YOU label: above the mark, else below, right or left,
 // whichever first stays on the plan and covers no exit mark (its number).
 function youLabelAt(here, r, exitR) {
-  ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
+  ctx.font = `600 ${Math.round(r * 1.6)}px Geist, system-ui, sans-serif`;
   const w = ctx.measureText(t("you")).width, h = r * 1.6, gap = r * 1.8;
   const [x, y] = here;
   const places = [
@@ -926,13 +1141,14 @@ function youLabelAt(here, r, exitR) {
 }
 
 function label(text, x, y, r, baseline, align = "center") {
-  ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
+  ctx.font = `600 ${Math.round(r * 1.6)}px Geist, system-ui, sans-serif`;
   ctx.textAlign = align;
   ctx.textBaseline = baseline;
   ctx.lineWidth = r / 1.5;
-  ctx.strokeStyle = "#ffffff";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = DARK;
   ctx.strokeText(text, x, y);
-  ctx.fillStyle = "#111111";
+  ctx.fillStyle = "#ffffff";
   ctx.fillText(text, x, y);
 }
 
@@ -1089,7 +1305,7 @@ function showCredit() {
     a.rel = "noopener";
     return a;
   };
-  const changes = [...(c.changes || []), state.photo_map ? "exit marks drawn on top" : "marks, escape map and route drawn on top"].join(", ");
+  const changes = [...(c.changes || []), ...(state.photo_map ? ["exit marks drawn on top"] : ["dimmed", "marks, ways out and route drawn on top"])].join(", ");
   box.append(`Sample plan. Photo: “${quoted(c.title)}” by ${c.author}, `,
              link(c.licence, c.licence_url), ", ", link("source", c.source_url),
              `. Changes: ${changes}.`,
@@ -1126,6 +1342,7 @@ function update() {
   // With no start, the status line gives the same instruction.
   $("tap-text").hidden = !state.start || marking;
   showLegend();
+  showStages();
 }
 
 function showLegend() {
@@ -1297,7 +1514,9 @@ function setStart(x, y) {
   state.start = [Math.round(x), Math.round(y)];
   state.exitChoice = -1;
   if (photoOnly) setPhotoOnly(false);
+  reveal = null;  // a tap ends the reveal
   update();
+  startRouteDraw();
   remember();
   explain("tap");
 }
@@ -1430,6 +1649,7 @@ function showPlan(answer, focusResult, push) {
     buildField();
     showCredit();
     if (typeof showReading === "function") showReading();  // reading.js
+    startReveal();
     update();
     explain();
     showWords();
@@ -1724,7 +1944,9 @@ for (const p of PHOTOS) p.addEventListener("change", (ev) => {
 
 // Gallery of open-licensed plan photos with saved readings.
 // On a wide screen the tiles are in rows of 3 beside the start text.
-const GALLERY_FIRST = matchMedia("(min-width: 960px)").matches ? 9 : 8;
+const GALLERY_FIRST = matchMedia("(min-width: 960px)").matches ? 12 : 8;
+const GALLERY_BATCH = 24;  // each chevron opens this many more
+const GALLERY_PEEK = matchMedia("(min-width: 960px)").matches ? 6 : 2;  // the faded row under them (house rule: more is a peek)
 const countryName = (() => {
   try {
     const names = new Intl.DisplayNames(["en"], { type: "region" });
@@ -1817,10 +2039,15 @@ async function showGallery() {
   } catch (e) { return; }
   if (!plans.length) return;
   const grid = $("gallery");
-  const render = (all) => {
+  let shown = GALLERY_FIRST;
+  const render = () => {
     grid.replaceChildren();
-    (all ? plans : plans.slice(0, GALLERY_FIRST)).forEach((p, i) => {
+    const all = shown >= plans.length;
+    const peek = all ? 0 : Math.min(GALLERY_PEEK, plans.length - shown);
+    plans.slice(0, shown + peek).forEach((p, i) => {
       const li = document.createElement("li");
+      // The faded row only shows that more plans follow: the chevron opens them.
+      if (i >= shown) { li.className = "peek"; li.inert = true; li.setAttribute("aria-hidden", "true"); }
       const b = document.createElement("button");
       b.type = "button";
       b.className = "sample";
@@ -1839,19 +2066,21 @@ async function showGallery() {
       li.append(b);
       grid.append(li);
     });
-    $("gallery-more").hidden = all || plans.length <= GALLERY_FIRST;
+    $("gallery-more").hidden = all;
+    $("gallery-more").setAttribute("aria-label", `Show ${Math.min(GALLERY_BATCH, plans.length - shown)} more plans`);
     markOpenSample();
   };
   $("credits").replaceChildren(...plans.map((p) => creditLine(p.credit)));
   $("gallery-count").textContent = String(plans.length);
   // "XX" marks photos whose country is not known.
   $("gallery-countries").textContent = String(new Set(plans.map((p) => p.country).filter((c) => c !== "XX")).size);
-  $("gallery-more").textContent = `Show all ${plans.length} plans`;
   $("gallery-more").addEventListener("click", () => {
-    render(true);
-    grid.children[GALLERY_FIRST]?.querySelector("button").focus();
+    const first = shown;
+    shown = Math.min(plans.length, shown + GALLERY_BATCH);
+    render();
+    grid.children[first]?.querySelector("button").focus();
   });
-  render(false);
+  render();
   $("gallery-wrap").hidden = false;
 }
 showGallery();

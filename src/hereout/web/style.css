@@ -1,42 +1,37 @@
 @font-face {
-  font-family: "Plus Jakarta Sans";
+  font-family: "Geist";
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url("/static/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+  src: url("/static/fonts/geist-latin.woff2") format("woff2");
 }
-/* The colours of the logo (hub wiki, meta-hackathon-2026: logo round 5). */
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/static/fonts/geist-mono-latin.woff2") format("woff2");
+}
+/* Afterglow (DESIGN.md): a dark corridor, the ways out glow like the lines of
+   an emergency light. One scheme: the plan photo is dimmed under the marks. */
 :root {
-  --bg: #f3f5f2;
-  --card: #ffffff;
-  --fg: #10201a;
-  --muted: #55625b;
-  --accent: #0b7a4b;
-  --accent-fg: #ffffff;
-  --line: #d5ddd8;
-  --soft: #e4e9e5;
-  --logo-wall: #173a31;
-  --logo-route: #0e9f6e;
-  --logo-dot: #f0563a;
-  --exit: #0a7d3b;   /* the exit marks on the plan (app.js exitMark) */
-  --route: #1b5fd1;  /* the route on the plan (app.js ROUTE) */
-  color-scheme: light dark;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e1a16;
-    --card: #15231e;
-    --fg: #eef4f0;
-    --muted: #a9b8b0;
-    --accent: #3ddc97;
-    --accent-fg: #06210f;
-    --line: #2b3b34;
-    --soft: #22312b;
-    --logo-wall: #8faaa0;
-    --logo-route: #3ddc97;
-    --logo-dot: #ff7a59;
-    --route: #6f9cf0;
-  }
+  --bg: #07100c;
+  --card: #0f1a15;
+  --raise: #15231d;
+  --fg: #eaf3ee;
+  --muted: #a7b8b0;
+  --line: #22332b;
+  --soft: #18251f;
+  --accent: #3dffa0;
+  --accent-fg: #03140b;
+  --logo-wall: #8faaa0;
+  --logo-route: #3dffa0;
+  --logo-dot: #ff7a59;
+  --exit: #3dffa0;   /* the exit marks on the plan (app.js EXIT) */
+  --route: #5aa2ff;  /* the route on the plan (app.js ROUTE) */
+  --lit: #ff9a3d;    /* the step the user taps (app.js LIT) */
+  --reading: #d29bff;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -45,16 +40,15 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font: 17px/1.5 "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 450 17px/1.55 "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-h1, h2, h3 { line-height: 1.2; letter-spacing: -0.01em; }
-h2 { font-size: 1.2rem; margin: 0 0 8px; }
-h3 { font-size: 1rem; margin: 20px 0 8px; }
-a { color: inherit; }
-.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+h1, h2, h3, h4 { line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; }
+h2 { font-size: 1.6rem; margin: 0 0 10px; letter-spacing: -0.03em; }
+h3 { font-size: 1.05rem; margin: 20px 0 8px; }
+a { color: var(--accent); }
+.ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Header: the logo, and a photo button while a plan is open. */
-.top { border-bottom: 1px solid var(--line); }
 .top-in { max-width: 1200px; margin: 0 auto; padding: 0 16px; min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--fg); min-height: 44px; }
 .brand:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; border-radius: 4px; }
@@ -62,65 +56,77 @@ a { color: inherit; }
 .logo .lw { stroke: var(--logo-wall); }
 .logo .lr { stroke: var(--logo-route); }
 .logo .ld { fill: var(--logo-dot); }
-.word { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1; }
+.word { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
 .word span { color: var(--accent); }
 html:not(.has-plan) .new-photo { display: none; }
 /* With a plan open, the start page text goes. Its h1 stays for a screen reader. */
 html.has-plan .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-html.has-plan .intro > :not(h1), html.has-plan .demo { display: none; }
+html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how { display: none; }
 /* While a plan from the address loads, the samples wait under it, so they do not jump down. */
 html.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
 .new-photo input, .shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 
-/* Buttons */
+/* Buttons: round ends. The photo buttons glow in the accent. */
 .shoot span, .new-photo span, button {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-height: 48px;
-  padding: 10px 18px;
-  border-radius: 12px;
-  border: 1.5px solid var(--line);
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
   background: var(--card);
   color: var(--fg);
   font: inherit;
-  font-weight: 600;
+  font-weight: 550;
   cursor: pointer;
 }
-.shoot span, .new-photo span, #ready { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.new-photo span { min-height: 44px; padding: 8px 14px; font-size: 0.95rem; }
+button:hover { background: var(--raise); }
+.shoot span, .new-photo span, #ready { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 650; }
+.shoot span { box-shadow: 0 0 32px rgb(61 255 160 / 0.32); }
+.new-photo span { min-height: 44px; padding: 8px 16px; font-size: 0.95rem; }
 .shoot { display: block; }
-.shoot span { display: flex; width: 100%; min-height: 60px; font-size: 1.1rem; border-radius: 14px; }
-.shoot input:focus-visible + span, .new-photo input:focus-visible + span, button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.shoot span { display: flex; width: 100%; min-height: 60px; font-size: 1.1rem; }
+.shoot input:focus-visible + span, .new-photo input:focus-visible + span, button:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
 button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[aria-disabled="true"] + span { opacity: 0.55; cursor: progress; }
 
 /* Page layout: one column on a phone. */
-.layout { max-width: 1200px; margin: 0 auto; padding: 0 16px 32px; }
-.intro h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.08; margin: 28px 0 12px; }
-.lead { margin: 0 0 20px; color: var(--muted); }
-.howto { list-style: none; margin: 20px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.howto li { display: flex; align-items: center; gap: 12px; font-weight: 500; }
-.howto .n { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--soft); color: var(--accent); flex: none; }
+.layout { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
+.intro h1 { font-size: 2.6rem; font-weight: 600; letter-spacing: -0.045em; line-height: 1.02; margin: 28px 0 16px; }
+.intro h1 em { font-style: normal; color: var(--accent); }
+.lead { margin: 0 0 24px; color: var(--muted); font-size: 1.1rem; max-width: 32ch; }
+.demo-link { margin: 16px 0 0; }
+.demo-link a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 550; }
+.demo-link .ico { width: 16px; height: 16px; fill: currentColor; }
 
-/* The example: the photo of a sample plan, cropped, under the marks HereOut drew on it. */
-.example { margin: 0 0 20px; }
-.shoot + .example { margin-top: 16px; }
-.example-open { display: block; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--fg); text-decoration: none; }
-.example-open:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
-.example-pic { display: block; position: relative; overflow: hidden; aspect-ratio: var(--aspect); background: var(--soft); }
+/* The hero: one sample plan, dimmed, with the ways out, the route and YOU on it. */
+.hero { margin: 28px 0 0; }
+.example-open { display: block; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: #000; color: var(--fg); text-decoration: none; }
+.example-open:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+.example-pic { display: block; position: relative; overflow: hidden; aspect-ratio: var(--aspect); }
 .example-pic img { position: absolute; display: block; max-width: none; height: auto; }
 .example-photo { width: var(--w); left: var(--x); top: var(--y); }
 .example-marks { inset: 0; width: 100%; }
-.example-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 14px; font-weight: 600; border-top: 1px solid var(--line); }
+.example-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 52px; padding: 8px 18px; font-weight: 550; border-top: 1px solid var(--line); background: var(--card); }
 .example-go { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--accent); }
 .example-open:hover .example-go { text-decoration: underline; }
-.example .credit { margin-top: 6px; font-size: 0.8rem; }
-.demo-link { margin: 0 0 16px; }
-.demo-link a { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; color: var(--accent); font-weight: 600; }
-.demo-link .ico { width: 16px; height: 16px; fill: currentColor; }
-.demo { margin: 40px 0 8px; }
-.demo h2 { margin-bottom: 4px; }
-.demo > p { margin: 0 0 12px; }
-.demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 14px; background: #000; }
-.demo video:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.hero .credit { margin-top: 8px; font-size: 0.8rem; }
+
+/* From photo to route: the four parts of the work, as the page shows them. */
+.how { margin: 48px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.how li { padding: 24px 20px 26px 0; }
+.how li + li { border-top: 1px solid var(--line); }
+.how .ico { width: 28px; height: 28px; color: var(--accent); }
+.how .i-you { color: var(--fg); }
+.how .i-route { color: var(--route); }
+.how h3 { margin: 14px 0 6px; font-size: 1.2rem; }
+.how p { margin: 0; color: var(--muted); }
+
+.demo { margin: 56px 0 8px; }
+.demo h2 { margin-bottom: 6px; }
+.demo > p { margin: 0 0 16px; }
+.demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 22px; background: #000; }
+.demo video:focus, .demo video:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
 .transcript { margin-top: 16px; }
 .transcript summary { cursor: pointer; min-height: 24px; }
 .transcript ol { padding-left: 1.4em; }
@@ -137,7 +143,7 @@ html.has-plan #status { margin: 6px 0; }
 .upload-bar.float {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
-  background: var(--bg); border-top: 1px solid var(--line);
+  background: var(--card); border-top: 1px solid var(--line);
 }
 .upload-bar.float > * { max-width: 720px; margin: 0 auto; }
 .upload-bar.float #reading { display: none; }  /* the note says it; no motion beside the plan */
@@ -149,18 +155,39 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
   #reading { display: none; }
 }
 
+/* The four parts above the plan: a thin line of text, not controls. The part on the plan now is lit. */
+.stages { list-style: none; display: flex; gap: 4px; margin: 0 0 12px; padding: 0; font: 500 0.82rem/1.2 "Geist Mono", ui-monospace, monospace; color: var(--muted); }
+.stages li { flex: 1 1 0; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.stages li::before { content: ""; height: 3px; border-radius: 2px; background: var(--line); }
+.stages li.done { color: var(--fg); }
+.stages li.done::before { background: rgb(61 255 160 / 0.45); }
+.stages li.now { color: var(--accent); }
+.stages li.now::before { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.stages li span { overflow-wrap: anywhere; }
+
+/* The tap prompt on the plan, while the plan waits for the tap (app.js showStages). */
+.stage { position: relative; }
+.tap-prompt { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px);
+  width: max-content; padding: 10px 18px 10px 12px; border-radius: 999px; background: rgb(7 16 12 / 0.9); border: 1px solid var(--accent); color: var(--fg); font-weight: 600; pointer-events: none;
+  box-shadow: 0 0 24px rgb(61 255 160 / 0.25); }
+.tap-prompt .ico { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .tap-prompt { animation: prompt-in 0.4s ease-out; }
+  @keyframes prompt-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+}
+
 /* The plan and its controls */
 .view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.seg { display: flex; flex: 1 1 auto; min-width: min-content; gap: 2px; padding: 4px; border-radius: 12px; background: var(--soft); }
+.seg { display: flex; flex: 1 1 auto; min-width: min-content; gap: 2px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
 /* On a narrow screen a label can take two lines; it never runs under the next button. */
-.seg button { flex: 1 1 auto; min-height: 44px; padding: 4px 6px; border: 0; border-radius: 9px; background: transparent; font-size: 0.85rem; line-height: 1.15; white-space: nowrap; color: var(--muted); }
+.seg button { flex: 1 1 auto; min-height: 40px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; font-size: 0.85rem; line-height: 1.15; white-space: nowrap; color: var(--muted); font-weight: 500; }
 @media (max-width: 380px) { .seg { flex-basis: 0; } .seg button { flex-basis: 0; white-space: normal; } }
-.seg button[aria-pressed="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px rgb(16 32 26 / 0.25), inset 0 -3px 0 var(--accent); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); font-weight: 600; }
 .seg button:disabled { cursor: not-allowed; }
-.enlarge { flex: none; min-width: 52px; min-height: 52px; padding: 8px 12px; }
-.enlarge[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.enlarge { flex: none; min-width: 52px; min-height: 50px; padding: 8px 14px; }
+.enlarge[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .enlarge-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.stage { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--card); }
+.stage { border: 1px solid var(--line); border-radius: 22px; overflow: hidden; background: #000; }
 @media (max-width: 600px) {
   /* On a phone the plan uses the full width of the screen. */
   .stage { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
@@ -168,78 +195,90 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
 .stage.big { max-height: 80vh; overflow: auto; }
 .stage.big canvas { width: 220%; max-width: none; }
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; cursor: crosshair; }
-/* The ring goes around the plan, not over the photo, so it shows in both colour schemes. */
+/* The whole plan fits on the screen; on a phone the answer heading peeks under it. */
+.stage:not(.big) canvas { width: auto; max-width: 100%; max-height: calc(100svh - 230px); margin: 0 auto; }
+@media (max-width: 959px) { .stage:not(.big) canvas { max-height: 66svh; } }
+/* The ring goes around the plan, not over the photo. */
 canvas:focus-visible { outline: none; }
-.stage:has(> canvas:focus-visible) { outline: 3px solid var(--fg); outline-offset: 2px; }
-.stage:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 0; font-size: 0.85rem; color: var(--muted); }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
-/* Swatches sit on white, as the marks sit on the paper of the plan. */
-.legend i, .backup i { display: inline-block; flex: none; width: 30px; height: 12px; border-radius: 3px; background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
-.sw-field { background-image: linear-gradient(90deg, rgb(10 125 59 / 0.55), rgb(245 190 20 / 0.55)); }
-.sw-way { height: 12px !important; background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='12'%3E%3Crect x='0' y='4' width='34' height='4' fill='rgb(6,64,34)'/%3E%3Cpath d='M24 6 L15 1 L15 11 Z' fill='rgb(6,64,34)' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E") no-repeat !important; }
-.sw-wall { height: 3px !important; background-image: linear-gradient(#7a818b, #7a818b); }
-.sw-exit { width: 14px !important; height: 14px !important; background-image: linear-gradient(#0a7d3b, #0a7d3b); }
-.sw-route { height: 6px !important; background-image: linear-gradient(#1b5fd1, #1b5fd1); }
-.sw-other { height: 4px !important; background-image: repeating-linear-gradient(90deg, #1b5fd1 0 8px, transparent 8px 14px); }
-.hint { margin: 8px 0 0; font-size: 0.95rem; }
+.stage:has(> canvas:focus-visible) { outline: 3px solid var(--fg); outline-offset: 3px; }
+.stage:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 0; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+/* Swatches sit on the dimmed plan, as the marks do. */
+.legend i, .backup i { display: inline-block; flex: none; width: 30px; height: 12px; border-radius: 3px; background-color: #0b1510; box-shadow: 0 0 0 2px #0b1510; }
+.sw-field { background-image: linear-gradient(90deg, rgb(61 255 160 / 0.5), rgb(61 255 160 / 0)); }
+.sw-way { height: 12px !important; background: #0b1510 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='34' height='12'%3E%3Crect x='0' y='4.5' width='34' height='3' fill='%233dffa0'/%3E%3Cpath d='M24 6 L15 1 L15 11 Z' fill='%233dffa0' stroke='%230b1510' stroke-width='1'/%3E%3C/svg%3E") no-repeat !important; }
+.sw-wall { height: 3px !important; background-image: linear-gradient(#7d9188, #7d9188); }
+.sw-exit { width: 14px !important; height: 14px !important; background-image: linear-gradient(#3dffa0, #3dffa0); }
+.sw-route { height: 6px !important; background-image: linear-gradient(#5aa2ff, #5aa2ff); }
+.sw-other { height: 4px !important; background-image: repeating-linear-gradient(90deg, #5aa2ff 0 8px, transparent 8px 14px); }
+.hint { margin: 10px 0 0; font-size: 0.95rem; }
 /* A tap off the floor drawing: the message stands where the eyes are. */
-.hint.refused #tap-text { font-weight: 700; }
+.hint.refused #tap-text { font-weight: 700; color: var(--fg); }
 #kbd-hint { color: var(--muted); }
 #kbd-hint::before { content: " "; }
 
 /* The answer: the exit, the steps and what to do next. */
-.answer-col { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.answer-col { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
 /* On a phone the answer comes first, so the steps stay near the plan; the language row is under it. */
 .answer-col > .answer { order: -1; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 22px; padding: 20px; }
 .card > :first-child { margin-top: 0; }
 .answer-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
 .answer-head p { margin: 0; display: flex; flex-direction: column; gap: 2px; }
-.badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 52px; height: 52px; padding: 0 8px; border-radius: 8px; background: var(--exit); color: #ffffff; font-weight: 800; font-size: 1.6rem; }
-.kicker { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
-#answer-name { font-size: 1.3rem; line-height: 1.25; }
-.plan-status { margin: 0; font-weight: 600; min-height: 1.5em; }
-.backup { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 10px; }
-.backup button { grid-column: 1 / -1; justify-self: start; min-height: 44px; padding: 6px 14px; }
+.badge { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 52px; height: 52px; padding: 0 8px; border-radius: 14px;
+  background: var(--exit); color: var(--accent-fg); font: 700 1.6rem "Geist Mono", ui-monospace, monospace; box-shadow: 0 0 24px rgb(61 255 160 / 0.35); }
+.kicker { font-size: 0.9rem; color: var(--muted); }
+#answer-name { font-size: 1.35rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; }
+.plan-status { margin: 0; font-weight: 550; font-size: 1.05rem; min-height: 1.5em; }
+.backup { margin: 12px 0 0; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px 10px; color: var(--muted); }
+.backup button { grid-column: 1 / -1; justify-self: start; min-height: 44px; padding: 6px 16px; }
 #steps-head { margin-top: 18px; }
 #steps-hint { margin: 0 0 8px; font-size: 0.9rem; }
-#steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-#steps li { counter-increment: step; display: flex; align-items: center; gap: 10px; margin: 0; min-height: 44px; }
-#steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--soft); font-size: 0.85rem; font-weight: 700; }
-button.step { display: block; flex: 1; width: 100%; text-align: start; font-weight: 500; padding: 8px 12px; min-height: 44px; }
-button.step[aria-pressed="true"] { border-color: #d9480f; box-shadow: inset 5px 0 0 #d9480f; padding-inline-start: 16px; }
-[dir="rtl"] button.step[aria-pressed="true"] { box-shadow: inset -5px 0 0 #d9480f; }
+#steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: flex; flex-direction: column; }
+#steps li { counter-increment: step; display: flex; align-items: center; gap: 12px; margin: 0; min-height: 48px; border-top: 1px solid var(--line); }
+#steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%;
+  border: 1.5px solid var(--route); color: var(--route); font: 600 0.8rem "Geist Mono", ui-monospace, monospace; }
+button.step { display: block; flex: 1; width: 100%; text-align: start; font-weight: 450; padding: 10px 4px; min-height: 48px; border: 0; border-radius: 10px; background: transparent; color: #d5e2db; }
+button.step:hover { background: var(--raise); }
+button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background: rgb(255 154 61 / 0.12); padding-inline-start: 12px; }
+#steps li:has(button.step[aria-pressed="true"])::before { border-color: var(--lit); background: var(--lit); color: var(--accent-fg); }
 .check { margin: 0 0 10px; font-size: 0.9rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .actions button { flex: 1 1 auto; }
 #fix-hint { margin: 10px 0 0; }
-#exits-wrap h3 { margin: 0 0 10px; }
-.exits { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
+#exits-wrap h3 { margin: 0 0 12px; }
+.exits { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; }
 /* One square for each exit, like its mark on the plan. The name is in the label. */
-.exits button { min-height: 44px; padding: 0 4px; border-radius: 8px; border: 0; background: var(--exit); color: #ffffff; font-size: 1.1rem; font-weight: 700; }
+.exits button { min-height: 46px; padding: 0 4px; border-radius: 12px; border: 0; background: var(--exit); color: var(--accent-fg); font: 700 1.1rem "Geist Mono", ui-monospace, monospace; }
+.exits button:hover { background: #8dffc7; }
 .exits button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card), 0 0 0 6px var(--route); }
-.exits button.dead { background: var(--card); color: var(--muted); border: 1.5px dashed var(--muted); }
+.exits button:focus-visible { outline-offset: 8px; }
+.exits button.dead { background: transparent; color: var(--muted); border: 1.5px dashed #6f8279; }
 #exits-note { margin: 10px 0 0; font-size: 0.9rem; }
 .muted { color: var(--muted); margin: 0 0 12px; }
 .credit { color: var(--muted); font-size: 0.85rem; margin: 0; }
 #back-to-samples { align-self: flex-start; }
 
 /* Samples */
-.gallery-wrap { margin: 28px 0 8px; }
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin: 0 0 12px; padding: 0; list-style: none; }
+.gallery-wrap { margin: 56px 0 8px; }
+.gallery-wrap h2 { display: flex; align-items: center; gap: 12px; }
+.gallery-wrap h2 .ico { width: 26px; height: 26px; color: var(--accent); }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; margin: 20px 0 16px; padding: 0; list-style: none; }
 .gallery li { display: flex; }
 .gallery li > button { width: 100%; }
-button.sample { padding: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: stretch; text-align: left; font-weight: 600; border-width: 1px; }
-button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); }
-button.sample span { padding: 8px 10px; font-size: 0.9rem; }
-button.sample[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+button.sample { padding: 0; min-height: 0; overflow: visible; display: flex; flex-direction: column; align-items: stretch; text-align: left; border: 0; border-radius: 14px; background: transparent; }
+button.sample:hover { background: transparent; }
+button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); border-radius: 14px; filter: brightness(0.85); transition: filter 0.15s; }
+button.sample:hover img { filter: none; }
+button.sample span { padding: 10px 2px 0; font: 500 0.85rem "Geist Mono", ui-monospace, monospace; color: var(--muted); }
+button.sample[aria-current="true"] img { box-shadow: 0 0 0 3px var(--accent); filter: none; }
+button.sample[aria-current="true"] span { color: var(--accent); }
 .credits { margin-top: 16px; color: var(--muted); font-size: 0.85rem; }
 .credits summary { cursor: pointer; min-height: 24px; color: var(--fg); font-size: 1rem; }
 .credits ul { padding-left: 1.2em; }
 .credits li { margin: 6px 0; }
 ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
-/* The result heading is not visible, so its focus ring goes around the plan. */
 /* The plan opens right under the header, so a scroll to it keeps the header in view. */
 .result { scroll-margin-top: 140px; }
 #result-head:focus-visible + .plan-col { outline: 2px solid var(--muted); outline-offset: 4px; border-radius: 4px; }
@@ -250,30 +289,30 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
   .seg { flex: 0 1 auto; }
   .seg button { padding: 6px 16px; font-size: 0.95rem; }
   .view { justify-content: space-between; }
+  .how li + li { border-top: 0; border-left: 1px solid var(--line); padding-left: 20px; }
 }
 
-/* Wide screens: the start page in two columns (what HereOut does | samples),
-   and an open plan beside its answer. */
+/* Wide screens: the start page text beside the hero plan, and an open plan beside its answer. */
 @media (min-width: 960px) {
   .top-in, .layout { padding-left: 48px; padding-right: 48px; }
-  .top-in { min-height: 72px; }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); column-gap: 56px; align-items: start;
-            grid-template-areas: "intro gallery" "status gallery" "demo demo" "result result"; }
+  .top-in { min-height: 80px; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); column-gap: 64px; align-items: center;
+            grid-template-areas: "intro hero" "status status" "how how" "gallery gallery" "demo demo" "result result"; }
   .intro { grid-area: intro; }
+  .hero { grid-area: hero; margin-top: 24px; }
   .status-wrap { grid-area: status; }
+  .how { grid-area: how; margin-top: 40px; }
   .result { grid-area: result; }
   .gallery-wrap { grid-area: gallery; }
-  .demo { grid-area: demo; max-width: 1040px; }
-  .intro h1 { font-size: 3.1rem; margin-top: 56px; }
-  .lead { font-size: 1.15rem; max-width: 30em; }
+  .demo { grid-area: demo; }
+  .intro h1 { font-size: 4.2rem; margin-top: 24px; }
+  .lead { font-size: 1.25rem; }
   .shoot span { display: inline-flex; width: auto; padding: 0 32px; }
-  .howto { margin-top: 28px; }
-  html:not(.has-plan) .gallery-wrap { margin-top: 56px; }
-  html:not(.has-plan) .gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  html.has-plan .layout { grid-template-areas: "status status" "result result" "gallery gallery"; }
-  .result { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: 28px; align-items: start; }
+  html.has-plan .layout { align-items: start; grid-template-areas: "status status" "result result" "gallery gallery"; }
+  .result { display: grid; grid-template-columns: minmax(0, 1fr) 390px; column-gap: 28px; align-items: start; }
   .answer-col { margin-top: 0; }
   .answer-col > .answer { order: 0; }
+  html:not(.has-plan) .gallery { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 /* What Muse Spark read (reading.js): a card under the answer, and a view of the plan. */
@@ -287,7 +326,7 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 .read-exits .rl { font-weight: 700; overflow-wrap: anywhere; }
 .read-exits .rf { color: var(--muted); }
 #show-read { width: 100%; margin: 0 0 12px; }
-#show-read[aria-pressed="true"] { border-color: #6a1b9a; box-shadow: inset 0 0 0 1.5px #6a1b9a; }
+#show-read[aria-pressed="true"] { border-color: var(--reading); box-shadow: inset 0 0 0 1.5px var(--reading); }
 #read-zoom { margin: 12px 0 8px; font-size: 0.9rem; }
 .read > p:last-child { margin: 0; font-size: 0.9rem; }
 /* The second look: the sheets of numbered crops, and what came back for each. */
@@ -295,7 +334,7 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 .look > p { margin: 0 0 10px; font-size: 0.9rem; }
 .look-sheets { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 14px; }
 .look-sheet { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 12px; align-items: start; }
-.look-open { display: block; width: 128px; min-width: 44px; min-height: 44px; padding: 0; overflow: hidden; border-radius: 8px; background: #ffffff; }
+.look-open { display: block; width: 128px; min-width: 44px; min-height: 44px; padding: 0; overflow: hidden; border-radius: 10px; background: #ffffff; }
 .look-open img { display: block; width: 100%; height: auto; }
 .look-pic { position: relative; display: block; }
 .look-pt { position: absolute; width: 12px; height: 12px; border: 2.5px solid #0a7d3b; border-radius: 50%; transform: translate(-50%, -50%);
@@ -304,14 +343,14 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 .look-view .look-pt { width: 30px; height: 30px; border-width: 3.5px; }
 .look-key { display: inline-flex; align-items: center; gap: 6px; margin-right: 12px; white-space: nowrap; }
 .look-key .look-pt { position: static; transform: none; flex: none; }
-.look-open:hover { border-color: #6a1b9a; }
+.look-open:hover { border-color: var(--reading); background: #ffffff; }
 .look-crops { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; }
 .look-crops li { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
 .look-crops .lk { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 4px;
-  background: #000000; color: #ffffff; font-size: 0.8rem; font-weight: 800; }
-.look-view { width: min(96vw, 760px); max-width: none; max-height: 94vh; padding: 0; border: 1px solid var(--line); border-radius: 14px;
+  background: #ffffff; color: #000000; font-size: 0.8rem; font-weight: 800; }
+.look-view { width: min(96vw, 760px); max-width: none; max-height: 94vh; padding: 0; border: 1px solid var(--line); border-radius: 22px;
   background: var(--card); color: var(--fg); }
-.look-view::backdrop { background: rgb(0 0 0 / 0.6); }
+.look-view::backdrop { background: rgb(0 0 0 / 0.7); }
 .look-view-bar { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 8px 8px 8px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
 .look-view-bar h3 { margin: 0; font-size: 1rem; }
@@ -322,29 +361,36 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 .read-legend { display: none; }
 .result.reading .read-legend { display: flex; }
 .result.reading #legend { display: none; }
+.read-legend i { background-color: #ffffff; box-shadow: 0 0 0 2px #ffffff; }
 .sw-rbox { height: 12px !important; background: #ffffff !important; outline: 2px dashed #6a1b9a; outline-offset: -2px; }
 .sw-rpt { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 3px solid #6a1b9a; }
 .sw-rzoom { height: 4px !important; background-image: linear-gradient(#6a1b9a, #6a1b9a); }
 .sw-rcode { height: 3px !important; background-image: repeating-linear-gradient(90deg, #111111 0 6px, transparent 6px 10px); }
 .sw-rdrop { width: 14px !important; height: 14px !important; border-radius: 50% !important; border: 3px solid #5f6368; }
-@media (prefers-color-scheme: dark) {
-  #show-read[aria-pressed="true"] { border-color: #c58af0; box-shadow: inset 0 0 0 1.5px #c58af0; }
-}
 
 /* The language of the plan card (i18n.js). */
 .lang-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .lang-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
-.lang-row select { min-height: 44px; min-width: 10em; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); font: inherit; }
+.lang-row select { min-height: 44px; min-width: 10em; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; }
 .lang-row select:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 
 /* What the plan says: the words that Muse Spark read on the plan, each with its original. */
 .words h3 { margin: 0 0 6px; }
-.words h4 { font-size: 0.95rem; margin: 14px 0 6px; }
+.words h4 { font-size: 0.95rem; margin: 16px 0 6px; color: var(--muted); font-weight: 550; }
 #words-lang { margin: 0 0 8px; }
-.w-title { margin: 0 0 4px; font-weight: 700; font-size: 1.05rem; }
-.w-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.w-list li { padding-inline-start: 12px; border-inline-start: 3px solid var(--line); }
+.w-title { margin: 0 0 4px; font-weight: 650; font-size: 1.05rem; }
+.w-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.w-list li { padding: 8px 0; border-top: 1px solid var(--line); }
 .w-text { display: block; overflow-wrap: anywhere; }
 .w-orig { display: block; margin-top: 2px; font-size: 0.85rem; color: var(--muted); overflow-wrap: anywhere; }
 .w-title .w-orig { font-weight: 400; }
 #words-note { margin: 14px 0 0; font-size: 0.85rem; }
+
+/* More samples: a faded row and one round chevron (house rule: more is a peek). */
+.gallery li.peek { max-height: 96px; overflow: hidden; opacity: 0.4; -webkit-mask-image: linear-gradient(#000, transparent); mask-image: linear-gradient(#000, transparent); }
+#gallery-more { display: flex; width: 52px; height: 52px; min-height: 0; padding: 0; margin: -28px auto 8px; position: relative; }
+#gallery-more[hidden] { display: none; }
+#gallery-more .ico { width: 24px; height: 24px; }
+@media (max-width: 480px) {
+  .stages { font-size: 0.74rem; }
+}

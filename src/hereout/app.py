@@ -73,7 +73,7 @@ def index_html() -> str:
 
 
 EXAMPLE_PHOTO = "/gallery/example-photo"  # in index.html: the server puts the URL of the saved image here
-EXAMPLE_TAG = '<figure id="example" class="example" hidden'
+EXAMPLE_TAG = '<figure id="example" class="example hero" hidden'
 EXAMPLE_CREDIT = '<figcaption id="example-credit" class="credit"></figcaption>'
 
 
@@ -100,7 +100,7 @@ def example_page(page: str, gallery: Gallery | None) -> str:
     url = gallery.saved_image_url(m[1]) if m and gallery else None
     if not url:
         return re.sub(EXAMPLE_TAG + r".*?</figure>\n?", "", page, count=1, flags=re.S)
-    credit = credit_html(gallery.items[m[1]]["credit"], ["cropped", "marks, escape map and route drawn on top"])
+    credit = credit_html(gallery.items[m[1]]["credit"], ["cropped", "dimmed", "marks, ways out and route drawn on top"])
     return (page.replace(f'src="{EXAMPLE_PHOTO}"', f'src="{html.escape(url)}"', 1)
                 .replace(EXAMPLE_TAG, EXAMPLE_TAG.removesuffix(" hidden"), 1)
                 .replace(EXAMPLE_CREDIT, EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))

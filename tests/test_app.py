@@ -112,7 +112,7 @@ def test_page_and_robots():
     assert "cache-control" not in client.get("/static/app.js").headers
     # An old hash gets the new file, but not for a year: a rollback must not find it.
     assert "cache-control" not in client.get("/static/app.js?v=0123456789").headers
-    assert client.get("/static/fonts/plus-jakarta-sans-latin.woff2?v=0123456789").status_code == 200
+    assert client.get("/static/fonts/geist-latin.woff2?v=0123456789").status_code == 200
 
 
 def make_gallery(tmp_path):
@@ -287,7 +287,7 @@ def test_example_shows_the_saved_image(tmp_path):
     assert f'src="/gallery/answers/{path.stem}.webp"' in shown and " hidden" not in shown
     assert "“The ‘A’ plan” by A" in shown
     assert '<a href="https://l" rel="noopener">CC0 1.0</a>' in shown
-    assert "Changes: resized, cropped, marks, escape map and route drawn on top." in shown
+    assert "Changes: resized, cropped, dimmed, marks, ways out and route drawn on top." in shown
     assert "shared under the same licence" in shown
     # The image URL is the one the plan opens with, so the browser loads it once.
     client = TestClient(create_app(None, use_env=False, gallery=g))
