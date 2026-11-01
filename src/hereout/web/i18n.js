@@ -185,7 +185,7 @@ const HereOutI18n = (() => {
     enlarge: "Toggle button: shows the plan larger.",
     stage: "Name of the plan area, for screen readers.",
     stage_exits: "One of four short labels above the plan that show what the plan shows now: the exits that the model found.",
-    stage_ways: "One of four short labels above the plan: every way out to an exit, drawn on the plan.",
+    stage_ways: "One of four short labels above the plan: the ways out to the exits, drawn on the plan.",
     stage_you: "One of four short labels above the plan: the place where the user stands (the user taps it). Use the same idea as the \"you are here\" label, in normal case.",
     stage_route: "One of four short labels above the plan: the route to the exit.",
     tap_prompt: "Short prompt on the plan while it waits for the user to tap the spot where they stand. An instruction to one person, polite.",

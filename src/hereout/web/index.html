@@ -34,7 +34,7 @@
 <main class="layout">
   <section id="intro" class="intro" aria-labelledby="intro-head">
     <h1 id="intro-head">Your <em>way out</em>, drawn on the plan.</h1>
-    <p class="lead">Photograph the posted evacuation plan. Tap where you stand. Follow the route to the nearest exit.</p>
+    <p class="lead">In front of an evacuation plan you don't know? HereOut draws the way out on your photo.</p>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
@@ -46,17 +46,17 @@
     <a id="example-open" class="example-open" href="/?sample=RU-commons_000164">
       <span class="example-pic" style="--aspect: 780 / 1080; --w: 153.846%; --x: -37.179%; --y: -15.741%">
         <img class="example-photo" src="/gallery/example-photo" alt="" fetchpriority="high">
-        <img class="example-marks" src="/static/example-marks.webp" alt="A museum floor plan from Moscow, dimmed, with four numbered exits, the ways out glowing green and a blue route from YOU to Exit 4.">
+        <img class="example-marks" src="/static/example-marks.webp" alt="A floor plan from an arts centre in Moscow, dimmed, with four numbered exits, the ways out glowing green, a blue route from YOU to Exit 4 and a dashed second route to Exit 3.">
       </span>
-      <span class="example-bar"><span>Example: a museum plan from Russia</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
+      <span class="example-bar"><span>Example: a plan from an arts centre in Moscow</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
     </a>
     <figcaption id="example-credit" class="credit"></figcaption>
   </figure>
   <section class="how" aria-labelledby="how-head">
     <h2 id="how-head" class="sr">From photo to route</h2>
     <ol role="list">
-      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h7.5"/><path d="M17 13.5V21"/><path d="M14 7h7m-3-3 3 3-3 3"/></svg><h3>Exits</h3><p>Muse Spark finds each exit on your photo.</p></li>
-      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18h6V8h10"/><path d="m16 4 4 4-4 4"/><path d="M4 12h3"/></svg><h3>Ways out</h3><p>Code reads the walls and draws every way to an exit.</p></li>
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h7.5"/><path d="M17 13.5V21"/><path d="M14 7h7m-3-3 3 3-3 3"/></svg><h3>Exits</h3><p>Muse Spark finds the exits on your photo.</p></li>
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18h6V8h10"/><path d="m16 4 4 4-4 4"/><path d="M4 12h3"/></svg><h3>Ways out</h3><p>HereOut's code finds the walls and draws the ways out to the exits.</p></li>
       <li><svg class="ico i-you" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg><h3>You</h3><p>You tap where you stand on the plan.</p></li>
       <li><svg class="ico i-route" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 2 19 21 12 17 5 21 12 2z"/></svg><h3>Route</h3><p>Your browser finds the route to the nearest exit, turn by turn.</p></li>
     </ol>
@@ -177,7 +177,6 @@
   </section>
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
     <h2 id="gallery-head"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span><span id="gallery-count"></span> real plans from <span id="gallery-countries"></span> countries and regions</span></h2>
-    <p class="muted">Open-licensed photos of posted plans. Muse Spark read each one.</p>
     <ul id="gallery" class="gallery"></ul>
     <button id="gallery-more" type="button" hidden><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
     <details class="credits">
