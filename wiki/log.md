@@ -390,3 +390,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Rewrote `DESIGN.md` for direction B (owner, 2026-11-01).
 - Source: the owner request of 2026-11-01, the direction canvas, the UX and accessibility reviews, and the code.
 - Updated `decisions/demo-video.md`: the fifth video records the real page after the redesign (RU-commons_000164, hub `film.mjs`).
+
+## [2026-11-01] ingest | Vote of several reads
+
+- Added `decisions/exit-vote.md` (rejected): three main reads and a vote on the dev set, at temperatures 0 and 0.7.
+- Source: `scripts/vote_reads.py`, the saved dev reads and the owner request of 2026-11-01.

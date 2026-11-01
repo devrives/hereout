@@ -417,6 +417,7 @@ class ModelClient:
             raise ValueError("contributor models send content to training; not allowed")
         self.model = model
         self.effort = effort
+        self.temperature = 0.0
         self.ledger = ledger
         self.prices = prices or Prices()
         self.http = httpx.Client(
@@ -450,7 +451,7 @@ class ModelClient:
             body = {
                 "model": self.model,
                 "max_tokens": max_tokens,
-                "temperature": 0,
+                "temperature": self.temperature,
                 **({"reasoning_effort": self.effort} if self.effort else {}),
                 "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, *images]}],
             }

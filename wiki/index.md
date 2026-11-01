@@ -18,6 +18,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Upload as a job; no zoom call after a slow main call](decisions/slow-reads.md): no failed upload when the model is slow.
 - [Page layout: plan beside the answer, with the logo](decisions/page-layout-a.md): header logo, answer card beside the plan.
 - [Afterglow redesign and the reveal of a plan](decisions/afterglow-redesign.md): dark page with glowing ways out; a plan opens as exits, ways out, tap, route.
+- [No vote of several reads for the exits](decisions/exit-vote.md): rejected; a vote of three reads gained 1 to 3 points at 5 %.
 - [Show the ways out as straight lines from door to door](decisions/way-network.md): door-to-door network, routes along it.
 - [Draw the ways out as one tree of level and upright lines](decisions/orthogonal-way-tree.md): proposed; lines along the two wall directions, joined at right angles.
 - [Close the outside of the building and give closed rooms a door](decisions/outside-and-closed-rooms.md): proposed; fills, outside areas, exit placement and room doors with no model call.
