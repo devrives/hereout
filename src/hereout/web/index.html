@@ -27,7 +27,7 @@
     </a>
     <nav class="nav" aria-label="Page">
       <a class="nav-how" href="#how"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18h6V8h10"/><path d="m16 4 4 4-4 4"/><path d="M4 12h3"/></svg>How it works</a>
-      <a id="nav-samples" class="nav-samples" href="#gallery-wrap" hidden><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Samples</a>
+      <a id="nav-samples" class="nav-samples js-only" href="#gallery-wrap"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Samples</a>
       <a id="nav-demo" class="nav-demo" href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg>Demo</a>
       <a class="nav-code" href="https://gitlab.com/devrives/hereout" rel="noopener"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>Code</a>
     </nav>
@@ -40,15 +40,19 @@
 <main class="layout">
   <section id="intro" class="intro" aria-labelledby="intro-head">
     <h1 id="intro-head">Your <em>way out</em>, drawn on the plan.</h1>
-    <p class="lead">In front of an evacuation plan you don't know? HereOut draws the way out on your photo.</p>
+    <p class="lead">New hotel or station? Photograph the evacuation plan by the door and see your way out before you need it.</p>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
       <span id="shoot-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Take a photo of the plan</span>
     </label>
-    <div id="try" class="try" hidden>
+    <div id="try" class="try js-only">
       <p id="try-head">Or open a sample plan</p>
-      <ul id="try-list" class="try-list" role="list" aria-labelledby="try-head" data-ids="RU-commons_000164,JP-commons_000268,DE-commons_000022"></ul>
+      <ul id="try-list" class="try-list" role="list" aria-labelledby="try-head">
+        <li><button type="button" class="sample" data-id="RU-commons_000164" aria-label="Russia, sample plan"><img src="/gallery/thumbs/RU-commons_000164.jpg" alt="" width="112" height="84"><span>Russia</span></button></li>
+        <li><button type="button" class="sample" data-id="JP-commons_000268" aria-label="Japan, sample plan"><img src="/gallery/thumbs/JP-commons_000268.jpg" alt="" width="112" height="84"><span>Japan</span></button></li>
+        <li><button type="button" class="sample" data-id="DE-commons_000022" aria-label="Germany, sample plan"><img src="/gallery/thumbs/DE-commons_000022.jpg" alt="" width="112" height="84"><span>Germany</span></button></li>
+      </ul>
     </div>
     <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video</a></p>
   </section>
@@ -59,10 +63,11 @@
         <img class="example-marks" src="/static/example-marks.webp" alt="A floor plan from an arts centre in Moscow, dimmed, with four numbered exits, the ways out glowing green, a blue route from YOU to Exit 4 and a dashed second route to Exit 3.">
       </span>
       <span class="example-bar"><span>Example: a plan from an arts centre in Moscow</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
+      <span class="sr loop-says">A phone shows HereOut on this plan: four exits, the ways out, a tap, and the route to Exit 4.</span>
     </a>
     <figcaption id="example-credit" class="credit"></figcaption>
   </figure>
-  <p id="proof" class="proof" hidden><a href="#gallery-wrap"><span><b id="proof-plans"></b> plans</span> <span><b id="proof-countries"></b> countries and regions</span> <span><b id="proof-langs"></b> languages</span></a></p>
+  <p id="proof" class="proof js-only" hidden><a href="#gallery-wrap"><span><b id="proof-plans"></b> plans</span> <span><b id="proof-countries"></b> countries and regions</span> <span><b id="proof-langs"></b> languages</span></a></p>
   <section id="how" class="how" aria-labelledby="how-head">
     <h2 id="how-head" class="sr">From photo to route</h2>
     <ol role="list">
@@ -112,8 +117,9 @@
         </div>
         <div class="now-step">
           <button id="step-prev" class="now-go" type="button" aria-label="Previous step" data-t-label="step_prev"><svg class="ico flip" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
-          <p id="now-text" class="now-text"></p>
+          <p id="now-text" class="now-text" tabindex="-1"></p>
           <button id="step-next" class="now-go" type="button" aria-label="Next step" data-t-label="step_next"><svg class="ico flip" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+          <span id="now-end" class="now-end" hidden><svg class="turn door" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h7.5"/><path d="M17 13.5V21"/><path d="M14 7h7m-3-3 3 3-3 3"/></svg></span>
         </div>
       </section>
       <div id="legend" class="legend" hidden>

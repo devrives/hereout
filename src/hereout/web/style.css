@@ -30,12 +30,14 @@
   --exit: #3dffa0;   /* the exit marks on the plan (app.js EXIT) */
   --route: #5aa2ff;  /* the route on the plan (app.js ROUTE) */
   --lit: #ff9a3d;    /* the step the user taps (app.js LIT) */
-  --done: #5b6f86;   /* the legs before the lit step (app.js DONE) */
+  --done: #aebdcc;   /* the legs before the lit step (app.js DONE) */
   --reading: #d29bff;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+/* Parts that need the script show from the first paint when it runs (early.js adds "js"). */
+html:not(.js) .js-only { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 body {
   margin: 0;
@@ -156,7 +158,11 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .loop-toggle[data-playing="true"] .i-play, .loop-toggle[data-playing="false"] .i-pause { display: none; }
 .loop-toggle .ico { fill: currentColor; stroke-width: 2.4; }
 .loop-toggle .i-pause { fill: none; }
-.loop-phone video { display: block; width: 100%; height: auto; aspect-ratio: 1 / 2; border-radius: 35px; background: var(--bg); }
+.loop-phone video, .loop-still { display: block; width: 100%; height: auto; aspect-ratio: 1 / 2; border-radius: 35px; background: var(--bg); }
+/* Without the script the loop does not play: the poster shows, with no controls of the browser. */
+html:not(.js) .loop-phone video, html:not(.js) .loop-toggle { display: none; }
+/* The words for a screen reader of what the loop shows (index.html) belong to the loop only. */
+.example:not(.has-loop) .loop-says { display: none; }
 .has-loop .example-bar { justify-content: center; flex-wrap: wrap; gap: 4px 12px; min-height: 44px; padding: 14px 0 0; border: 0; background: none; text-align: center; }
 .has-loop .credit { max-width: 52ch; margin-top: 4px; text-align: center; }
 
@@ -171,7 +177,7 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 
 /* From photo to route: the four parts of the work, as the page shows them. */
 .how { margin: 28px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); }
 .how li { padding: 24px 20px 26px 0; }
 .how li + li { border-top: 1px solid var(--line); }
 .how .ico { width: 28px; height: 28px; color: var(--accent); }
@@ -228,9 +234,10 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
   width: max-content; padding: 10px 18px 10px 12px; border-radius: 999px; background: rgb(7 16 12 / 0.9); border: 1px solid var(--accent); color: var(--fg); font-weight: 600; pointer-events: none;
   box-shadow: 0 0 24px rgb(61 255 160 / 0.25); }
 .tap-prompt .ico { color: var(--accent); }
+.tap-prompt.placed { bottom: auto; transform: none; }
 @media (prefers-reduced-motion: no-preference) {
   .tap-prompt { animation: prompt-in 0.4s ease-out; }
-  @keyframes prompt-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+  @keyframes prompt-in { from { opacity: 0; translate: 0 8px; } }
 }
 
 /* The current step, right under the plan (app.js showNow): the plan and the
@@ -238,13 +245,20 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
    while its place is below it. Its size does not change from step to step. */
 .now-card { position: sticky; bottom: var(--bar-room, 0px); z-index: 2; margin: 10px 0 0; padding: 12px 12px 14px;
   background: var(--card); border: 1px solid var(--line); border-radius: 22px; }
+/* A card taller than 40 % of the screen, or a plan with the keyboard focus: the card stays in its place (app.js stickNow). */
+.now-card.loose { position: static; }
 .now-top { display: flex; align-items: center; gap: 12px; padding-inline-start: 4px; }
 .badge.now-badge { min-width: 40px; height: 40px; border-radius: 12px; font-size: 1.2rem; box-shadow: 0 0 16px rgb(61 255 160 / 0.3); }
 .now-head { flex: 1; margin: 0; color: var(--muted); font-size: 0.95rem; font-weight: 550; min-width: 0; }
 .now-round { flex: none; width: 48px; min-height: 48px; padding: 0; }
 .now-step { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .now-text { flex: 1; display: flex; align-items: center; gap: 12px; margin: 0; min-width: 0; min-height: 4.2em;
-  font-size: 1.08rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+  font-size: 1.08rem; font-weight: 600; line-height: 1.35; overflow-wrap: break-word; border-radius: 10px; }
+.now-text:focus { outline: none; }
+.now-text:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+/* The last walk: the exit door in the place of "Next". */
+.now-end { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 56px; min-height: 64px; }
+.now-end .turn { width: 32px; height: 32px; color: var(--exit); }
 .now-go { flex: none; width: 56px; min-height: 64px; padding: 0; border-radius: 18px; background: var(--raise); }
 .now-go .ico { width: 26px; height: 26px; }
 .now-go.gone { visibility: hidden; }
@@ -258,6 +272,24 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
   /* On a phone the card is the foot of the plan, from edge to edge. */
   .now-card { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; padding: 10px 12px 12px; }
 }
+/* Very narrow (a phone at 200 % zoom): the words of the step get their own row, the buttons go under them. */
+@media (max-width: 299px) {
+  .now-step { flex-wrap: wrap; justify-content: space-between; }
+  .now-text { order: -1; flex: 1 0 100%; min-height: 0; }
+  .now-text .turn { width: 28px; height: 28px; }
+  .now-top { gap: 8px; padding-inline-start: 0; }
+  .badge.now-badge { min-width: 32px; height: 32px; font-size: 1rem; }
+}
+/* A phone at 200 % zoom (195 px): the header, the view buttons and the keys wrap; nothing scrolls sideways. */
+@media (max-width: 299px) {
+  .top-in { flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
+  .view .seg { flex: 1 1 100%; flex-wrap: wrap; border-radius: 22px; }
+  .seg button { flex: 1 1 auto; }
+  .look .look-key { white-space: normal; }
+  .look-sheets .look-sheet { grid-template-columns: minmax(0, 1fr); }
+}
+/* On a wide screen the step list is beside the plan: the card would show the lit step twice (ux review). */
+@media (min-width: 960px) { .now-card { display: none !important; } }
 
 /* The plan and its controls */
 .view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
@@ -276,7 +308,7 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
   .stage { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
 }
 .stage.big { max-height: 80vh; overflow: auto; }
-.stage.big canvas { width: 220%; max-width: none; }
+.stage.big canvas { width: var(--zoom, 220%); max-width: none; }
 canvas { display: block; width: 100%; height: auto; touch-action: manipulation; cursor: crosshair; }
 /* The whole plan fits on the screen; on a phone the answer heading peeks under it. */
 .stage:not(.big) canvas { width: auto; max-width: 100%; max-height: calc(100svh - 230px); margin: 0 auto; }
@@ -326,7 +358,9 @@ button.step { display: flex; justify-content: flex-start; gap: 12px; flex: 1; wi
 #steps .turn { width: 24px; height: 24px; color: var(--muted); }
 #steps button.step[aria-pressed="true"] .turn { color: var(--lit); }
 #steps .turn.door { color: var(--exit); }
-#steps li.arrive { gap: 16px; padding-inline-end: 4px; }
+/* "Then you reach the exit." ends the last walk: no number of its own (app.js walkCount). */
+#steps li.arrive { counter-increment: none; gap: 16px; padding: 10px 4px 10px 0; color: var(--muted); }
+#steps li.arrive::before { content: ""; border-color: transparent; }
 button.step:hover { background: var(--raise); }
 button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background: rgb(255 154 61 / 0.12); padding-inline-start: 12px; }
 #steps li:has(button.step[aria-pressed="true"])::before { border-color: var(--lit); background: var(--lit); color: var(--accent-fg); }

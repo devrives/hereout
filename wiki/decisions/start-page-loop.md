@@ -3,7 +3,7 @@ type: decision
 title: Start page with a header, a phone loop and a credits page
 status: accepted
 updated: 2026-11-01
-checked: 4fc0f50
+checked: fb84cde
 sources:
   - owner:2026-11-01
   - src/hereout/app.py
@@ -32,12 +32,12 @@ sources:
 ## Decision
 
 - The header has links to How it works, Samples, Demo and Code (the GitLab repository). The links are not buttons, so the photo button in the hero stays the one primary action. The header stays at the top of the start page. With a plan open, it scrolls away and has the "New photo" button. Narrow screens show fewer links.
-- The hero has a phone that plays a loop of the real page at 390 px with one sample plan (RU-commons_000164, tap 720, 950). The loop shows the exits, the ways out, the tap, the route and the steps. Its last frames fade into its first frame, so the loop has no seam.
+- The hero has a phone that plays a loop of the real page at 390 px with one sample plan (RU-commons_000164, tap 720, 950). The loop shows the exits, the ways out, the tap, the route and the steps. It shows no page header, so the hero has one call to action ([plan-page-fixes](plan-page-fixes.md)). Its last frames fade into its first frame, so the loop has no seam.
 - The hub script `docs/hackathon-hereout-submission-2026-10-31/hero_loop.mjs` records the loop with the Playwright clock, as for the demo video. The files are outside the repository, in `../_workspace/hereout-video/site`: `hero-loop.mp4`, `hero-loop.webm` and the poster `hero-loop.webp`.
 - The server shows the phone only when `hero-loop.mp4` is there and the gallery has the credit of the plan. Else it shows the still example picture.
 - The phone is the link that opens the same plan. The credit line under it names the recording as a change.
 - The page starts the loop only while the phone is on the screen. With reduced motion, the page shows the poster. A round button on the phone pauses and plays the loop.
-- Three sample plans show under the photo button. Their exits are right. A row of counts (plans, countries and regions, languages) links to the samples.
+- Three sample plans show under the photo button. Their exits are right. A row of counts (plans, countries and regions, languages) links to the samples. Since the fix round of the same day, both rows are in the page from the server, so the page does not move ([plan-page-fixes](plan-page-fixes.md)).
 - The photo credits of all samples are on the page `/credits`, with one anchor for each sample id. A link beside the heading of the samples opens it. The open plan and the hero keep their own credit lines.
 - The start page has one disclosure: the text of the video, right under the video. The credit of the photo in the video is in the caption line under the video.
 

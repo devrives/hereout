@@ -115,11 +115,15 @@ def loop_html(folder: Path) -> str:
     """The phone of the hero: a short silent loop of the page in use, recorded
     from the real page by the hub script docs/.../hero_loop.mjs. app.js starts
     it only on screen, and never with reduced motion."""
-    poster = f' poster="{video_url(folder, "hero-loop.webp")}"' if (folder / "hero-loop.webp").is_file() else ""
+    has_poster = (folder / "hero-loop.webp").is_file()
+    poster = f' poster="{video_url(folder, "hero-loop.webp")}"' if has_poster else ""
     webm = f'<source src="{video_url(folder, "hero-loop.webm")}" type="video/webm">' if (folder / "hero-loop.webm").is_file() else ""
+    # Without JS the page shows the poster only: no video and no controls of the browser (style.css).
+    still = (f'<noscript><img class="loop-still" src="{video_url(folder, "hero-loop.webp")}" alt="" width="600" height="1200"></noscript>'
+             if has_poster else "")
     return (f'<span class="loop-phone"><video id="hero-loop" class="loop" muted loop playsinline preload="metadata" '
             f'width="600" height="1200"{poster} aria-hidden="true">{webm}'
-            f'<source src="{video_url(folder, LOOP)}" type="video/mp4"></video></span>\n')
+            f'<source src="{video_url(folder, LOOP)}" type="video/mp4"></video>{still}</span>\n')
 
 
 def example_page(page: str, gallery: Gallery | None, folder: Path | None = None) -> str:
@@ -143,6 +147,24 @@ def example_page(page: str, gallery: Gallery | None, folder: Path | None = None)
     return (page.replace(f'src="{EXAMPLE_PHOTO}"', f'src="{html.escape(url)}"', 1)
                 .replace(EXAMPLE_TAG, EXAMPLE_TAG.removesuffix(" hidden"), 1)
                 .replace(EXAMPLE_CREDIT, EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))
+
+
+PROOF_TAG = '<p id="proof" class="proof js-only" hidden'
+LANGUAGES = 1 + len(list((WEB / "i18n").glob("*.json")))  # English and the catalogues of the plan card
+
+
+def proof_page(page: str, gallery: Gallery | None) -> str:
+    """The start page with the counts of the samples in place (app.js fills
+    them too), so the row under the hero does not move the page when the
+    gallery comes. With no gallery, the row stays hidden."""
+    plans = gallery.listing() if gallery else []
+    if not plans:
+        return page
+    countries = len({p["country"] for p in plans if p["country"] != "XX"})
+    for key, n in (("proof-plans", len(plans)), ("proof-countries", countries), ("proof-langs", LANGUAGES),
+                   ("gallery-count", len(plans)), ("gallery-countries", countries)):
+        page = page.replace(f'id="{key}"></', f'id="{key}">{n}</', 1)
+    return page.replace(PROOF_TAG, PROOF_TAG.removesuffix(" hidden"), 1)
 
 
 CREDITS_LIST = '<ol id="credits" class="credit-list" role="list"></ol>'
@@ -323,7 +345,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return HTMLResponse(demo_page(example_page(page, gallery, video), video, gallery))
+        return HTMLResponse(demo_page(proof_page(example_page(page, gallery, video), gallery), video, gallery))
 
     @app.api_route("/credits", methods=["GET", "HEAD"])
     def credits_list():

@@ -19,7 +19,7 @@ colors:
   exit: "#3dffa0"
   route: "#5aa2ff"
   lit: "#ff9a3d"
-  done: "#5b6f86"
+  done: "#aebdcc"
   reading: "#d29bff"
 typography:
   display:
@@ -264,7 +264,7 @@ A plan opens in the order of the work (owner, 2026-11-01): the exits one by one,
 - `exit` is the same glow green: the exit marks on the plan, the exit badge and the exit buttons, with dark numbers.
 - `route` is the light blue of the route on the plan, the step numbers and the ring round the chosen exit.
 - `lit` (amber) is the current step: its number, its turn icon and its part of the route on the plan. On the last step it is a ring round the exit.
-- `done` (grey blue) is the part of the route before the current step, and the numbers of those steps on the plan.
+- `done` (light grey blue) is the part of the route before the current step, and the dots of those steps on the plan. It is light, so a walked leg stays clear on the dimmed photo (judge review, 2026-11-01).
 - `reading` is the purple of the reading view (what Muse Spark read). That view shows the whole photo, not dimmed, with its own fixed colours in `reading.js`.
 - `logo-wall`, `logo-route` and `logo-dot` colour the three parts of the logo SVG.
 - The page has one scheme (`color-scheme: dark`). The photo is the only light area, and in the escape map it is under a veil (`VEIL`, the ground at 60 %).
@@ -281,7 +281,9 @@ A plan opens in the order of the work (owner, 2026-11-01): the exits one by one,
 - The header stays at the top of the start page (sticky, `bg` at 88 % with a blur and a `line` border). With a plan open it scrolls away, so the plan has the height of the screen.
 - At 960 px and wider, the gutter is 48 px. The start page has the text at the left and the hero phone at the right. The phone fits the screen height (`--pw`, 230 to 300 px wide). The four parts, the samples (6 columns) and the demo video are full width under them. With a plan open, the plan is at the left and the answer column (390 px) is at the right.
 - On a phone the answer card comes first in the answer column, so the steps stay near the plan. The plan frame uses the full width of the screen under 600 px.
-- After a tap, the card of the current step is right under the plan, in view with it (research brief 2026-11-01: on a phone the steps were below the fold). The page scrolls only as far as the card needs, and the top of the plan stays in view. While its place is below the screen, the card sticks to the foot of the screen. Under 600 px it uses the full width, as the plan does.
+- After a tap, under 960 px, the card of the current step is right under the plan, in view with it (research brief 2026-11-01: on a phone the steps were below the fold). At 960 px and wider there is no card: the step list beside the plan shows the current step.
+- After a tap, the page scrolls only as far as it must. It stops at an edge: the header, the stage strip and the view buttons show whole or not at all, and the top of the plan stays in view. On a wide screen it does not scroll when the plan is in view.
+- While its place is below the screen, the card sticks to the foot of the screen. It does not stick when it is taller than 40 % of the screen, or while the plan has the keyboard focus. Under 600 px it uses the full width, as the plan does. Under 300 px the words of the step have their own row, over the buttons.
 - While a plan reads or waits to open, the upload bar stays fixed at the foot of the screen. The body gets the same room (`--bar-room`, set by `app.js`).
 - A touch target is at least `tap` (44 px). Buttons are 48 px high, the start photo button 60 px.
 
@@ -305,19 +307,22 @@ All in `style.css` and `index.html`.
 
 - Header links (`nav-link`): How it works, Samples, Demo and Code, each with an icon, in `muted`. They are links, not buttons: the one primary action stays in the hero. Narrow screens keep fewer links: under 720 px no "How it works", under 480 px no "Demo", under 360 px only "Code". With a plan open, only Samples and Code stay, and under 480 px only the "New photo" button.
 - Photo buttons (`button-primary`, `button-new-photo`): a file input behind a label. They show only with JS.
-- Sample row: under the photo button, "Or open a sample plan" and three sample thumbnails (`data-ids` in `index.html`, plans whose exits are right). One tap opens the plan, as in the gallery.
-- Hero phone (`loop-phone`): a phone frame with a muted loop of the page at 390 px (`hero-loop.mp4` and `.webm` in the video folder, made by the hub script `docs/hackathon-hereout-submission-2026-10-31/hero_loop.mjs`). The phone is the link that opens the same plan. The server shows it only when the file is there, else the still example picture. The loop plays only on the screen. With reduced motion it shows the poster. The round button on the foot of the screen (`loop-toggle`) pauses and plays it (WCAG 2.2.2). The credit line of the photo is under it.
-- Count row: plans, countries and regions, languages, in Geist Mono `fg` with `muted` words, divided by `line`. It is one link to the samples. The counts come from the gallery and the language list.
+- Sample row: under the photo button, "Or open a sample plan" and three sample thumbnails (fixed in `index.html`, plans whose exits are right). They are in the page from the start, so nothing moves when the gallery comes. One tap opens the plan, as in the gallery.
+- Hero phone (`loop-phone`): a phone frame with a muted loop of the page at 390 px (`hero-loop.mp4` and `.webm` in the video folder, made by the hub script `docs/hackathon-hereout-submission-2026-10-31/hero_loop.mjs`). The phone is the link that opens the same plan. The server shows it only when the file is there, else the still example picture. The loop shows the plan with no page header. A hidden line tells a screen reader what the loop shows. Without JS the phone shows the poster only. The loop plays only on the screen. With reduced motion it shows the poster. The round button on the foot of the screen (`loop-toggle`) pauses and plays it (WCAG 2.2.2). The credit line of the photo is under it.
+- Count row: plans, countries and regions, languages, in Geist Mono `fg` with `muted` words, divided by `line`. It is one link to the samples. The server puts the counts in the page (`app.py` `proof_page`), from the gallery and the language list.
 - `button-secondary` is every other button: `card` ground, a `line` border.
 - The stage strip (`stage-chip`): four labels above the plan. Done parts have a green dot, the part that shows now is green with a green border (`stage-chip-now`).
-- The view control (`seg`, `seg-item`): "Escape map", "Photo only", "Routes only", with `aria-pressed`. Beside it, the larger-plan button.
+- The view control (`seg`, `seg-item`): "Escape map", "Photo only", "Routes only". It is one choice of three: exactly one button has `aria-pressed="true"`. "Routes only" shows the walls with the ways out, with no photo. In the reading view no button is pressed. A photo map has no "Routes only". Beside it, the larger-plan button.
+- The larger plan is 1.4 to 2.2 times as wide as the frame: as large as keeps the route, YOU and its exit in view, and centred on them.
+- The tap prompt ("Tap where you stand") goes to the edge of the plan where it covers the fewest ways out and no exit: the foot first, then the top.
 - The plan frame (`.stage`) holds the canvas. The focus ring goes around the frame, not over the photo.
 - The legend: one line for each mark, with a swatch on the dark ground of the plan.
 - The answer card (`card`): the exit badge and name, the steps as rows with a number circle (`button-step`, `button-step-lit`), the backup route, and the actions "Read the steps aloud" and "Mark the exit".
-- The exit buttons (`button-exit`): the number, as the mark on the plan. The full name is in the label. The nearest exit and the exit of the second way also have a word beside the number ("Nearest", "If blocked"). The words stay when the user chooses another exit, so the buttons do not move. An exit with no way from the start is dashed (`button-exit-dead`).
-- The current step (`now-card`, `badge-now`, `button-now-step`): under the plan after a tap. A small exit badge, "Exit 4 · Step 2 of 5", a speaker button that reads this step only, then the turn icon and the words of the step between a previous and a next button (56 × 64 px, the thumb zone). The plan lights the same step. At the first and the last step, the button that has nothing to show keeps its place but does not show, so the card does not move; the focus goes to the other button. Each step change goes once to the live line of the plan. The full list stays in the answer card.
-- Turn icons: one outline glyph for each step, left of its words in the step list and in the card: straight, left, right, slight left, slight right, back, and an exit door for the last step. Step 1 names a side of the plan, so its arrow points to that side. 24 viewBox, stroke 2, `currentColor`: muted in the list, `lit` for the current step, `exit` for the door.
-- On the plan: a small numbered dot where each step starts, the same number as in the list (step 1 starts at YOU and has none). The current step is `lit`, the legs and dots before it are `done`, the rest is `route`. A short white arrow at YOU points the first move.
+- The exit buttons (`button-exit`): the number, as the mark on the plan. The full name is in the label. The nearest exit and the exit of the second way also have a word beside the number ("Nearest", "If blocked"). The name starts with the visible words: "Exit 4, Nearest: ВЫХОД" (WCAG 2.5.3). The words stay when the user chooses another exit, so the buttons do not move. After the user chose an exit, a dashed way to the nearest exit says "The dashed line leads to the nearest exit", not "If it is blocked". An exit with no way from the start is dashed (`button-exit-dead`).
+- The steps are the walks of the route. "Then you reach the exit." is no step: the list shows it after the walks with the exit door and no number, and the card adds it to the words of the last walk.
+- The current step (`now-card`, `badge-now`, `button-now-step`): under the plan after a tap, under 960 px only. A small exit badge, "Exit 4 · Step 2 of 4", a speaker button that reads this step only, then the turn icon and the words of the step between a previous and a next button (56 × 64 px, the thumb zone). The plan lights the same step. At the first step the previous button keeps its place but does not show. At the last walk the exit door (`exit`) takes the place of the next button. So the card does not move. When a button reaches either end, the focus goes to the words of the step (`tabindex="-1"`), so a held Enter stops there. Each step change goes once to the live line of the plan. The full list stays in the answer card. After an exit button on a narrow screen, the plan and the card come into view and the next button takes the focus.
+- Turn icons: one outline glyph for each step, left of its words in the step list and in the card: straight, left, right, slight left, slight right, back, a side step (the line jogs to the left or the right, then goes on), and an exit door for the end. A turn with a side step keeps its turn glyph. Step 1 names a side of the plan, so its arrow points to that side. 24 viewBox, stroke 2, `currentColor`: muted in the list, `lit` for the current step, `exit` for the door.
+- On the plan: a small round dot where each step starts, the same number as in the list (step 1 starts at YOU and has none). The dots are smaller than the exit marks and in the colours of the route: `route`, `lit` for the current step, `done` before it, with dark numbers. A dot keeps clear of every exit mark, YOU and the other dots: it moves along its walk, or it does not show. The current step is `lit`, the legs before it are `done`, the rest is `route`. At the last walk an amber ring goes round the exit. A short white arrow at YOU points the first move.
 - The samples: a grid of photos with the country under each one in Geist Mono. Under the first rows, one faded row and a round chevron button open the rest. A "Photo credits" link beside the heading opens `/credits`.
 - Disclosures: the start page has one, the text of the video, right under the video. The credit of the photo in the video is in the caption line under the video.
 - Icons: inline outline SVG, 24 viewBox, stroke 1.8, 20 px, `currentColor`.
@@ -346,7 +351,7 @@ The current code differs from `references/house-ui-rules.md` in these places. Th
 
 ## Screens
 
-Widths: 390 and 1280. Without JS, the start page shows one line that says HereOut needs JavaScript, and no photo button.
+Widths: 390 and 1280. Without JS, the start page shows one line that says HereOut needs JavaScript, no photo button, no sample row and no count row (`.js-only`, set by `early.js`).
 
 | Screen | Route | States |
 |---|---|---|

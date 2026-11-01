@@ -24,9 +24,7 @@ function setReading(on) {
   $("show-read").setAttribute("aria-pressed", String(readShown));
   $("show-read-text").textContent = readShown ? "Hide the reading" : "Show the reading on the plan";
   $("result").classList.toggle("reading", readShown);
-  $("show-map").setAttribute("aria-pressed", String(!readShown && showMap && !photoOnly));
-  $("show-photo").setAttribute("aria-pressed", String(!readShown && photoOnly));
-  $("show-routes").setAttribute("aria-pressed", String(!readShown && routesOnly));
+  pressView();  // app.js: no view button is pressed while the reading shows
   tapSaid = readShown ? () => t("read_tap") : tapText;
   $("tap-text").textContent = tapSaid();
   $("tap-text").hidden = !readShown && (!state || !state.start || marking);
@@ -338,14 +336,14 @@ $("show-read").addEventListener("click", (ev) => {
 // Another view of the plan, a tap or Enter ends the reading view. The tap
 // sets no start: the reading view shows all of the photo, and the plan view
 // is framed, so the tap point would be wrong.
-// The view buttons then only end it: the view under it comes back as it was.
+// A view button ends it and shows its own view (app.js setView).
 function endReading(ev) {
   if (!readShown) return;
   ev.stopImmediatePropagation();
   ev.preventDefault();
   setReading(false);
 }
-for (const id of ["show-map", "show-photo", "show-routes"]) $(id).addEventListener("click", endReading, true);
+for (const id of ["show-map", "show-photo", "show-routes"]) $(id).addEventListener("click", () => { if (readShown) setReading(false); }, true);
 canvas.addEventListener("click", endReading, true);
 canvas.addEventListener("keydown", (ev) => {
   if (ev.key === "Enter" || ev.key === " ") endReading(ev);

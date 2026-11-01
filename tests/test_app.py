@@ -362,6 +362,8 @@ def test_example_plays_the_loop(tmp_path):
     (video / "hero-loop.webm").write_bytes(b"\0")
     shown = example_page(page, g, video)
     assert 'poster="/video/hero-loop.webp?v=' in shown and shown.index("video/webm") < shown.index("video/mp4")
+    # Without JS the poster shows in place of the video (style.css hides the video).
+    assert '<noscript><img class="loop-still" src="/video/hero-loop.webp?v=' in shown
     # A plan that the gallery does not know: no loop, no example.
     assert "<figure" not in example_page(page.replace("XX-test_1", "XX-gone"), g, video)
     # The real page has the one picture that the loop takes the place of.
@@ -370,6 +372,18 @@ def test_example_plays_the_loop(tmp_path):
     m = re.search(r'data-sample="([\w-]+)"', real)
     shown = example_page(real.replace(m[1], "XX-test_1"), g, video)
     assert 'id="hero-loop"' in shown and "example-photo" not in shown and 'id="example-open"' in shown
+
+
+def test_counts_in_the_start_page(tmp_path):
+    """The row of counts is in the page from the server, so the hero does not move when the gallery comes."""
+    from hereout.app import LANGUAGES, WEB, proof_page
+    real = (WEB / "index.html").read_text()
+    assert proof_page(real, None) == real
+    shown = proof_page(real, make_gallery(tmp_path))
+    assert '<p id="proof" class="proof js-only">' in shown
+    assert '<b id="proof-plans">1</b>' in shown and '<b id="proof-countries">0</b>' in shown
+    assert f'<b id="proof-langs">{LANGUAGES}</b>' in shown and LANGUAGES == 13
+    assert '<span id="gallery-count">1</span>' in shown
 
 
 def test_start_page_links_and_credits_page(tmp_path):

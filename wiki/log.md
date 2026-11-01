@@ -408,3 +408,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - It also has the tap on the dashed second way and the words on the exit buttons.
 - Updated `DESIGN.md`: the token `done`, three components and the rules for them.
 - Source: the research brief of 2026-11-01 (sections 0 and 2), the owner request, the browser checks at 390 and 1280.
+
+## [2026-11-01] ingest | Fix round after the judge, UX and accessibility reviews
+
+- Added `decisions/plan-page-fixes.md`: 20 fixes of the plan page and the start page.
+- Updated `decisions/current-step-card.md` (the walk count, the dots, no card on wide screens) and `decisions/start-page-loop.md` (the lead, the loop with no header, no layout shift).
+- Updated `DESIGN.md`: the token `done`, the view control, the steps, the card, the dots and the start page parts.
+- Source: the findings of the judge agent and the two reviewers (owner, 2026-11-01), the browser checks at 195, 390 and 1280, and the code.

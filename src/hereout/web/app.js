@@ -18,9 +18,15 @@ let cursor = null;    // [x, y] keyboard marker on the plan
 let keyboard = false; // show the marker only after an arrow key
 let planSeq = 0;      // only the newest upload may change the page
 let selected = -1;    // the step shown on the plan, or -1
-let showMap = true;
+// What the plan shows: one view of three (DESIGN.md "view control").
+// "map": the dimmed photo with the escape map and the marks; "photo": the
+// photo only; "routes": the walls HereOut read with the escape map and the
+// marks, with no photo. showMap stays true: the map shows in "map" and "routes".
+let viewMode = "map";
+let marksMode = "map";  // the view with marks to go back to after "photo"
+const showMap = true;
 let photoOnly = false;
-let routesOnly = false; // the routes on the walls HereOut read, with no photo
+let routesOnly = false;
 let addExit = false;    // the next exit the user marks joins the others (explain, NO_EXIT_HERE)
 const canSpeak = "speechSynthesis" in window;
 $("shoot").hidden = $("new-photo").hidden = false;  // without JS the photo buttons would do nothing
@@ -46,7 +52,7 @@ const EXIT = "#3dffa0";
 const EXIT_INK = "#03140b";
 const EXIT_GLOW = "rgba(61, 255, 160, 0.75)";
 const LIT = "#ff9a3d";
-const DONE = "#5b6f86";  // the legs before the lit step: walked, so dimmed
+const DONE = "#aebdcc";  // the legs before the lit step: walked, so grey, but light on the dimmed photo
 const DARK = "#07100c";  // the ground of the page: the edge of every mark
 const VEIL = "rgba(7, 16, 12, 0.6)";  // over the photo in the escape map, so the marks stand out
 const ARROW_GAP = 12;   // plan units between two arrows on a way out
@@ -986,7 +992,51 @@ function showStages() {
     li.classList.toggle("now", i === at);
   });
   // The plan waits for the tap: it says so on the plan, where the eyes are (ux review).
-  $("tap-prompt").hidden = !(now === "you" && !state.start && !marking && !photoOnly && view.reachable);
+  const prompt = $("tap-prompt");
+  const was = prompt.hidden;
+  prompt.hidden = !(now === "you" && !state.start && !marking && !photoOnly && view.reachable);
+  if (!prompt.hidden && (was || prompt.dataset.for !== promptKey())) placePrompt();
+}
+
+// The place of the tap prompt: the edge of the plan where it covers the
+// fewest ways out and no exit (judge review: at the foot of RU-commons_000164
+// it hid the ways to Exit 4). The tries go from the foot to the top, the middle first.
+const promptKey = () => `${canvas.clientWidth}x${canvas.clientHeight}:${$("stage").scrollLeft},${$("stage").scrollTop}:${!!(view && network())}`;
+function placePrompt() {
+  const el = $("tap-prompt"), st = $("stage");
+  el.dataset.for = promptKey();
+  const w = el.offsetWidth, h = el.offsetHeight, m = 16;
+  const cw = canvas.clientWidth, ch = canvas.clientHeight;
+  if (!cw || !ch || w + 2 * m > st.clientWidth) { el.style.left = el.style.top = ""; el.classList.remove("placed"); return; }
+  // The part of the canvas in view, in the CSS pixels of the stage.
+  const vx0 = Math.max(canvas.offsetLeft, st.scrollLeft), vx1 = Math.min(canvas.offsetLeft + cw, st.scrollLeft + st.clientWidth);
+  const vy0 = Math.max(canvas.offsetTop, st.scrollTop), vy1 = Math.min(canvas.offsetTop + ch, st.scrollTop + st.clientHeight);
+  const xs = [(vx0 + vx1 - w) / 2, vx0 + m, vx1 - w - m], ys = [vy1 - h - m, vy0 + m];
+  const tries = ys.flatMap((y) => xs.map((x) => [x, y]));
+  // What the prompt would cover: points along the ways out, and the exits.
+  const [x0, y0, x1, y1] = shownFrame();
+  const toPlan = (x, y) => [x0 + (x - canvas.offsetLeft) / cw * (x1 - x0), y0 + (y - canvas.offsetTop) / ch * (y1 - y0)];
+  const net = network();
+  const step = frameUnit();
+  const pts = [];
+  for (const leg of net ? net.legs : []) {
+    const n = Math.max(1, Math.ceil(Math.hypot(leg.b[0] - leg.a[0], leg.b[1] - leg.a[1]) / step));
+    for (let k = 0; k <= n; k++) pts.push([leg.a[0] + (leg.b[0] - leg.a[0]) * k / n, leg.a[1] + (leg.b[1] - leg.a[1]) * k / n, 1]);
+  }
+  for (const e of state.exits) pts.push([e.x, e.y, 50]);
+  const cost = ([x, y]) => {
+    const [px0, py0] = toPlan(x - 6, y - 6), [px1, py1] = toPlan(x + w + 6, y + h + 6);
+    return pts.reduce((a, [px, py, k]) => a + (px >= px0 && px <= px1 && py >= py0 && py <= py1 ? k : 0), 0);
+  };
+  let best = tries[0], bestCost = Infinity;
+  for (const p of tries) {
+    const c = cost(p);
+    if (c < bestCost) { best = p; bestCost = c; }
+    if (!c) break;
+  }
+  el.classList.add("placed");
+  el.style.left = `${Math.round(best[0])}px`;
+  el.style.top = `${Math.round(best[1])}px`;
 }
 
 function drawMarks(unit, rv = null) {
@@ -1036,7 +1086,7 @@ function drawMarks(unit, rv = null) {
   if (pts && pts.length > 1) {
     const split = draw === 1 ? routeSplit() : null;
     if (split) {
-      strokeLine(split.done, [[DARK, unit * 1.6], [DONE, unit * 1.0]]);
+      strokeLine(split.done, [[DARK, unit * 1.9], [DONE, unit * 1.15]]);
       strokeLine(split.rest, ROUTE_LINE(unit));
     } else {
       strokeLine(pts, ROUTE_LINE(unit));
@@ -1049,8 +1099,10 @@ function drawMarks(unit, rv = null) {
   if (rv) return;
   const step = draw === 1 ? view.steps[selected] : null;
   if (step && step.kind === "walk") strokeLine(step.path, [[DARK, unit * 3.2], [LIT, unit * 2]]);
-  // The last step: a ring in the lit colour round the exit.
-  if (step && step.kind === "arrive" && used >= 0) {
+  // The last walk ends at the exit: a ring in the lit colour round it, and
+  // the exit over the lit leg, so its number shows.
+  if (step && selected === walkCount() - 1 && used >= 0) {
+    exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
     const e = state.exits[used], r = unit * 2.2 * 1.75;
     for (const [color, width] of [[DARK, unit * 1.3], [LIT, unit * 0.7]]) {
       ctx.strokeStyle = color;
@@ -1101,37 +1153,57 @@ function routeSplit() {
 }
 
 // A small numbered dot where each step starts, the same number as in the
-// step list. Step 1 starts at YOU, and the last step is the exit: they have
-// none. A dot that would cover YOU, the exit or another dot is left out;
-// the dot of the lit step always shows.
+// step list. Step 1 starts at YOU: it has none. The dots are round, smaller
+// than the exit marks and in the colours of the route (judge review: square
+// exits with numbers beside numbered dots read as more exits). A dot keeps
+// clear of every exit mark, of YOU, of its label and of the other dots: it
+// moves along its walk to a free place, or it does not show.
+const DOT_R = 1.75;  // plan units: the radius of a step dot (an exit mark is 2.2 from its middle to its side)
 function stepDots(unit, here, used, youBox) {
-  const r = unit * 2.1;
-  const exit = used >= 0 ? state.exits[used] : null;
-  const split = routeSplit();  // dots of walked legs are dimmed, as the legs are
+  const r = unit * DOT_R;
+  const split = routeSplit();  // dots of walked legs are grey, as the legs are
   const ids = view.steps.map((s, j) => j).filter((j) => j > 0 && view.steps[j].kind === "walk");
-  ids.sort((a, b) => (a === selected) - (b === selected));  // the lit dot last, on top
+  ids.sort((a, b) => (b === selected) - (a === selected));  // the lit dot takes its place first
   const shown = [];
+  const exitGap = unit * 2.2 * 1.3 + r + unit * 0.6;  // an exit in use has a wide frame
+  const free = ([x, y]) => state.exits.every((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) >= exitGap) &&
+    !(here && Math.hypot(x - here[0], y - here[1]) < unit * 6) &&
+    !(youBox && x + r > youBox[0] && x - r < youBox[2] && y + r > youBox[1] && y - r < youBox[3]) &&
+    shown.every((p) => Math.hypot(x - p[0], y - p[1]) >= r * 2.4);
   for (const j of ids) {
-    const [x, y] = view.steps[j].from;
-    const off = (p, d) => Math.hypot(x - p[0], y - p[1]) >= d;
-    const onLabel = youBox && x + r > youBox[0] && x - r < youBox[2] && y + r > youBox[1] && y - r < youBox[3];
-    if (j !== selected && ((here && !off(here, unit * 6)) || (exit && !off([exit.x, exit.y], unit * 4.5)) ||
-        onLabel || shown.some((p) => !off(p, r * 2.2)))) continue;
-    shown.push([x, y]);
+    const path = view.steps[j].path;
+    const len = path.slice(1).reduce((a, q, k) => a + Math.hypot(q[0] - path[k][0], q[1] - path[k][1]), 0);
+    let at = null;
+    for (let d = 0; d <= len / 2 && !at; d += unit) {
+      const p = pointOnPath(path, d);
+      if (free(p)) at = p;
+    }
+    if (!at) continue;
+    shown.push(at);
     const lit = j === selected, done = !!split && j < selected;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = lit ? LIT : DARK;
+    ctx.arc(at[0], at[1], r, 0, Math.PI * 2);
+    ctx.fillStyle = lit ? LIT : done ? DONE : ROUTE;
     ctx.fill();
     ctx.lineWidth = unit * 0.35;
-    ctx.strokeStyle = lit ? DARK : done ? DONE : ROUTE;
+    ctx.strokeStyle = DARK;
     ctx.stroke();
-    ctx.font = `600 ${Math.round(r * 1.3)}px "Geist Mono", ui-monospace, monospace`;
+    ctx.font = `700 ${Math.round(r * 1.35)}px "Geist Mono", ui-monospace, monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = lit ? EXIT_INK : done ? DONE : ROUTE_CORE;
-    ctx.fillText(String(j + 1), x, y + r * 0.08);
+    ctx.fillStyle = DARK;
+    ctx.fillText(String(j + 1), at[0], at[1] + r * 0.08);
   }
+}
+
+// The point at distance d along a path of points.
+function pointOnPath(path, d) {
+  for (let k = 1; k < path.length; k++) {
+    const a = path[k - 1], b = path[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (d <= l && l > 0) return [a[0] + (b[0] - a[0]) * d / l, a[1] + (b[1] - a[1]) * d / l];
+    d -= l;
+  }
+  return path[path.length - 1];
 }
 
 // The direction of the first move from YOU: the heading of step 1, or its
@@ -1262,12 +1334,25 @@ const TURN_PATHS = {
   "slight right": ["M8 21v-7.5L16 6", "M10 6h6v6"],
   back: ["M16 20V10a4 4 0 0 0-8 0v6", "m5 13 3 3 3-3"],
   arrive: ["M3 21h18", "M5 21V5a2 2 0 0 1 2-2h7.5", "M17 13.5V21", "M14 7h7m-3-3 3 3-3 3"],
+  // A side step, then straight on: the line jogs to that side (judge review).
+  "aside left": ["M16 21v-5l-8-5V4", "m4 8 4-4 4 4"],
+  "aside right": ["M8 21v-5l8-5V4", "m12 8 4-4 4 4"],
 };
 // The first step names a side of the plan, not a turn: its arrow points to that side.
 const SIDE_ANGLE = { top: 0, "top right": 45, right: 90, "bottom right": 135, bottom: 180, "bottom left": 225, left: 270, "top left": 315 };
 
+// The glyph of a step. A turn keeps its turn glyph when it has a side step
+// too: the turn is the larger move. A step that only steps aside and goes on
+// (the first step too) gets the jog to its side.
+function turnKind(step, i) {
+  if (step.kind === "arrive") return "arrive";
+  const key = step.say && step.say.key;
+  if ((key === "straight_aside" || key === "start_aside") && (step.aside === "left" || step.aside === "right")) return `aside ${step.aside}`;
+  return i === 0 ? "straight" : step.turn;
+}
+
 function turnIcon(step, i) {
-  const kind = step.kind === "arrive" ? "arrive" : i === 0 ? "straight" : step.turn;
+  const kind = turnKind(step, i);
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
@@ -1284,10 +1369,20 @@ function turnIcon(step, i) {
   return svg;
 }
 
-function stepRow(s, i) {
+function stepRow(s, i, text = stepText(s)) {
   const span = document.createElement("span");
-  span.textContent = stepText(s);
+  span.textContent = text;
   return [turnIcon(s, i), span];
+}
+
+// The steps are the walks of the route (judge review). The last item of
+// route.js, "Then you reach the exit.", is no step of its own: the list shows
+// it with no number after the walks, and the card adds it to the last walk.
+const walkCount = () => (view ? view.steps.filter((s) => s.kind === "walk").length : 0);
+function walkText(i) {
+  const s = view.steps[i];
+  const end = i === walkCount() - 1 && view.steps.find((x) => x.kind === "arrive");
+  return end ? I.join([stepText(s), stepText(end)]) : stepText(s);
 }
 
 // With a route, step 1 is the current step: the card under the plan shows
@@ -1295,7 +1390,7 @@ function stepRow(s, i) {
 function showSteps() {
   const list = $("steps");
   list.replaceChildren();
-  selected = view.route && view.steps.length ? 0 : -1;
+  selected = view.route && walkCount() ? 0 : -1;
   view.steps.forEach((s, i) => {
     const li = document.createElement("li");
     if (s.kind === "walk") {
@@ -1330,49 +1425,79 @@ function showSteps() {
 // for the step before and after it. The plan lights the same step.
 function showNow() {
   const card = $("now-card");
-  const on = !!(state && view && view.route && state.start && view.steps.length && !state.photo_map);
+  const n = walkCount();
+  const on = !!(state && view && view.route && state.start && n && !state.photo_map);
   card.hidden = !on;
   if (!on) return;
-  const n = view.steps.length, i = Math.min(n - 1, Math.max(0, selected)), s = view.steps[i];
+  const i = Math.min(n - 1, Math.max(0, selected)), s = view.steps[i];
   const exit = view.route.exitIndex + 1;
   $("now-num").textContent = String(exit);
   $("now-head").textContent = `${t("exit_n", { n: exit })} · ${t("step_of", { i: i + 1, count: n })}`;
   const text = $("now-text");
-  text.replaceChildren(...stepRow(s, i));
-  text.classList.toggle("lit", selected >= 0 && s.kind === "walk");
+  text.replaceChildren(...stepRow(s, i, walkText(i)));
+  text.classList.toggle("lit", selected >= 0);
   // At either end the button keeps its place, so the card does not move.
+  // At the last walk the exit door takes the place of "Next".
   $("step-prev").classList.toggle("gone", i === 0);
-  $("step-next").classList.toggle("gone", i === n - 1);
+  $("step-next").hidden = i === n - 1;
+  $("now-end").hidden = i !== n - 1;
   for (const id of ["step-prev", "step-next", "now-speak"]) $(id).title = $(id).getAttribute("aria-label");
   $("now-speak").hidden = !canSpeak;
+  stickNow();
 }
 
 // The step before or after the current one. The new step goes to the live
-// line of the plan once; the focus stays on the button, or goes to the
-// other button when this one has nothing more to show.
+// line of the plan once. The focus stays on the button. At either end it goes
+// to the words of the step (a11y review): a held Enter then stops there, and
+// does not move on with the other button.
 function stepBy(d) {
-  if (!view || !view.steps.length) return;
-  const n = view.steps.length;
+  const n = walkCount();
+  if (!n) return;
   const i = Math.min(n - 1, Math.max(0, Math.max(0, selected) + d));
+  const mine = $(d < 0 ? "step-prev" : "step-next");
+  const had = document.activeElement === mine;
   select(i);
-  $("marker-status").textContent = t("step_said", { i: i + 1, count: n, text: stepText(view.steps[i]) });
-  const [mine, other] = d < 0 ? ["step-prev", "step-next"] : ["step-next", "step-prev"];
-  if (document.activeElement === $(mine) && $(mine).classList.contains("gone")) $(other).focus();
+  $("marker-status").textContent = t("step_said", { i: i + 1, count: n, text: walkText(i) });
+  if (had && (i === 0 || i === n - 1)) $("now-text").focus();
 }
 $("step-prev").addEventListener("click", () => stepBy(-1));
 $("step-next").addEventListener("click", () => stepBy(1));
 
-// After a tap, the card comes into view under the plan, so the plan and
-// the step show together. The top of the plan stays in view.
-function showNowInView() {
+// The card sticks to the foot of the screen only while it takes at most 40 %
+// of the screen (a11y review: at 200 % zoom it covered the plan), and not
+// while the plan has the keyboard focus: then the cross can be under it.
+function stickNow() {
   const card = $("now-card");
   if (card.hidden) return;
+  const keys = document.activeElement === canvas && canvas.matches(":focus-visible");
+  card.classList.toggle("loose", card.offsetHeight > window.innerHeight * 0.4 || keys);
+}
+window.addEventListener("resize", stickNow);
+
+// After a tap the plan and the current step come into view together. The
+// page scrolls only as far as it must, and it stops at an edge: the header,
+// the strip of stages and the view buttons show whole or not at all, and the
+// top of the plan stays in view. On a wide screen the steps are beside the
+// plan, so only the plan must be in view.
+function showNowInView() {
+  const card = $("now-card");
   const stage = $("stage").getBoundingClientRect();
   const bar = $("upload-bar");
   const room = window.innerHeight - (bar.classList.contains("float") ? bar.offsetHeight : 0);
+  const withCard = !card.hidden && getComputedStyle(card).display !== "none";
   // The card can stick to the foot of the screen: measure its own place under the plan.
-  const bottom = stage.bottom + parseFloat(getComputedStyle(card).marginTop) + card.offsetHeight;
-  const by = Math.min(bottom + 8 - room, stage.top);
+  const bottom = withCard ? stage.bottom + parseFloat(getComputedStyle(card).marginTop) + card.offsetHeight : stage.bottom;
+  const need = bottom + 8 - room;
+  if (need <= 4) return;
+  // The gaps between the parts above the plan, where the edge of the screen can stop.
+  const box = (el) => (el && !el.hidden && el.offsetHeight ? el.getBoundingClientRect() : null);
+  const parts = [box(document.querySelector("header.top")), box($("stages")), box(document.querySelector(".view"))].filter(Boolean);
+  const gaps = [];
+  let from = -Infinity;
+  for (const r of parts) { gaps.push([from, r.top]); from = r.bottom; }
+  gaps.push([from, stage.top]);
+  const fit = gaps.map(([a, b]) => (need <= b ? Math.max(a, need) : null)).find((v) => v !== null);
+  const by = Math.min(fit ?? stage.top, stage.top);
   if (by > 4) window.scrollBy({ top: by, behavior: smoothScroll() });
 }
 
@@ -1391,7 +1516,8 @@ function pathMiddle(path) {
 
 // Show one step on the plan. -1 shows none.
 function select(i) {
-  selected = i;
+  selected = Math.min(i, walkCount() - 1);
+  i = selected;
   $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
   if (photoOnly) setPhotoOnly(false);
   draw();
@@ -1408,16 +1534,26 @@ function select(i) {
 // Model labels are often all "Exit", so the number tells the exits apart.
 // In another language the label is its translation, once it has come (loadWords).
 function exitName(i) {
+  const label = exitLabel(i);
+  if (label) return t("exit_n_label", { n: i + 1, label });
   const l = (state.exits[i].label || "").trim();
-  if (!l || /^exit$/i.test(l)) return t("exit_n", { n: i + 1 });
+  const words = wordsIn(lang);
+  // A label that already has the number ("Exit 4") needs it only once.
+  return l && new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? (words && words.labels && words.labels[l]) || l : t("exit_n", { n: i + 1 });
+}
+
+// The label of exit i that its name shows after the number ("ВЫХОД" in
+// "Exit 4: ВЫХОД"), in the language when it has come; "" when the name is
+// only the number, or the label already has the number.
+function exitLabel(i) {
+  const l = (state.exits[i].label || "").trim();
+  if (!l || /^exit$/i.test(l)) return "";
   const words = wordsIn(lang);
   const shown = (words && words.labels && words.labels[l]) || l;
   // A label that only says "exit" in the language ("ВЫХОД" in Korean) is the plain name too.
   const bare = (s) => s.trim().toLocaleLowerCase();
-  if (shown !== l && [t("exit_word"), t("exit_n", { n: "" })].some((w) => bare(w) === bare(shown))) return t("exit_n", { n: i + 1 });
-  // A label that already has the number ("Exit 4") needs it only once. Else the
-  // number comes first, so it matches the mark on the plan.
-  return new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? shown : t("exit_n_label", { n: i + 1, label: shown });
+  if (shown !== l && [t("exit_word"), t("exit_n", { n: "" })].some((w) => bare(w) === bare(shown))) return "";
+  return new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? "" : shown;
 }
 
 // One button for each exit, in number order, so the route can go to another
@@ -1457,9 +1593,14 @@ function showExits() {
   });
 }
 
+// The name of an exit button. A button with a word ("4 Nearest") has the
+// visible words first and together, then the label: "Exit 4, Nearest: ВЫХОД"
+// (a11y review, WCAG 2.5.3).
 function nameExitButton(b, i) {
   const name = b.classList.contains("dead") ? t("exit_dead", { exit: exitName(i) }) : exitName(i);
-  b.title = b.dataset.tag ? t("exit_tagged", { exit: name, tag: t(`exit_tag_${b.dataset.tag}`) }) : name;
+  const tag = b.dataset.tag && t(`exit_tag_${b.dataset.tag}`);
+  const label = tag ? exitLabel(i) : "";
+  b.title = !tag ? name : label ? t("exit_n_tag_label", { n: i + 1, tag, label }) : t("exit_tagged", { exit: name, tag });
   b.setAttribute("aria-label", b.title);
 }
 
@@ -1480,8 +1621,16 @@ function chooseExit(i, from) {
   // A tap on the plan keeps the focus there; the card shows the new first step.
   if (from === "plan") { if (view.route) { startRouteDraw(); showNowInView(); } return; }
   if (!view.route) { $("exits").children[i].focus(); return; }
-  // On a phone, the plan with the new route comes into view; the steps take the focus.
-  if (narrow()) $("stage").scrollIntoView({ block: "start" });
+  // On a narrow screen the plan with the new route and the card of the step
+  // come into view, and "Next" in the card takes the focus: the step list is
+  // far below (a11y review). On a wide screen the steps are beside the plan.
+  if (narrow() && !$("now-card").hidden) {
+    ($("stages").hidden ? document.querySelector(".view") : $("stages")).scrollIntoView({ block: "start" });
+    showNowInView();
+    const next = $("step-next");
+    (next.hidden ? $("now-text") : next).focus({ preventScroll: true });
+    return;
+  }
   $("steps").focus({ preventScroll: narrow() });
 }
 
@@ -1644,7 +1793,17 @@ function explain(how = "tap") {
 // The second way out, as words for the status line.
 function otherWay() {
   if (!view || !view.backup) return "";
-  return t(photoOnly ? "backup_plain" : "backup", { exit: exitName(view.backup.exitIndex) });
+  return backupText();
+}
+
+// The words of the dashed second way. After the user chose an exit, the
+// dashed way can lead to the nearest exit: then it says so, as its exit
+// button does ("Nearest"), and not "if it is blocked" (judge review).
+function backupText() {
+  const i = view.backup.exitIndex;
+  const nearest = state.exitChoice >= 0 && view.near && view.near.main === i;
+  const key = (nearest ? "backup_nearest" : "backup") + (photoOnly ? "_plain" : "");
+  return t(key, { exit: exitName(i) });
 }
 
 // The second way out under the steps too, where the eyes are after a tap
@@ -1653,35 +1812,37 @@ function showBackup() {
   const b = view.backup;
   $("backup").hidden = !b || !view.route;
   if ($("backup").hidden) return;
-  $("backup-text").textContent = t(photoOnly ? "backup_plain" : "backup", { exit: exitName(b.exitIndex) });
+  $("backup-text").textContent = backupText();
   $("backup-go").textContent = t("route_to_n", { n: b.exitIndex + 1 });
 }
 
-// Photo only and Routes only change what is under the marks, so at most one is on.
-function setPhotoOnly(on) {
-  clearRefusal();
-  photoOnly = on;
-  if (on) routesOnly = false;
-  $("show-photo").setAttribute("aria-pressed", String(on));
-  $("show-routes").setAttribute("aria-pressed", String(routesOnly));
-  $("show-map").disabled = on;
-  $("show-map").setAttribute("aria-pressed", String(showMap && !on));
-  showLegend();
-  draw();
+// The three views are one choice (ux review): exactly one button is pressed.
+// The reading view (reading.js) is a fourth view: then none is pressed.
+const VIEW_BUTTONS = { map: "show-map", photo: "show-photo", routes: "show-routes" };
+function pressView() {
+  const off = typeof readingOn === "function" && readingOn();
+  for (const [mode, id] of Object.entries(VIEW_BUTTONS)) $(id).setAttribute("aria-pressed", String(!off && mode === viewMode));
 }
 
-$("show-map").addEventListener("click", () => {
+function setView(mode) {
   clearRefusal();
-  showMap = !showMap;
-  $("show-map").setAttribute("aria-pressed", String(showMap));
+  viewMode = mode;
+  if (mode !== "photo") marksMode = mode;
+  photoOnly = mode === "photo";
+  routesOnly = mode === "routes";
+  pressView();
   showLegend();
   draw();
-});
-$("show-photo").addEventListener("click", () => setPhotoOnly(!photoOnly));
-$("show-routes").addEventListener("click", () => {
-  routesOnly = !routesOnly;
-  setPhotoOnly(false);
-});
+  showStages();
+  if (view && view.backup) showBackup();
+}
+
+// A step, a tap or a mark needs the marks: Photo only goes back to the view before it.
+function setPhotoOnly(on) {
+  setView(on ? "photo" : marksMode);
+}
+
+for (const [mode, id] of Object.entries(VIEW_BUTTONS)) $(id).addEventListener("click", () => setView(mode));
 
 function startMarking() {
   clearRefusal();
@@ -1858,9 +2019,11 @@ function showPlan(answer, focusResult, push) {
     img = next;
     state = answer;
     // A photo map has no routes, so the controls for routes and walls go.
+    // Its views are the photo with the exit marks ("Escape map") and Photo only.
     const map = !!state.photo_map;
-    if (map) routesOnly = false;
-    $("show-map").hidden = $("show-routes").hidden = $("fix").hidden = $("legend-route").hidden = map;
+    if (map && viewMode === "routes") { viewMode = marksMode = "map"; routesOnly = false; }
+    pressView();
+    $("show-routes").hidden = $("fix").hidden = $("legend-route").hidden = map;
     hints();
     $("result").hidden = false;
     layout();
@@ -2264,28 +2427,12 @@ function quoted(title) {
 
 // Under the photo button: a few sample plans whose exits are right, for a
 // visitor with no plan at hand. Each one opens in one tap, like a gallery tile.
+// The row is in the page (index.html), so nothing moves when the gallery comes
+// (a11y review: layout shift). A plan that the gallery does not have goes.
+for (const b of $("try-list").querySelectorAll("button.sample")) b.addEventListener("click", () => openSample(b.dataset.id, true));
 function showTry(plans) {
-  const list = $("try-list");
-  const items = list.dataset.ids.split(",").map((id) => plans.find((p) => p.id === id)).filter(Boolean);
-  if (!items.length || SET) return;
-  list.replaceChildren(...items.map((p) => {
-    const li = document.createElement("li");
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "sample";
-    b.dataset.id = p.id;
-    const im = document.createElement("img");
-    im.src = p.thumb;
-    im.alt = "";
-    const cap = document.createElement("span");
-    cap.textContent = countryName(p.country);
-    b.append(im, cap);
-    b.setAttribute("aria-label", `${cap.textContent}, sample plan`);
-    b.addEventListener("click", () => openSample(p.id, true));
-    li.append(b);
-    return li;
-  }));
-  $("try").hidden = false;
+  for (const b of $("try-list").querySelectorAll("button.sample")) if (!plans.some((p) => p.id === b.dataset.id)) b.parentElement.remove();
+  if (!$("try-list").children.length || SET) $("try").hidden = true;
 }
 
 async function showGallery() {
@@ -2293,8 +2440,8 @@ async function showGallery() {
   try {
     const r = await fetch(`/api/gallery${SET}`);
     if (r.ok) plans = (await r.json()).plans;
-  } catch (e) { return; }
-  if (!plans.length) return;
+  } catch (e) { /* no gallery: the parts that show it go */ }
+  if (!plans.length) { $("try").hidden = $("nav-samples").hidden = true; return; }
   const grid = $("gallery");
   let shown = GALLERY_FIRST;
   const render = () => {
@@ -2371,6 +2518,10 @@ canvas.addEventListener("keydown", (ev) => {
               Math.min(fr[3] - inset, Math.max(fr[1] + inset, cursor[1] + move[1]))];
     draw();
     scrollToPoint(cursor);
+    // The cross stays in the window: on a short screen the plan is taller than it.
+    const cy = canvas.getBoundingClientRect().top + toCanvasCss(cursor)[1];
+    const pad = 40;
+    if (cy < pad || cy > window.innerHeight - pad) window.scrollBy({ top: cy < pad ? cy - pad : cy - window.innerHeight + pad });
     sayMarker();
   } else if (ev.key === "Enter" || ev.key === " ") {
     keyboard = true;
@@ -2392,6 +2543,7 @@ canvas.addEventListener("focus", () => {
     if (!cursor) cursor = startCursor();
     keyboard = true;
   }
+  stickNow();
   draw();
 });
 
@@ -2415,13 +2567,16 @@ function sayMarker() {
     $("marker-status").textContent = t(key, { at, exit: near >= 0 ? exitName(near) : "" });
   }, 400);
 }
-canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; draw(); });
+canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; stickNow(); draw(); });
 
 // In the larger plan, put the start in the middle, so the start of the route is in view.
 function centreOnStart() {
-  if (!state || !state.start) return;
+  if (state && state.start) centreOn(state.start);
+}
+
+function centreOn(p) {
   const st = $("stage");
-  const [x, y] = toCanvasCss(state.start);
+  const [x, y] = toCanvasCss(p);
   st.scrollLeft = x - st.clientWidth / 2;
   st.scrollTop = y - st.clientHeight / 2;
 }
@@ -2435,15 +2590,40 @@ function scrollToPoint(p) {
   if (y < st.scrollTop + 40 || y > st.scrollTop + st.clientHeight - 40) st.scrollTop = y - st.clientHeight / 2;
 }
 
+// The larger plan is at most 2.2 times as wide as the frame. With a route,
+// it is only as large as keeps the route, YOU and its exit in the view, and
+// the view is centred on them (ux review: on a phone the exit was cut off).
+const BIG_MAX = 2.2, BIG_MIN = 1.4;
+function bigZoom() {
+  const st = $("stage");
+  const r = state && state.start && view && view.route;
+  if (!r) return { zoom: BIG_MAX, box: null };
+  const e = state.exits[r.exitIndex];
+  const pts = [...r.points, state.start, [e.x, e.y]];
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const pad = frameUnit() * 8;  // room for the exit mark, YOU and its label
+  const box = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
+  const [x0, y0, x1, y1] = shownFrame();
+  const w = st.clientWidth, h = Math.min(window.innerHeight * 0.8, window.innerHeight - 60);
+  // At zoom k the canvas is k * w wide, so a plan unit is k * w / (x1 - x0) CSS pixels.
+  const perUnit = w / (x1 - x0);
+  const fit = Math.min(w / ((box[2] - box[0]) * perUnit), h / ((box[3] - box[1]) * perUnit));
+  return { zoom: Math.max(BIG_MIN, Math.min(BIG_MAX, fit)), box };
+}
+
 $("enlarge").addEventListener("click", () => {
-  const big = $("stage").classList.toggle("big");
+  const st = $("stage");
+  const z = st.classList.contains("big") ? null : bigZoom();
+  st.style.setProperty("--zoom", z ? `${Math.round(z.zoom * 100)}%` : "");
+  const big = st.classList.toggle("big");
   $("enlarge").setAttribute("aria-pressed", String(big));
   if (big) {
-    $("stage").tabIndex = 0;
-    centreOnStart();
-    $("stage").scrollIntoView({ block: "nearest" });
+    st.tabIndex = 0;
+    if (z.box) centreOn([(z.box[0] + z.box[2]) / 2, (z.box[1] + z.box[3]) / 2]);
+    else centreOnStart();
+    st.scrollIntoView({ block: "nearest" });
   } else {
-    $("stage").removeAttribute("tabindex");
+    st.removeAttribute("tabindex");
   }
 });
 
@@ -2475,7 +2655,7 @@ $("speak").addEventListener("click", () => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = tag;
     if (voice) u.voice = voice;
-    if (i > 0 && i <= view.steps.length) u.onstart = () => select(i - 1);
+    if (i > 0 && i <= walkCount()) u.onstart = () => select(i - 1);
     if (i === lines.length - 1) u.onend = stopSpeaking;
     speechSynthesis.speak(u);
   });
@@ -2485,11 +2665,11 @@ $("speak").addEventListener("click", () => {
 
 // The speaker in the card reads the current step only.
 $("now-speak").addEventListener("click", () => {
-  if (!canSpeak || !view || !view.steps.length) return;
+  if (!canSpeak || !view || !walkCount()) return;
   stopSpeaking();
   const tag = I.SPEECH[lang] || lang;
   const voice = voiceFor(tag);
-  const u = new SpeechSynthesisUtterance(stepText(view.steps[Math.min(view.steps.length - 1, Math.max(0, selected))]));
+  const u = new SpeechSynthesisUtterance(walkText(Math.min(walkCount() - 1, Math.max(0, selected))));
   u.lang = tag;
   if (voice) u.voice = voice;
   speechSynthesis.speak(u);
