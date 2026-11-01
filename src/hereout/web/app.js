@@ -26,7 +26,8 @@ $("shoot").hidden = $("new-photo").hidden = false;  // without JS the photo butt
 const PHOTOS = [$("photo"), $("photo-2")];
 // Below this width the answer is under the plan, so an answer can scroll the plan away.
 const narrow = () => matchMedia("(max-width: 959px)").matches;
-// "?set=review" opens the review set: plans read with code under test.
+// "?set=review" opens the review set: plans read with code under test. Only a
+// local server with HEREOUT_REVIEW=1 has it; elsewhere the gallery stays empty.
 const SET = new URLSearchParams(location.search).get("set") === "review" ? "?set=review" : "";
 const STORE_KEY = `hereout:last${SET}`;  // the review set keeps its own last plan
 const PHOTO_KEY = "hereout:photo";  // the plan of the last photo, so Back after a sample finds it

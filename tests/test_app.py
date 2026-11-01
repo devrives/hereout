@@ -180,23 +180,48 @@ def test_saved_answer_with_its_image(tmp_path):
 
 def test_review_pages(tmp_path):
     gallery = make_gallery(tmp_path)
-    assert TestClient(create_app(None, use_env=False, gallery=gallery)).get("/review/x/").status_code == 404
+    assert TestClient(create_app(None, use_env=False, gallery=gallery, review=True)).get("/review/x/").status_code == 404
     (tmp_path / "review" / "x").mkdir(parents=True)
     (tmp_path / "review" / "x" / "index.html").write_text("<p>ok</p>")
-    client = TestClient(create_app(None, use_env=False, gallery=gallery))
+    client = TestClient(create_app(None, use_env=False, gallery=gallery, review=True))
     assert client.get("/review/x/").text == "<p>ok</p>"
 
 
-def test_review_set(tmp_path):
+def make_review_set(tmp_path):
     main = make_gallery(tmp_path)
     (tmp_path / "review" / "gallery").mkdir(parents=True)
     make_gallery(tmp_path / "review" / "gallery")
-    client = TestClient(create_app(None, use_env=False, gallery=main))
+    (tmp_path / "review" / "x").mkdir()
+    (tmp_path / "review" / "x" / "index.html").write_text("<p>ok</p>")
+    return main
+
+
+def test_review_set(tmp_path):
+    client = TestClient(create_app(None, use_env=False, gallery=make_review_set(tmp_path), review=True))
     plans = client.get("/api/gallery?set=review").json()["plans"]
     assert plans[0]["thumb"] == "/review/gallery/thumbs/XX-test_1.jpg"
     assert client.get(plans[0]["thumb"]).status_code == 200
     assert client.post("/api/gallery/XX-test_1?set=review").json()["id"] == "g-XX-test_1"
     assert client.get("/api/gallery").json()["plans"][0]["thumb"] == "/gallery/thumbs/XX-test_1.jpg"
+
+
+def test_review_is_off_by_default(tmp_path, monkeypatch):
+    """The test pages are not public: without HEREOUT_REVIEW=1 they give 404."""
+    monkeypatch.delenv("HEREOUT_REVIEW", raising=False)
+    client = TestClient(create_app(None, use_env=False, gallery=make_review_set(tmp_path)))
+    assert client.get("/review/x/").status_code == 404
+    assert client.get("/review/gallery/thumbs/XX-test_1.jpg").status_code == 404
+    assert client.get("/api/gallery?set=review").status_code == 404
+    assert client.post("/api/gallery/XX-test_1?set=review").status_code == 404
+    # The public gallery stays.
+    assert client.get("/api/gallery").json()["plans"][0]["id"] == "XX-test_1"
+    assert client.post("/api/gallery/XX-test_1").json()["id"] == "g-XX-test_1"
+
+
+def test_production_compose_keeps_review_off():
+    from pathlib import Path
+    compose = (Path(__file__).parent.parent / "docker-compose.yml").read_text()
+    assert 'HEREOUT_REVIEW: "0"' in compose
 
 
 def test_gallery_unknown_and_absent(tmp_path):
