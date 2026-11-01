@@ -56,15 +56,20 @@ def static_digest(name: str) -> str:
     return hashlib.sha256((WEB / name).read_bytes()).hexdigest()[:10]
 
 
-def index_html() -> str:
-    """index.html with a content hash on each /static/ file.
+def page_html(name: str) -> str:
+    """A page of web/ with a content hash on each /static/ file.
 
     The edge and the browsers keep a file with its hash for a year. A new hash
     makes them load the new file, so a page never runs with an old script.
     """
     def versioned(m: re.Match) -> str:
         return f'{m.group(1)}/static/{m.group(2)}?v={static_digest(m.group(2))}"'
-    page = re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / "index.html").read_text())
+    return re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / name).read_text())
+
+
+def index_html() -> str:
+    """index.html with its /static/ hashes and the hash of the plan card catalogues."""
+    page = page_html("index.html")
     # The catalogues of the plan card (web/i18n/), loaded by the page with this hash.
     h = hashlib.sha256()
     for p in sorted((WEB / "i18n").glob("*.json")):
@@ -91,24 +96,71 @@ def credit_html(c: dict, changes: list[str]) -> str:
     return out
 
 
-def example_page(page: str, gallery: Gallery | None) -> str:
-    """The start page with its example: the photo of one sample plan under the
-    marks that HereOut drew on it (web/example-marks.webp, scripts/example_marks.mjs).
-    The example goes while the gallery has no saved image of that plan for the
-    current code (scripts/save_answers.py): a hidden image would still load."""
+def video_url(folder: Path, name: str) -> str:
+    """The URL of a file in the video folder. A new file gets a new URL at the edge."""
+    st = (folder / name).stat()
+    return f"/video/{name}?v={st.st_size:x}{int(st.st_mtime):x}"
+
+
+# The changes to a sample photo in the hero loop and the demo video.
+RECORDED = ["cropped", "dimmed", "marks, ways out and route drawn on top", "shown in a recording of the HereOut page"]
+LOOP_TOGGLE = ('<button id="loop-toggle" class="loop-toggle" type="button" aria-label="Pause the animation">'
+               '<svg class="ico i-pause" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 5v14"/><path d="M15 5v14"/></svg>'
+               '<svg class="ico i-play" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>\n')
+EXAMPLE_PIC = re.compile(r'<span class="example-pic".*?</span>\n', re.S)
+LOOP = "hero-loop.mp4"  # with hero-loop.webm (optional) and hero-loop.webp (the poster)
+
+
+def loop_html(folder: Path) -> str:
+    """The phone of the hero: a short silent loop of the page in use, recorded
+    from the real page by the hub script docs/.../hero_loop.mjs. app.js starts
+    it only on screen, and never with reduced motion."""
+    poster = f' poster="{video_url(folder, "hero-loop.webp")}"' if (folder / "hero-loop.webp").is_file() else ""
+    webm = f'<source src="{video_url(folder, "hero-loop.webm")}" type="video/webm">' if (folder / "hero-loop.webm").is_file() else ""
+    return (f'<span class="loop-phone"><video id="hero-loop" class="loop" muted loop playsinline preload="metadata" '
+            f'width="600" height="1200"{poster} aria-hidden="true">{webm}'
+            f'<source src="{video_url(folder, LOOP)}" type="video/mp4"></video></span>\n')
+
+
+def example_page(page: str, gallery: Gallery | None, folder: Path | None = None) -> str:
+    """The start page with its example: one sample plan. With the loop in the
+    video folder (HEREOUT_VIDEO), a phone plays the page in use with that plan.
+    Else the photo of the plan under the marks that HereOut drew on it
+    (web/example-marks.webp, scripts/example_marks.mjs), while the gallery has
+    a saved image of that plan for the current code (scripts/save_answers.py):
+    a hidden image would still load. Without either, the example goes."""
     m = re.search(EXAMPLE_TAG + r'[^>]* data-sample="([\w-]+)"', page)
-    url = gallery.saved_image_url(m[1]) if m and gallery else None
+    item = gallery.items.get(m[1]) if m and gallery else None
+    if item and folder and (folder / LOOP).is_file():
+        credit = credit_html(item["credit"], RECORDED)
+        return (EXAMPLE_PIC.sub(lambda _: loop_html(folder), page, count=1)
+                .replace(EXAMPLE_TAG, EXAMPLE_TAG.replace('hero" hidden', 'hero has-loop"'), 1)
+                .replace(EXAMPLE_CREDIT, LOOP_TOGGLE + "    " + EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))
+    url = gallery.saved_image_url(m[1]) if item else None
     if not url:
         return re.sub(EXAMPLE_TAG + r".*?</figure>\n?", "", page, count=1, flags=re.S)
-    credit = credit_html(gallery.items[m[1]]["credit"], ["cropped", "dimmed", "marks, ways out and route drawn on top"])
+    credit = credit_html(item["credit"], ["cropped", "dimmed", "marks, ways out and route drawn on top"])
     return (page.replace(f'src="{EXAMPLE_PHOTO}"', f'src="{html.escape(url)}"', 1)
                 .replace(EXAMPLE_TAG, EXAMPLE_TAG.removesuffix(" hidden"), 1)
                 .replace(EXAMPLE_CREDIT, EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))
 
 
+CREDITS_LIST = '<ol id="credits" class="credit-list" role="list"></ol>'
+
+
+def credits_page(page: str, gallery: Gallery) -> str:
+    """The page of photo credits (web/credits.html): one entry for each sample
+    plan, in the order of the gallery, with the sample id as its anchor."""
+    rows = "".join(f'\n    <li id="{html.escape(p["id"])}"><a href="/?sample={html.escape(p["id"])}">Sample plan {n}</a> '
+                   f'{credit_html(p["credit"], [])}</li>'
+                   for n, p in enumerate(gallery.listing(), 1))
+    return page.replace(CREDITS_LIST, CREDITS_LIST.replace("></", f">{rows}\n  </"), 1)
+
+
 DEMO_TAG = '<section id="demo" class="demo" hidden'
 DEMO_LINK = '<p id="demo-link"'
-DEMO_CREDITS = '<ul id="demo-credits"></ul>'
+DEMO_CREDITS = '<span id="demo-credits"></span>'
+NAV_DEMO = '<a id="nav-demo"'
 
 
 def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
@@ -120,15 +172,12 @@ def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
     if not (m and folder and (folder / "demo.mp4").is_file() and gallery
             and all(i in gallery.items for i in ids)):
         page = re.sub(DEMO_LINK + r".*?</p>\n?", "", page, count=1, flags=re.S)
+        page = re.sub(r"\s*" + NAV_DEMO + r".*?</a>", "", page, count=1, flags=re.S)
         return re.sub(DEMO_TAG + r".*?</section>\n?", "", page, count=1, flags=re.S)
 
-    def url(name: str) -> str:  # a new file gets a new URL at the edge
-        st = (folder / name).stat()
-        return f"/video/{name}?v={st.st_size:x}{int(st.st_mtime):x}"
-    poster = f' poster="{url("demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
-    credits = "".join(f"<li>{credit_html(gallery.items[i]['credit'], ['cropped', 'dimmed', 'marks, ways out and route drawn on top', 'shown in a recording of the HereOut page'])}</li>"
-                      for i in ids)
-    return (page.replace('src="/video/demo.mp4"', f'src="{url("demo.mp4")}"{poster}', 1)
+    poster = f' poster="{video_url(folder, "demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
+    credits = " ".join(credit_html(gallery.items[i]["credit"], RECORDED) for i in ids)
+    return (page.replace('src="/video/demo.mp4"', f'src="{video_url(folder, "demo.mp4")}"{poster}', 1)
                 .replace(DEMO_TAG, DEMO_TAG.removesuffix(" hidden"), 1)
                 .replace(DEMO_CREDITS, DEMO_CREDITS.replace("></", f">{credits}</"), 1))
 
@@ -270,10 +319,17 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
     # One translation call at a time for each text and language; a second request waits for the first.
     text_locks = [threading.Lock() for _ in range(16)]
     page = index_html()
+    credits = page_html("credits.html")
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return HTMLResponse(demo_page(example_page(page, gallery), video, gallery))
+        return HTMLResponse(demo_page(example_page(page, gallery, video), video, gallery))
+
+    @app.api_route("/credits", methods=["GET", "HEAD"])
+    def credits_list():
+        if not gallery:
+            raise HTTPException(404, "not found")
+        return HTMLResponse(credits_page(credits, gallery))
 
     @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)
     def robots():

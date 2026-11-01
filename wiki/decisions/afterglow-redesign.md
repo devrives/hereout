@@ -39,3 +39,4 @@ sources:
 - The stage strip is a row of four states. `DESIGN.md` records it as a gap from the house rules.
 - `scripts/example_marks.mjs` crops in photo pixels of the frame and turns off motion.
 - On RU-commons_000164 some ways out run below the building, into the legend panel. The floor box of the model holds that area. This did not change.
+- On 2026-11-01 a phone loop of the page took the place of the still example in the hero. The still example stays as the fallback ([start-page-loop](start-page-loop.md)).

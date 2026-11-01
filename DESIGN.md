@@ -108,6 +108,8 @@ rounded:
   exit: 12px
   sample: 14px
   card: 22px
+  phone-screen: 35px
+  phone: 42px
   pill: 999px
 spacing:
   # style.css has no space properties: these are the values the rules use.
@@ -123,6 +125,7 @@ spacing:
   gutter-wide: 48px
   page-max: 1200px
   answer-col: 390px
+  phone-width: 280px
   tap: 44px
   button: 48px
   shoot: 60px
@@ -198,6 +201,24 @@ components:
   button-step-lit:
     backgroundColor: "{colors.raise}"
     textColor: "#ffffff"
+  nav-link:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.muted}"
+    typography: "{typography.label}"
+    rounded: "{rounded.pill}"
+    height: 44px
+    padding: 0 10px
+  loop-phone:
+    backgroundColor: "#020604"
+    rounded: "{rounded.phone}"
+    width: 280px
+    padding: 7px
+  loop-toggle:
+    backgroundColor: "{colors.bg}"
+    textColor: "{colors.fg}"
+    rounded: "{rounded.pill}"
+    height: 44px
+    width: 44px
 ---
 <!-- design-md: tokens=src/hereout/web/style.css -->
 
@@ -213,7 +234,9 @@ One page (`src/hereout/web/index.html`), English on the start page, with a plan 
 
 The concept is a dark corridor in an emergency: the paper plan is dimmed, and the ways out glow like the green lines of emergency lighting. The reference is photoluminescent egress marking and dark product interfaces (Linear). The owner picked this direction from three (sign, afterglow, transit) on 2026-11-01.
 
-The page has two modes. The start page shows the heading, the photo button, a hero plan (a sample, dimmed, with its ways out and a route), the four parts of the work, the samples and the demo video. With a plan open (class `has-plan` on `html`), the start text goes, the header gets a "New photo" button, and the plan stands beside its answer.
+The page has two modes. The start page shows the heading, the photo button, three sample plans under it, a hero phone that plays the page in use (a loop of one sample plan), a row of counts, the four parts of the work, the samples and the demo video. The header links to the parts of the page and to the code. With a plan open (class `has-plan` on `html`), the start text goes, the header gets a "New photo" button, and the plan stands beside its answer.
+
+The photo credits of the samples are on their own page, `/credits` (`web/credits.html`), one entry for each sample with the sample id as its anchor. The start page has no footer (owner, 2026-11-01).
 
 A plan opens in the order of the work (owner, 2026-11-01): the exits one by one, then every way out, then the tap, then the route. The strip "Exits, Ways out, You, Route" above the plan lights the part that shows now.
 
@@ -237,7 +260,8 @@ A plan opens in the order of the work (owner, 2026-11-01): the exits one by one,
 ## Layout
 
 - One column on a phone, with a `gutter` of 16 px and the page width up to `page-max` (1200 px).
-- At 960 px and wider, the gutter is 48 px. The start page has the text at the left and the hero plan at the right. The four parts, the samples (6 columns) and the demo video are full width under them. With a plan open, the plan is at the left and the answer column (390 px) is at the right.
+- The header stays at the top of the start page (sticky, `bg` at 88 % with a blur and a `line` border). With a plan open it scrolls away, so the plan has the height of the screen.
+- At 960 px and wider, the gutter is 48 px. The start page has the text at the left and the hero phone at the right. The phone fits the screen height (`--pw`, 230 to 300 px wide). The four parts, the samples (6 columns) and the demo video are full width under them. With a plan open, the plan is at the left and the answer column (390 px) is at the right.
 - On a phone the answer card comes first in the answer column, so the steps stay near the plan. The plan frame uses the full width of the screen under 600 px.
 - While a plan reads or waits to open, the upload bar stays fixed at the foot of the screen. The body gets the same room (`--bar-room`, set by `app.js`).
 - A touch target is at least `tap` (44 px). Buttons are 48 px high, the start photo button 60 px.
@@ -260,7 +284,11 @@ Round ends for every button, the view control and the language select (`pill`). 
 
 All in `style.css` and `index.html`.
 
+- Header links (`nav-link`): How it works, Samples, Demo and Code, each with an icon, in `muted`. They are links, not buttons: the one primary action stays in the hero. Narrow screens keep fewer links: under 720 px no "How it works", under 480 px no "Demo", under 360 px only "Code". With a plan open, only Samples and Code stay, and under 480 px only the "New photo" button.
 - Photo buttons (`button-primary`, `button-new-photo`): a file input behind a label. They show only with JS.
+- Sample row: under the photo button, "Or open a sample plan" and three sample thumbnails (`data-ids` in `index.html`, plans whose exits are right). One tap opens the plan, as in the gallery.
+- Hero phone (`loop-phone`): a phone frame with a muted loop of the page at 390 px (`hero-loop.mp4` and `.webm` in the video folder, made by the hub script `docs/hackathon-hereout-submission-2026-10-31/hero_loop.mjs`). The phone is the link that opens the same plan. The server shows it only when the file is there, else the still example picture. The loop plays only on the screen. With reduced motion it shows the poster. The round button on the foot of the screen (`loop-toggle`) pauses and plays it (WCAG 2.2.2). The credit line of the photo is under it.
+- Count row: plans, countries and regions, languages, in Geist Mono `fg` with `muted` words, divided by `line`. It is one link to the samples. The counts come from the gallery and the language list.
 - `button-secondary` is every other button: `card` ground, a `line` border.
 - The stage strip (`stage-chip`): four labels above the plan. Done parts have a green dot, the part that shows now is green with a green border (`stage-chip-now`).
 - The view control (`seg`, `seg-item`): "Escape map", "Photo only", "Routes only", with `aria-pressed`. Beside it, the larger-plan button.
@@ -268,7 +296,8 @@ All in `style.css` and `index.html`.
 - The legend: one line for each mark, with a swatch on the dark ground of the plan.
 - The answer card (`card`): the exit badge and name, the steps as rows with a number circle (`button-step`, `button-step-lit`), the backup route, and the actions "Read the steps aloud" and "Mark the exit".
 - The exit buttons (`button-exit`): the number only, as the mark on the plan. The full name is in the label. An exit with no way from the start is dashed (`button-exit-dead`).
-- The samples: a grid of photos with the country under each one in Geist Mono. Under the first rows, one faded row and a round chevron button open the rest.
+- The samples: a grid of photos with the country under each one in Geist Mono. Under the first rows, one faded row and a round chevron button open the rest. A "Photo credits" link beside the heading opens `/credits`.
+- Disclosures: the start page has one, the text of the video, right under the video. The credit of the photo in the video is in the caption line under the video.
 - Icons: inline outline SVG, 24 viewBox, stroke 1.8, 20 px, `currentColor`.
 
 ## Do's and Don'ts
@@ -296,12 +325,13 @@ Widths: 390 and 1280. Without JS, the start page shows one line that says HereOu
 
 | Screen | Route | States |
 |---|---|---|
-| Start | `/` | first visit, no JS |
+| Start | `/` | first visit, the loop playing, the loop paused, reduced motion (poster), no loop file (still example), no JS |
+| Photo credits | `/credits` | the list, one entry as the target (`/credits#<id>`) |
 | Samples | `/` (under the four parts) | the first rows and the faded row, all, credits open |
 | Photo reading | `/` after a photo | reading (wait notes), ready to open, could not read, offline, a reload during the upload |
 | Plan | `/?sample=<id>`, or a photo plan | the reveal (exits, ways out), waiting for the tap, a route draws in, a tap off the floor, a chosen exit, a backup route, an exit with no way (dashed), a marked exit, larger plan, Photo only, Routes only |
 | Plan language | `?lang=<tag>` | English, one of 12 more, Arabic (right to left), the plan words loading, no translation |
 | Reading | `/?sample=<id>`, the reading card | the reading on the plan, the second look, the dialog of one sheet |
-| Demo video | `/#demo` | the video, the transcript open |
+| Demo video | `/#demo` | the video with its caption line, the transcript open |
 
 Key screens: Start, Plan (the reveal and a route to the nearest exit), Plan language (Arabic).
