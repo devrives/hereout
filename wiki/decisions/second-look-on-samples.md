@@ -36,3 +36,4 @@ sources:
 - Two runs on one plan gave different answers (SE-commons_000314).
 - The saved readings hold exits after the legend and building fixes. Thus the gate on a sample starts from those exits, not from the raw model points.
 - Dry run on the gallery: 142 of 203 plans have suspect exits, 389 exits on 175 sheets.
+- Later (2026-11-02), a point past the 7 % limit is used when it is on a route mark inside the floor box. See [Judge review 3](judge-round-3.md).

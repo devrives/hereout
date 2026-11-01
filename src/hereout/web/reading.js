@@ -91,7 +91,7 @@ function lookResult(row) {
   if (row.zoom === "dropped") return ["Dropped", "no exit in this crop"];
   if (row.zoom === "moved") return zoomMoved(row) ? ["Moved", "the model pointed to a new spot"] : ["Kept", "the model pointed to the same spot"];
   switch (row.why) {
-    case "too far": return ["Kept", "the model pointed more than 7% of the plan away, so HereOut did not use that point"];
+    case "too far": return ["Kept", "the model pointed more than 7% of the plan away, and not at a route mark inside the floor box, so HereOut did not use that point"];
     case "off the crop": return ["Kept", "the model pointed outside this crop, so HereOut did not use that point"];
     case "last exit": return ["Kept", "the model saw no exit, but one exit must stay"];
     default: return ["No answer", "the first point stays"];

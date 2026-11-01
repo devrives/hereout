@@ -371,3 +371,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/demo-video.md`: the owner request, the motion graphic and the check of the route.
 - Source: the owner words of 2026-11-01 and the fact-check of the first render.
+
+## [2026-11-02] ingest | Judge review 3
+
+- Added `decisions/judge-round-3.md`: far zoom points, wall lines off the building, staircase walks, and why item 2 did not ship.
+- Updated `decisions/second-look-on-samples.md` and `index.md`.
+- Source: the third judge report, the agent branches judge3-exits and judge3-polish, the dev scores and the tests.
