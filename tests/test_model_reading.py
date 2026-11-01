@@ -10,7 +10,7 @@ def test_saved_reading_has_no_zoom_record():
     r = Reading([{"x": 10.4, "y": 20.6, "label": "ВЫХОД"}], plan_box=(1.2, 2, 300, 400))
     out = model_reading(r)
     assert out == {"box": [1, 2, 300, 400], "zoom": None,
-                   "exits": [{"label": "ВЫХОД", "at": [10, 21], "exit": 0}]}
+                   "exits": [{"label": "ВЫХОД", "at": [10, 21], "exit": 0}], "sheets": []}
 
 
 def test_zoom_and_code_results_line_up_with_the_exits():

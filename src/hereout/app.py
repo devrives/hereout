@@ -315,6 +315,9 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         # The plan images of the saved answers: their names carry the key of the answer.
         if (gallery.folder / "answers").is_dir():
             app.mount("/gallery/answers", LongCache(directory=gallery.folder / "answers"), name="answers")
+        # The sheets of numbered crops that the zoom check sent (scripts/zoom_saved.py).
+        # A new sheet gets a new name, so the edge and the browsers keep them.
+        app.mount("/gallery/zoom", LongCache(directory=gallery.folder / "zoom", check_dir=False), name="zoom")
         # Review pages for the owner, written outside the repository by test scripts.
         # robots.txt keeps them out of search.
         if (gallery.folder / "review").is_dir():

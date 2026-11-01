@@ -81,6 +81,14 @@ ZOOM_TIMEOUT = 25.0
 CALL_TIMEOUT = 45.0
 MAIN_TRIES = 2  # a timeout or a 5xx answer gets one more try
 
+# Why the zoom check left a checked exit where it was (Reading.trace "why").
+ZOOM_WHY = {
+    "no answer": "the answer had no usable entry for the crop",
+    "off the crop": "the point was outside its crop, or on another sheet",
+    "too far": "the move was larger than ZOOM_MAX_MOVE",
+    "last exit": "the model saw no exit in any crop, and one exit must stay",
+}
+
 ZOOM_PROMPT = """Image 1 is a photo of a posted evacuation plan (fire escape plan). The other images are sheets of zoomed parts of image 1, up to four on each sheet, each with its number in a black box. Each zoomed part is centred on a proposed final exit, marked with a small magenta cross.
 A final exit is the end of an escape route on this floor: a door in the outer wall of the building, or the door of a protected staircase. Escape arrows end there. When an exit sign stands at that door, the sign marks it. A final exit is never on the street, the pavement, the paper outside the building or the legend, and never in the middle of an arrow or a corridor.
 For each zoomed part, point to the final exit nearest to the cross: just inside the door, or the exit sign at that door. Use image 1 to see where the building and the legend are. If no final exit is in that zoomed part, give null.
@@ -195,9 +203,15 @@ class Reading:
     plan_box: tuple[float, float, float, float] | None = None  # image pixels
     # What the model gave, for the page: each exit of the main call with the
     # result of the zoom check on it ("moved" with "to", "dropped" or
-    # "unchanged"; no "zoom" key when it was not checked). None for a saved reading.
+    # "unchanged"; no "zoom" key when it was not checked), the number of its
+    # crop ("crop"), for "unchanged" why ("why", ZOOM_WHY), and the point of
+    # the model as a share of its sheet ("seen"). None for a
+    # saved reading with no second look.
     trace: list[dict] | None = None
     zoom: str | None = None  # the zoom check: "done", "none" (no suspect), "skipped", "failed" or "off"
+    # The sheets of numbered crops that the zoom call sent, as BGR images (a
+    # new photo), or the URLs of their saved files (a gallery plan).
+    sheets: list = field(default_factory=list)
     # Set by Plan.use_reading: the exits as the code got them, and what the
     # code did with each ({"at": (x, y)} or {"drop": "legend" | "off"}).
     given: list[dict] | None = None
@@ -332,11 +346,19 @@ class ModelClient:
         if not refine or took > ZOOM_SKIP_AFTER:
             reading.zoom = "off" if not refine else "skipped"
             return reading
+        return self.second_look(img, reading)
+
+    def second_look(self, img: np.ndarray, reading: Reading) -> Reading:
+        """The zoom check on the exits of a main reading: a call only when an
+        exit is suspect. Sets the exits, trace, zoom, sheets and cost of the
+        reading. scripts/zoom_saved.py runs it on the saved gallery readings."""
+        reading.trace = [dict(e) for e in reading.exits]
+        reading.sheets = []
         suspects = suspect_exits(img, reading.exits)
         reading.zoom = "done" if suspects else "none"
         if suspects:
             try:
-                reading.exits, extra, checked = self.zoom_exits(img, reading.exits, suspects)
+                reading.exits, extra, checked, reading.sheets = self.zoom_exits(img, reading.exits, suspects)
                 reading.cost_usd += extra
                 for i, result in checked.items():
                     reading.trace[i].update(result)
@@ -344,10 +366,14 @@ class ModelClient:
                 reading.zoom = "failed"
         return reading
 
-    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]) -> tuple[list[dict], float, dict]:
+    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]
+                   ) -> tuple[list[dict], float, dict, list[np.ndarray]]:
         """Look again at crops around the suspect exits. Returns the exits after
-        the look, its cost, and for each suspect what the look did:
-        {"zoom": "moved", "to": (x, y)}, {"zoom": "dropped"} or {"zoom": "unchanged"}."""
+        the look, its cost, for each suspect what the look did, and the sheets
+        that the call sent. Each result has the number of its crop ("crop"):
+        {"zoom": "moved", "to": (x, y)}, {"zoom": "dropped"} or
+        {"zoom": "unchanged", "why": <ZOOM_WHY key>}. A point of the model
+        inside its crop is also "seen": (x, y) as a share of its sheet."""
         h, w = img.shape[:2]
         side = max(160, round(ZOOM_CROP * max(h, w)))
         crops = []
@@ -368,7 +394,7 @@ class ModelClient:
             answers = {}
         out = [dict(e) for e in exits]
         drop = set()
-        checked = {i: {"zoom": "unchanged"} for i in suspects}
+        checked = {i: {"zoom": "unchanged", "why": "no answer", "crop": n} for n, i in enumerate(suspects, 1)}
         for n, (i, (c, x0, y0), (sheet, tx, ty, tw, th)) in enumerate(zip(suspects, crops, where), 1):
             a = answers.get(n)
             if not isinstance(a, dict):
@@ -379,20 +405,26 @@ class ModelClient:
                 continue
             try:
                 if int(a.get("sheet", sheet + 2)) != sheet + 2:
+                    checked[i]["why"] = "off the crop"
                     continue
                 H, W = sheets[sheet].shape[:2]
                 sx, sy = on_grid(a["x"]) / 1000 * W - tx, on_grid(a["y"]) / 1000 * H - ty
             except (TypeError, ValueError):
                 continue
             if not (-5 <= sx <= tw + 5 and -5 <= sy <= th + 5):
+                checked[i]["why"] = "off the crop"
                 continue
+            # Where the model pointed, as a share of the sheet, so the page can show it on the sheet.
+            seen = (round((tx + sx) / W, 4), round((ty + sy) / H, 4))
             ch, cw = c.shape[:2]
             x, y = x0 + sx / tw * cw, y0 + sy / th * ch
             if np.hypot(x - exits[i]["x"], y - exits[i]["y"]) <= ZOOM_MAX_MOVE * max(h, w):
                 out[i]["x"], out[i]["y"] = x, y
-                checked[i] = {"zoom": "moved", "to": (x, y)}
+                checked[i] = {"zoom": "moved", "to": (x, y), "crop": n, "seen": seen}
+            else:
+                checked[i].update(why="too far", seen=seen)
         kept = [e for i, e in enumerate(out) if i not in drop]
-        if kept:
-            for i in drop:
-                checked[i] = {"zoom": "dropped"}
-        return (kept or out), cost, checked
+        for i in drop:
+            checked[i] = {"zoom": "dropped", "crop": checked[i]["crop"]} if kept else \
+                {"zoom": "unchanged", "why": "last exit", "crop": checked[i]["crop"]}
+        return (kept or out), cost, checked, sheets

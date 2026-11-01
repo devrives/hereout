@@ -117,6 +117,25 @@ def image_data_url(img: np.ndarray) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
 
 
+SHEET_WEBP_QUALITY = 80  # the numbers and the magenta crosses stay sharp
+
+
+def sheet_webp(sheet: np.ndarray) -> bytes:
+    """A zoom sheet as the page shows it: the image that the model saw, as WebP."""
+    ok, buf = cv2.imencode(".webp", sheet, [cv2.IMWRITE_WEBP_QUALITY, SHEET_WEBP_QUALITY])
+    if not ok:
+        raise ValueError("could not encode the zoom sheet")
+    return buf.tobytes()
+
+
+def sheet_urls(reading: Reading) -> list[str]:
+    """The zoom sheets for the page. A new photo: data URLs, so the sheets
+    stay in the job answer in memory and nothing goes to disk. A gallery
+    plan: the URLs of the saved files (scripts/zoom_saved.py)."""
+    return [s if isinstance(s, str) else "data:image/webp;base64," + base64.b64encode(sheet_webp(s)).decode()
+            for s in reading.sheets]
+
+
 def answer(pid: str | None, plan: Plan, reading: Reading | None, err: str | None) -> dict:
     """The response for a new plan: the flat image, the marks, the wall grid and the wall lines."""
     h, w = plan.image.shape[:2]
@@ -134,10 +153,14 @@ MOVED_PX = 1.0  # a smaller change of a point is rounding, not a move
 
 def model_reading(reading: Reading) -> dict:
     """What the model gave and what came of it, for the page. For each exit of
-    the model: its label and point, the zoom check on it ("zoom", "zoom_at"),
+    the model: its label and point, the zoom check on it ("zoom", "zoom_at",
+    the number of its crop "crop", when the check left the point "why", and
+    where the model pointed on the sheet "seen", as shares of its width and height),
     and then either the number of the exit in "exits" ("exit", with
     "placed_at" when the code moved it) or why the code dropped it ("drop").
-    "zoom" of the whole reading is None for a saved reading: no record of the check."""
+    "sheets": the URLs of the sheets of numbered crops that the zoom call
+    sent; crop n is on sheet (n - 1) // ZOOM_PER_SHEET.
+    "zoom" of the whole reading is None for a saved reading with no record of the check."""
     given = reading.given if reading.given is not None else reading.exits
     code = reading.code if reading.code is not None else [{"at": (e["x"], e["y"])} for e in given]
     trace = reading.trace if reading.trace is not None else [dict(e) for e in given]
@@ -147,6 +170,9 @@ def model_reading(reading: Reading) -> dict:
         row = {"label": str(t.get("label", "")), "at": pt((t["x"], t["y"]))}
         if t.get("zoom"):
             row["zoom"] = t["zoom"]
+            for k in ("crop", "why", "seen"):
+                if t.get(k) is not None:
+                    row[k] = list(t[k]) if k == "seen" else t[k]
         last = (t["x"], t["y"])
         if t.get("zoom") == "moved":
             last = t["to"]
@@ -163,7 +189,7 @@ def model_reading(reading: Reading) -> dict:
                     row["placed_at"] = pt(c["at"])
         rows.append(row)
     box = [round(v) for v in reading.plan_box] if reading.plan_box else None
-    return {"box": box, "zoom": reading.zoom, "exits": rows}
+    return {"box": box, "zoom": reading.zoom, "exits": rows, "sheets": sheet_urls(reading)}
 
 
 def read_marks(plan: Plan, client: ModelClient | None) -> tuple[Reading | None, str | None]:

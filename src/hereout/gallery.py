@@ -42,6 +42,8 @@ class Gallery:
         self.last: list[str] = order.get("last", [])
         self.thumbs_url = thumbs_url
         self.answers_url = thumbs_url.rsplit("/", 1)[0] + "/answers"
+        # The sheets of the zoom check (scripts/zoom_saved.py): their names carry a hash.
+        self.zoom_url = thumbs_url.rsplit("/", 1)[0] + "/zoom"
         self.code = code_hash()
         self._paths: dict[tuple[str, str], Path] = {}
         self.items: dict[str, dict] = {}
@@ -92,10 +94,15 @@ class Gallery:
         if image is None:
             return None
         r = item["reading"]
+        # With a saved zoom check, "exits" are the exits after it, and "trace"
+        # is each exit of the main reading with what the check did with it.
         reading = Reading(
             exits=r.get("exits") or [],
             notes=r.get("notes", ""),
             plan_box=tuple(r["plan_box"]) if r.get("plan_box") else None,
+            trace=r.get("trace"),
+            zoom=r.get("zoom"),
+            sheets=[f"{self.zoom_url}/{name}" for name in r.get("sheets") or []],
         )
         # Saved text boxes spare the OCR on each open.
         text = item.get("text_boxes")
