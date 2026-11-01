@@ -18,7 +18,9 @@ with readable=yes and security_sensitive other than yes are used.
 OUT_DIR gets, for each photo:
   plans/<id>.jpg   the flat plan image that every coordinate refers to
   thumbs/<id>.jpg  a small preview
-  items/<id>.json  credit, model reading, route result, cost and time
+  items/<id>.json  credit, model reading ("reading": the exits after the code,
+                   "read": the points of the model and the second look), route result,
+                   cost and time
 A photo with a saved result is skipped, so a stopped run can go on.
 OUT_DIR must be outside the repository: the photos belong to their authors.
 """
@@ -38,7 +40,7 @@ import cv2
 import numpy as np
 
 from hereout.photo_map import is_photo_map
-from hereout.pipeline import Plan, decode_photo, prepare, read_marks
+from hereout.pipeline import Plan, decode_photo, model_reading, prepare, read_marks
 from hereout.reader import ModelClient, Reading
 from hereout.route import Field, blocked_grid, soft_grid
 
@@ -143,6 +145,9 @@ def run_one(row: dict, base: Path, out: Path, client: ModelClient, lock: threadi
             "exits": reading.exits,
             "plan_box": reading.plan_box, "notes": reading.notes,
         }
+        # What Muse Spark gave, the second look on it and what the code did with each exit
+        # (pipeline.model_reading), so scripts/score_exits.py --points model can score the model alone.
+        item["read"] = model_reading(reading)
         item["cost_usd"] = round(reading.cost_usd, 5)
         item.update(route_result(out / "plans" / f"{pid}.jpg", reading))
     if err != "spend cap reached":
