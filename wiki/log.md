@@ -401,3 +401,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/start-page-loop.md`: the header links, the phone loop, the sample plans, the counts, the page `/credits` and one disclosure.
 - Updated `decisions/afterglow-redesign.md` (Consequences) and `DESIGN.md`.
 - Source: the owner request of 2026-11-01, the research brief of 2026-11-01 and the code.
+## [2026-11-01] ingest | The current step under the plan
+
+- Added `decisions/current-step-card.md`: the card of the current step under the plan, turn icons and the leg highlight with progress.
+- The same page has the step dots and the arrow at YOU.
+- It also has the tap on the dashed second way and the words on the exit buttons.
+- Updated `DESIGN.md`: the token `done`, three components and the rules for them.
+- Source: the research brief of 2026-11-01 (sections 0 and 2), the owner request, the browser checks at 390 and 1280.

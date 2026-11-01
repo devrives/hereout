@@ -38,7 +38,7 @@ sources:
 - Why: the a11y review found side steps on the map that the words left out. The lines moved, and a side step went into a turn step. Detours round a wall in a straight walk were not in the words before this round.
 - Rejected: a clause at the end of the walk ("with a step right on the way", then "moving over to your right partway"). The ux review found two frames in one sentence and the noun "step" read as a stair. In 61 of 118 first steps the move came at the start, not partway.
 - Arrow heads: no head nearer than 4 head sizes to another head. A head that is too near slides along its line. A line of 5 plan units or more keeps one head. No head is nearer than 8 plan units to the start. The ux review found two heads that made one shape at a link split. It also found an arrow beside YOU that pointed away from the route.
-- The step number goes above, below, right or left of its leg, at the first place that covers neither YOU nor an exit mark. With no such place, step 1 has no number. After an exit button, the old step selection goes before the plan is drawn. Smooth scrolls follow the setting for less motion (a11y review).
+- The step number goes above, below, right or left of its leg, at the first place that covers neither YOU nor an exit mark. With no such place, step 1 has no number. Since 2026-11-01, a numbered dot at the start of each step replaces this number: see [The current step under the plan](current-step-card.md). After an exit button, the old step selection goes before the plan is drawn. Smooth scrolls follow the setting for less motion (a11y review).
 
 ## Consequences
 

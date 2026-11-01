@@ -104,6 +104,18 @@
         <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
         <p id="tap-prompt" class="tap-prompt" aria-hidden="true" hidden><svg class="ico" viewBox="0 0 24 24"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg><span data-t="tap_prompt">Tap where you stand</span></p>
       </div>
+      <section id="now-card" class="now-card" hidden aria-label="Current step" data-t-label="now_label">
+        <div class="now-top">
+          <span id="now-num" class="badge now-badge" aria-hidden="true"></span>
+          <p id="now-head" class="now-head"></p>
+          <button id="now-speak" class="now-round" type="button" aria-label="Read this step aloud" data-t-label="speak_step"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></button>
+        </div>
+        <div class="now-step">
+          <button id="step-prev" class="now-go" type="button" aria-label="Previous step" data-t-label="step_prev"><svg class="ico flip" aria-hidden="true" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+          <p id="now-text" class="now-text"></p>
+          <button id="step-next" class="now-go" type="button" aria-label="Next step" data-t-label="step_next"><svg class="ico flip" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+        </div>
+      </section>
       <div id="legend" class="legend" hidden>
         <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i><span data-t="legend_wall">Wall, as HereOut reads it</span></span>
         <span id="legend-field"><i class="sw-field" aria-hidden="true"></i><span data-t="legend_field">Near an exit … far from one</span></span>
