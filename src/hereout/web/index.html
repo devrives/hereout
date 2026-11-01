@@ -25,6 +25,12 @@
       </svg>
       <span class="word">Here<span>Out</span></span>
     </a>
+    <nav class="nav" aria-label="Page">
+      <a class="nav-how" href="#how"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18h6V8h10"/><path d="m16 4 4 4-4 4"/><path d="M4 12h3"/></svg>How it works</a>
+      <a id="nav-samples" class="nav-samples" href="#gallery-wrap" hidden><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Samples</a>
+      <a id="nav-demo" class="nav-demo" href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg>Demo</a>
+      <a class="nav-code" href="https://gitlab.com/devrives/hereout" rel="noopener"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>Code</a>
+    </nav>
     <label class="new-photo" id="new-photo" hidden>
       <input id="photo-2" type="file" accept="image/*" aria-labelledby="new-photo-text">
       <span id="new-photo-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>New photo</span>
@@ -40,6 +46,10 @@
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
       <span id="shoot-text" aria-hidden="true"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>Take a photo of the plan</span>
     </label>
+    <div id="try" class="try" hidden>
+      <p id="try-head">Or open a sample plan</p>
+      <ul id="try-list" class="try-list" role="list" aria-labelledby="try-head" data-ids="RU-commons_000164,JP-commons_000268,DE-commons_000022"></ul>
+    </div>
     <p id="demo-link" class="demo-link"><a href="#demo"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polygon points="7 4 20 12 7 20 7 4"/></svg>Watch the demo video</a></p>
   </section>
   <figure id="example" class="example hero" hidden data-sample="RU-commons_000164" data-start="720,950">
@@ -52,7 +62,8 @@
     </a>
     <figcaption id="example-credit" class="credit"></figcaption>
   </figure>
-  <section class="how" aria-labelledby="how-head">
+  <p id="proof" class="proof" hidden><a href="#gallery-wrap"><span><b id="proof-plans"></b> plans</span> <span><b id="proof-countries"></b> countries and regions</span> <span><b id="proof-langs"></b> languages</span></a></p>
+  <section id="how" class="how" aria-labelledby="how-head">
     <h2 id="how-head" class="sr">From photo to route</h2>
     <ol role="list">
       <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h7.5"/><path d="M17 13.5V21"/><path d="M14 7h7m-3-3 3 3-3 3"/></svg><h3>Exits</h3><p>Muse Spark finds the exits on your photo.</p></li>
@@ -176,19 +187,17 @@
     </div>
   </section>
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
-    <h2 id="gallery-head"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span><span id="gallery-count"></span> real plans from <span id="gallery-countries"></span> countries and regions</span></h2>
+    <div class="gallery-top">
+      <h2 id="gallery-head"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span><span id="gallery-count"></span> real plans from <span id="gallery-countries"></span> countries and regions</span></h2>
+      <p class="gallery-credits"><a href="/credits"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M14.8 9.5a3.5 3.5 0 1 0 0 5"/></svg>Photo credits</a></p>
+    </div>
     <ul id="gallery" class="gallery"></ul>
     <button id="gallery-more" type="button" hidden><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
-    <details class="credits">
-      <summary>Photo credits</summary>
-      <p class="muted">Each preview is a resized copy of the photo, some with the perspective corrected. Photos under a ShareAlike licence are shared under the same licence.</p>
-      <ul id="credits"></ul>
-    </details>
   </section>
   <section id="demo" class="demo" hidden aria-labelledby="demo-head" data-samples="RU-commons_000164">
     <h2 id="demo-head">Demo video</h2>
-    <p class="muted">51 s, no sound: a recording of this page with one sample plan, with captions.</p>
-    <video controls playsinline preload="none" width="1920" height="1080" src="/video/demo.mp4" aria-labelledby="demo-head"></video>
+    <video controls playsinline preload="none" width="1920" height="1080" src="/video/demo.mp4" aria-labelledby="demo-head" aria-describedby="demo-caption"></video>
+    <p id="demo-caption" class="credit demo-caption">51 s, no sound, with captions: a recording of this page with one sample plan. <span id="demo-credits"></span></p>
     <details class="transcript">
       <summary>Text of the video, with what it shows</summary>
       <ol>
@@ -204,10 +213,6 @@
         <li>203 real plans from 24 countries and regions. Open any one: each was read by Muse Spark. <em>On screen: the grid of sample plans.</em></li>
         <li>HereOut. hereout.devrives.com. Exits and plan words: Muse Spark, through Baseten. Walls and routes: HereOut's own code, in your browser. Built solo for the Meta hackathon. Check every route against the plan. <em>On screen: the end card with the HereOut logo.</em></li>
       </ol>
-    </details>
-    <details class="credits">
-      <summary>Photo in the video</summary>
-      <ul id="demo-credits"></ul>
     </details>
   </section>
 </main>

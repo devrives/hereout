@@ -1735,8 +1735,8 @@ for (const p of PHOTOS) p.addEventListener("click", (ev) => {
 // With a plan open, the start page text goes and the header has the photo button.
 function layout() {
   document.documentElement.classList.toggle("has-plan", !$("result").hidden);
-  // The demo video (start page only) must not play on, hidden, under a plan.
-  if (!$("result").hidden) document.querySelector("#demo video")?.pause();
+  // The videos of the start page must not play on, hidden, under a plan.
+  if (!$("result").hidden) for (const v of document.querySelectorAll("#demo video, #hero-loop")) v.pause();
 }
 
 // Load a sample plan. Only the newest request wins.
@@ -1995,6 +1995,27 @@ function setUpExample() {
 }
 setUpExample();
 
+// The phone of the hero plays only while it is on the screen. With reduced
+// motion it shows its first frame (the poster) until the user plays it. The
+// button beside it pauses and plays it (WCAG 2.2.2: motion of more than 5 s).
+function setUpLoop() {
+  const v = $("hero-loop"), btn = $("loop-toggle");
+  if (!v || !btn) return;
+  const calm = matchMedia("(prefers-reduced-motion: reduce)");
+  let seen = false, wanted = !calm.matches;
+  const run = () => {
+    if (seen && wanted && !document.documentElement.classList.contains("has-plan")) v.play().catch(() => {});
+    else v.pause();
+    btn.dataset.playing = String(wanted);
+    btn.setAttribute("aria-label", wanted ? "Pause the animation" : "Play the animation");
+  };
+  new IntersectionObserver((es) => { seen = es[es.length - 1].isIntersecting; run(); }, { threshold: 0.2 }).observe(v);
+  calm.addEventListener("change", () => { wanted = !calm.matches; run(); });
+  btn.addEventListener("click", () => { wanted = !wanted; run(); });
+  run();
+}
+setUpLoop();
+
 // The open sample is marked in the gallery and named in the address, so it can be shared.
 function markOpenSample(push) {
   const gid = sampleId(state && state.id);
@@ -2023,12 +2044,30 @@ function quoted(title) {
   return title.replace(/"([^"]*)"/g, "‘$1’");
 }
 
-function creditLine(c) {
-  const li = document.createElement("li");
-  const a = (text, href) => { const e = document.createElement("a"); e.href = href; e.textContent = text; e.rel = "noopener"; return e; };
-  li.append(`“${quoted(c.title)}” by ${c.author}, `);
-  li.append(c.licence_url ? a(c.licence, c.licence_url) : c.licence, ", ", a("source", c.source_url));
-  return li;
+// Under the photo button: a few sample plans whose exits are right, for a
+// visitor with no plan at hand. Each one opens in one tap, like a gallery tile.
+function showTry(plans) {
+  const list = $("try-list");
+  const items = list.dataset.ids.split(",").map((id) => plans.find((p) => p.id === id)).filter(Boolean);
+  if (!items.length || SET) return;
+  list.replaceChildren(...items.map((p) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "sample";
+    b.dataset.id = p.id;
+    const im = document.createElement("img");
+    im.src = p.thumb;
+    im.alt = "";
+    const cap = document.createElement("span");
+    cap.textContent = countryName(p.country);
+    b.append(im, cap);
+    b.setAttribute("aria-label", `${cap.textContent}, sample plan`);
+    b.addEventListener("click", () => openSample(p.id, true));
+    li.append(b);
+    return li;
+  }));
+  $("try").hidden = false;
 }
 
 async function showGallery() {
@@ -2070,10 +2109,13 @@ async function showGallery() {
     $("gallery-more").setAttribute("aria-label", `Show ${Math.min(GALLERY_BATCH, plans.length - shown)} more plans`);
     markOpenSample();
   };
-  $("credits").replaceChildren(...plans.map((p) => creditLine(p.credit)));
-  $("gallery-count").textContent = String(plans.length);
   // "XX" marks photos whose country is not known.
-  $("gallery-countries").textContent = String(new Set(plans.map((p) => p.country).filter((c) => c !== "XX")).size);
+  const countries = String(new Set(plans.map((p) => p.country).filter((c) => c !== "XX")).size);
+  $("gallery-count").textContent = $("proof-plans").textContent = String(plans.length);
+  $("gallery-countries").textContent = $("proof-countries").textContent = countries;
+  $("proof-langs").textContent = String(Object.keys(I.LANGS).length);
+  $("proof").hidden = false;
+  showTry(plans);
   $("gallery-more").addEventListener("click", () => {
     const first = shown;
     shown = Math.min(plans.length, shown + GALLERY_BATCH);
@@ -2081,7 +2123,7 @@ async function showGallery() {
     grid.children[first]?.querySelector("button").focus();
   });
   render();
-  $("gallery-wrap").hidden = false;
+  $("gallery-wrap").hidden = $("nav-samples").hidden = false;
 }
 showGallery();
 

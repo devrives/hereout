@@ -48,9 +48,26 @@ h3 { font-size: 1.05rem; margin: 20px 0 8px; }
 a { color: var(--accent); }
 .ico { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-/* Header: the logo, and a photo button while a plan is open. */
-.top-in { max-width: 1200px; margin: 0 auto; padding: 0 16px; min-height: 64px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
-.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--fg); min-height: 44px; }
+/* Header: the logo and the links to the parts of the page. It stays at the top
+   of the start page. With a plan open, it has the photo button and scrolls away. */
+.top { position: sticky; top: 0; z-index: 10; background: rgb(7 16 12 / 0.88); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+html.has-plan .top { position: static; background: none; -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom-color: transparent; }
+html:not(.has-plan) { scroll-padding-top: 76px; }
+.top-in { max-width: 1200px; margin: 0 auto; padding: 0 16px; min-height: 64px; display: flex; align-items: center; gap: 4px 12px; }
+.nav { display: flex; align-items: center; gap: 2px; }
+.nav a { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 10px; border-radius: 999px; color: var(--muted); font-weight: 550; font-size: 0.95rem; text-decoration: none; white-space: nowrap; }
+.nav a:hover { color: var(--fg); background: var(--card); }
+.nav a:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+.nav .ico { width: 18px; height: 18px; }
+/* Narrow screens keep fewer links: the photo button and the samples come first. */
+@media (max-width: 719px) { .nav-how { display: none !important; } }
+@media (max-width: 479px) { .nav-demo { display: none !important; } .nav a { padding: 0 8px; } }
+@media (max-width: 359px) { .nav-samples { display: none !important; } }
+/* With a plan open, the start page parts are gone: the links to them go too. */
+html.has-plan .nav-how, html.has-plan .nav-demo { display: none !important; }
+@media (max-width: 599px) { html.has-plan .nav-samples { display: none !important; } }
+@media (max-width: 479px) { html.has-plan .nav-code { display: none !important; } }
+.brand { flex: none; margin-right: auto; display: inline-flex; align-items: center; gap: 10px; text-decoration: none; color: var(--fg); min-height: 44px; }
 .brand:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; border-radius: 4px; }
 .logo { width: 32px; height: 31px; }
 .logo .lw { stroke: var(--logo-wall); }
@@ -59,9 +76,10 @@ a { color: var(--accent); }
 .word { font-size: 1.4rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
 .word span { color: var(--accent); }
 html:not(.has-plan) .new-photo { display: none; }
+.new-photo { flex: none; }
 /* With a plan open, the start page text goes. Its h1 stays for a screen reader. */
 html.has-plan .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how { display: none; }
+html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how, html.has-plan .proof { display: none; }
 /* While a plan from the address loads, the samples wait under it, so they do not jump down. */
 html.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
 .new-photo input, .shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -93,6 +111,15 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .intro h1 { font-size: 2.6rem; font-weight: 600; letter-spacing: -0.045em; line-height: 1.02; margin: 28px 0 16px; }
 .intro h1 em { font-style: normal; color: var(--accent); }
 .lead { margin: 0 0 24px; color: var(--muted); font-size: 1.1rem; max-width: 32ch; }
+/* Under the photo button: three sample plans, for a visitor with no plan at hand. */
+.try { margin: 22px 0 0; }
+.try p { margin: 0 0 10px; color: var(--muted); font-size: 0.95rem; }
+.try-list { list-style: none; display: flex; gap: 12px; margin: 0; padding: 0; }
+.try-list li { flex: 0 1 112px; min-width: 0; display: flex; }
+.try-list button.sample { width: 100%; }
+.try-list button.sample img { border-radius: 10px; }
+.try-list button.sample span { padding-top: 6px; font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.try-list button.sample:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
 .demo-link { margin: 16px 0 0; }
 .demo-link a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 550; }
 .demo-link .ico { width: 16px; height: 16px; fill: currentColor; }
@@ -110,9 +137,39 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .example-go { display: inline-flex; align-items: center; gap: 6px; flex: none; color: var(--accent); }
 .example-open:hover .example-go { text-decoration: underline; }
 .hero .credit { margin-top: 8px; font-size: 0.8rem; }
+/* With the loop (app.py loop_html): a phone plays the page in use with the same
+   plan, over a soft glow. The phone opens the plan, like the picture. */
+.hero.has-loop { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; }
+.hero.has-loop::before { content: ""; position: absolute; z-index: -1; left: 0; right: 0; top: 4%; height: 70%; pointer-events: none;
+  background: radial-gradient(closest-side, rgb(61 255 160 / 0.13), rgb(61 255 160 / 0)); }
+.has-loop .example-open { display: flex; flex-direction: column; align-items: center; width: 100%; overflow: visible; border: 0; border-radius: 0; background: none; }
+.has-loop .example-open:focus-visible { border-radius: 22px; outline-offset: 8px; }
+.loop-phone { display: block; width: min(280px, 72vw); padding: 7px; border-radius: 42px; background: #020604; border: 1px solid #2f4339;
+  box-shadow: 0 0 0 1px #000, 0 28px 70px -24px rgb(61 255 160 / 0.28); }
+/* The pause and play button sits on the foot of the phone screen. --pw is the phone width. */
+.hero.has-loop { --pw: min(280px, 72vw); }
+.loop-phone { width: var(--pw) !important; }
+.loop-toggle { position: absolute; top: calc(2 * var(--pw) - 78px); left: calc(50% + var(--pw) / 2 - 62px); width: 44px; height: 44px; min-height: 0; padding: 0;
+  border-radius: 50%; background: rgb(7 16 12 / 0.82); border-color: #2f4339; color: var(--fg); }
+.loop-toggle:hover { background: var(--raise); }
+.loop-toggle[data-playing="true"] .i-play, .loop-toggle[data-playing="false"] .i-pause { display: none; }
+.loop-toggle .ico { fill: currentColor; stroke-width: 2.4; }
+.loop-toggle .i-pause { fill: none; }
+.loop-phone video { display: block; width: 100%; height: auto; aspect-ratio: 1 / 2; border-radius: 35px; background: var(--bg); }
+.has-loop .example-bar { justify-content: center; flex-wrap: wrap; gap: 4px 12px; min-height: 44px; padding: 14px 0 0; border: 0; background: none; text-align: center; }
+.has-loop .credit { max-width: 52ch; margin-top: 4px; text-align: center; }
+
+/* The counts under the hero, one link to the samples (app.js showGallery). */
+.proof { margin: 40px 0 0; }
+.proof a { display: flex; flex-wrap: wrap; gap: 6px 0; color: var(--muted); text-decoration: none; font-size: 1.05rem; }
+.proof span { display: inline-flex; align-items: baseline; gap: 8px; padding-right: 24px; }
+.proof b { font: 700 1.5rem/1.2 "Geist Mono", ui-monospace, monospace; color: var(--fg); letter-spacing: -0.02em; }
+.proof a:hover b { color: var(--accent); }
+.proof a:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; border-radius: 4px; }
+@media (min-width: 600px) { .proof span + span { padding-left: 24px; border-left: 1px solid var(--line); } }
 
 /* From photo to route: the four parts of the work, as the page shows them. */
-.how { margin: 48px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.how { margin: 28px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
 .how li { padding: 24px 20px 26px 0; }
 .how li + li { border-top: 1px solid var(--line); }
@@ -123,8 +180,8 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .how p { margin: 0; color: var(--muted); }
 
 .demo { margin: 56px 0 8px; }
-.demo h2 { margin-bottom: 6px; }
-.demo > p { margin: 0 0 16px; }
+.demo h2 { margin-bottom: 16px; }
+.demo-caption { margin: 10px 0 0; }
 .demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 22px; background: #000; }
 .demo video:focus, .demo video:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
 .transcript { margin-top: 16px; }
@@ -132,7 +189,6 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 .transcript ol { padding-left: 1.4em; }
 .transcript li { margin: 10px 0; }
 .transcript em { display: block; margin-top: 4px; color: var(--muted); font-style: normal; }
-.demo .credits { margin-top: 8px; }
 #status { min-height: 1.5em; margin: 12px 0; color: var(--muted); }
 #status:empty { margin: 8px 0; }
 html.has-plan #status { margin: 6px 0; }
@@ -274,10 +330,21 @@ button.sample:hover img { filter: none; }
 button.sample span { padding: 10px 2px 0; font: 500 0.85rem "Geist Mono", ui-monospace, monospace; color: var(--muted); }
 button.sample[aria-current="true"] img { box-shadow: 0 0 0 3px var(--accent); filter: none; }
 button.sample[aria-current="true"] span { color: var(--accent); }
-.credits { margin-top: 16px; color: var(--muted); font-size: 0.85rem; }
-.credits summary { cursor: pointer; min-height: 24px; color: var(--fg); font-size: 1rem; }
-.credits ul { padding-left: 1.2em; }
-.credits li { margin: 6px 0; }
+/* The link to the photo credits (/credits), beside the heading of the samples. */
+.gallery-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: 16px; }
+.gallery-top h2 { margin-bottom: 0; }
+.gallery-credits { margin: 0; }
+.gallery-credits a { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; font-weight: 550; font-size: 0.95rem; }
+.gallery-credits .ico { width: 18px; height: 18px; }
+
+/* The page of photo credits (credits.html). */
+.doc { max-width: 860px; margin: 0 auto; padding: 0 16px 56px; }
+.doc h1 { display: flex; align-items: center; gap: 12px; margin: 32px 0 12px; font-size: 2.2rem; letter-spacing: -0.04em; }
+.doc h1 .ico { width: 30px; height: 30px; color: var(--accent); }
+.credit-list { list-style: none; margin: 24px 0 0; padding: 0; color: var(--muted); font-size: 0.9rem; }
+.credit-list li { padding: 12px 0; border-top: 1px solid var(--line); scroll-margin-top: 80px; }
+.credit-list li:target { color: var(--fg); }
+.credit-list li > a:first-child { margin-right: 6px; font: 500 0.85rem "Geist Mono", ui-monospace, monospace; }
 ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
 /* The plan opens right under the header, so a scroll to it keeps the header in view. */
 .result { scroll-margin-top: 140px; }
@@ -295,11 +362,14 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 /* Wide screens: the start page text beside the hero plan, and an open plan beside its answer. */
 @media (min-width: 960px) {
   .top-in, .layout { padding-left: 48px; padding-right: 48px; }
-  .top-in { min-height: 80px; }
+  .top-in { min-height: 72px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); column-gap: 64px; align-items: center;
-            grid-template-areas: "intro hero" "status status" "how how" "gallery gallery" "demo demo" "result result"; }
+            grid-template-areas: "intro hero" "status status" "proof proof" "how how" "gallery gallery" "demo demo" "result result"; }
+  .proof { grid-area: proof; }
   .intro { grid-area: intro; }
   .hero { grid-area: hero; margin-top: 24px; }
+  /* The phone fits the screen height beside the start text. */
+  .hero.has-loop { --pw: clamp(230px, calc((100svh - 300px) / 2), 300px); }
   .status-wrap { grid-area: status; }
   .how { grid-area: how; margin-top: 40px; }
   .result { grid-area: result; }

@@ -336,3 +336,55 @@ def test_demo_video_needs_the_file_and_the_credits(tmp_path):
     r = client.get("/video/demo.mp4", headers={"Range": "bytes=0-9"})
     assert r.status_code == 206 and len(r.content) == 10
     assert 'id="demo' not in TestClient(create_app(None, use_env=False)).get("/").text
+
+
+def test_example_plays_the_loop(tmp_path):
+    from hereout.app import EXAMPLE_CREDIT, EXAMPLE_PIC, EXAMPLE_TAG, WEB, example_page
+    (tmp_path / "g").mkdir()
+    g = make_gallery(tmp_path / "g")
+    page = (f'<p>a</p>\n{EXAMPLE_TAG} data-sample="XX-test_1" data-start="1,2"><a id="example-open">'
+            f'<span class="example-pic" style="--w: 1%">\n<img class="example-photo" src="/gallery/example-photo">\n</span>\n'
+            f'<span class="example-bar">Example</span></a>\n    {EXAMPLE_CREDIT}</figure>\n<p>b</p>')
+    video = tmp_path / "v"
+    video.mkdir()
+    # No loop and no saved image: the example goes.
+    assert example_page(page, g, video) == "<p>a</p>\n<p>b</p>"
+    (video / "hero-loop.mp4").write_bytes(b"\0" * 32)
+    shown = example_page(page, g, video)
+    assert 'class="example hero has-loop"' in shown and "example-photo" not in shown
+    assert '<video id="hero-loop" class="loop" muted loop playsinline preload="metadata"' in shown
+    assert 'aria-hidden="true"' in shown and 'src="/video/hero-loop.mp4?v=20' in shown
+    assert "poster=" not in shown and "video/webm" not in shown
+    # The button that pauses the motion, outside the link; the credit names the recording.
+    assert shown.index('id="loop-toggle"') > shown.index("</a>")
+    assert "Changes: cropped, dimmed, marks, ways out and route drawn on top, shown in a recording of the HereOut page." in shown
+    (video / "hero-loop.webp").write_bytes(b"RIFF")
+    (video / "hero-loop.webm").write_bytes(b"\0")
+    shown = example_page(page, g, video)
+    assert 'poster="/video/hero-loop.webp?v=' in shown and shown.index("video/webm") < shown.index("video/mp4")
+    # A plan that the gallery does not know: no loop, no example.
+    assert "<figure" not in example_page(page.replace("XX-test_1", "XX-gone"), g, video)
+    # The real page has the one picture that the loop takes the place of.
+    real = (WEB / "index.html").read_text()
+    assert len(EXAMPLE_PIC.findall(real)) == 1 and 'id="example-open"' in real
+    m = re.search(r'data-sample="([\w-]+)"', real)
+    shown = example_page(real.replace(m[1], "XX-test_1"), g, video)
+    assert 'id="hero-loop"' in shown and "example-photo" not in shown and 'id="example-open"' in shown
+
+
+def test_start_page_links_and_credits_page(tmp_path):
+    from hereout.app import NAV_DEMO, WEB, demo_page
+    real = (WEB / "index.html").read_text()
+    # The header links to the parts of the page and to the code; the demo link goes with the demo.
+    assert 'href="#how"' in real and 'id="how"' in real and 'href="#gallery-wrap"' in real
+    assert 'href="https://gitlab.com/devrives/hereout"' in real and real.count(NAV_DEMO) == 1
+    assert NAV_DEMO not in demo_page(real, None, None) and 'href="#how"' in demo_page(real, None, None)
+    # One disclosure on the start page: the text of the video. The credits have their own page.
+    assert real.count("<details") == 1 and 'href="/credits"' in real
+    assert "<footer" not in real
+    (tmp_path / "g").mkdir()
+    client = TestClient(create_app(None, use_env=False, gallery=make_gallery(tmp_path / "g")))
+    page = client.get("/credits").text
+    assert '<li id="XX-test_1"><a href="/?sample=XX-test_1">Sample plan 1</a> Photo: “T” by A, CC0 1.0' in page
+    assert page.count("<li id=") == 1 and '/static/style.css?v=' in page
+    assert TestClient(create_app(None, use_env=False)).get("/credits").status_code == 404

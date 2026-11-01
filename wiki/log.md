@@ -395,3 +395,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Added `decisions/exit-vote.md` (rejected): three main reads and a vote on the dev set, at temperatures 0 and 0.7.
 - Source: `scripts/vote_reads.py`, the saved dev reads and the owner request of 2026-11-01.
+
+## [2026-11-01] ingest | Start page loop, header and credits page
+
+- Added `decisions/start-page-loop.md`: the header links, the phone loop, the sample plans, the counts, the page `/credits` and one disclosure.
+- Updated `decisions/afterglow-redesign.md` (Consequences) and `DESIGN.md`.
+- Source: the owner request of 2026-11-01, the research brief of 2026-11-01 and the code.
