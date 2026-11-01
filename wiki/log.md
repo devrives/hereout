@@ -332,3 +332,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/demo-video.md`: the video file, the mount, the caption text and the credits.
 - Updated `index.md`: the new page.
 - Source: the owner words of 2026-11-01, the code and the tests.
+
+## [2026-11-01] ingest | Demo video with large captions
+
+- Updated `decisions/demo-video.md`: the captions are in a strip under the page picture, and the video is 2 min 20 s long.
+- Source: the owner words of 2026-11-01 and the new video.
