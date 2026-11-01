@@ -80,7 +80,7 @@
  "found_exits": "Utiliser les sorties trouvées par HereOut",
  "fix_hint": "Touchez la sortie sur le plan. HereOut trace ensuite l’itinéraire vers cette sortie uniquement.",
  "fix_hint_add": "Touchez la sortie ou l’escalier de cet étage sur le plan. Les autres sorties restent.",
- "exits_head": "Itinéraire vers une autre sortie",
+ "exits_head": "Itinéraire vers une sortie",
  "exits_note": "En pointillés : HereOut n’a trouvé aucun passage depuis votre position vers cette sortie.",
  "exit_dead": "{exit}, aucun passage trouvé",
  "back_samples": "Retour aux exemples",

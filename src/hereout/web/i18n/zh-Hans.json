@@ -80,7 +80,7 @@
  "found_exits": "使用 HereOut 找到的出口",
  "fix_hint": "点击平面图上的出口，HereOut 将只规划到该出口的路线。",
  "fix_hint_add": "点击平面图上本层的出口或楼梯，其他出口保留。",
- "exits_head": "前往另一出口的路线",
+ "exits_head": "前往出口的路线",
  "exits_note": "虚线：HereOut 未找到从您所在位置到该出口的通道。",
  "exit_dead": "{exit}，未找到通道",
  "back_samples": "返回示例",

@@ -80,7 +80,7 @@
  "found_exits": "HereOutが見つけた出口を使う",
  "fix_hint": "図面の出口をタップしてください。HereOutはその出口へのルートのみを表示します。",
  "fix_hint_add": "図面の出口またはこの階の階段をタップしてください。他の出口はそのまま残ります。",
- "exits_head": "別の出口へのルート",
+ "exits_head": "出口へのルート",
  "exits_note": "点線：HereOutは現在地からその出口への道を見つけられませんでした。",
  "exit_dead": "{exit}、ルートが見つかりません",
  "back_samples": "サンプルに戻る",

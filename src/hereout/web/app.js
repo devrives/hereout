@@ -2478,7 +2478,6 @@ async function showGallery() {
   const countries = String(new Set(plans.map((p) => p.country).filter((c) => c !== "XX")).size);
   $("gallery-count").textContent = $("proof-plans").textContent = String(plans.length);
   $("gallery-countries").textContent = $("proof-countries").textContent = countries;
-  $("proof-langs").textContent = String(Object.keys(I.LANGS).length);
   $("proof").hidden = false;
   showTry(plans);
   $("gallery-more").addEventListener("click", () => {

@@ -80,7 +80,7 @@
  "found_exits": "Usa le uscite trovate da HereOut",
  "fix_hint": "Toccare l’uscita sulla pianta. HereOut traccia il percorso solo verso quell’uscita.",
  "fix_hint_add": "Toccare l’uscita o le scale di questo piano sulla pianta. Le altre uscite restano.",
- "exits_head": "Percorso verso un’altra uscita",
+ "exits_head": "Percorso verso un’uscita",
  "exits_note": "Tratteggiato: HereOut non ha trovato un percorso dal tuo punto verso quell’uscita.",
  "exit_dead": "{exit}, nessun percorso trovato",
  "back_samples": "Torna agli esempi",

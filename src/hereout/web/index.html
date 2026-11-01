@@ -67,9 +67,9 @@
     </a>
     <figcaption id="example-credit" class="credit"></figcaption>
   </figure>
-  <p id="proof" class="proof js-only" hidden><a href="#gallery-wrap"><span><b id="proof-plans"></b> plans</span> <span><b id="proof-countries"></b> countries and regions</span> <span><b id="proof-langs"></b> languages</span></a></p>
+  <p id="proof" class="proof js-only" hidden><a href="#gallery-wrap"><span><b id="proof-plans"></b> plans</span> <span><b id="proof-countries"></b> countries and regions</span></a></p>
   <section id="how" class="how" aria-labelledby="how-head">
-    <h2 id="how-head" class="sr">From photo to route</h2>
+    <h2 id="how-head" class="sr">How it works</h2>
     <ol role="list">
       <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V5a2 2 0 0 1 2-2h7.5"/><path d="M17 13.5V21"/><path d="M14 7h7m-3-3 3 3-3 3"/></svg><h3>Exits</h3><p>Muse Spark finds the exits on your photo.</p></li>
       <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 18h6V8h10"/><path d="m16 4 4 4-4 4"/><path d="M4 12h3"/></svg><h3>Ways out</h3><p>HereOut's code finds the walls and draws the ways out to the exits.</p></li>
@@ -133,7 +133,7 @@
       <div id="read-legend" class="legend read-legend" lang="en" dir="ltr">
         <span id="rl-box"><i class="sw-rbox" aria-hidden="true"></i>Floor box, from Muse Spark</span>
         <span><i class="sw-rpt" aria-hidden="true"></i>Exit point from Muse Spark, by exit number</span>
-        <span id="rl-zoom"><i class="sw-rzoom" aria-hidden="true"></i>Moved by the zoom check</span>
+        <span id="rl-zoom"><i class="sw-rzoom" aria-hidden="true"></i>Moved by the second look</span>
         <span id="rl-code"><i class="sw-rcode" aria-hidden="true"></i>Moved by HereOut</span>
         <span id="rl-drop"><i class="sw-rdrop" aria-hidden="true"></i>Not used</span>
       </div>
@@ -164,7 +164,7 @@
         <p id="fix-hint" class="muted" hidden>Tap the exit on the plan. HereOut then routes to that exit only.</p>
       </div>
       <div id="exits-wrap" class="card" hidden>
-        <h3 id="exits-head" data-t="exits_head">Route to another exit</h3>
+        <h3 id="exits-head" data-t="exits_head">Route to an exit</h3>
         <div id="exits" class="exits" role="group" aria-labelledby="exits-head"></div>
         <p id="exits-note" class="muted" hidden data-t="exits_note">Dashed: HereOut found no way from your spot to that exit.</p>
       </div>
@@ -220,16 +220,16 @@
       <summary>Text of the video, with what it shows</summary>
       <ol>
         <li>In a building abroad, the evacuation plan on the wall is in Russian. Where is your way out? <em>On screen: the photo of the plan, dimmed.</em></li>
-        <li>Photograph the plan when you arrive. Or open one of 203 real plans from 24 countries and regions. <em>On screen: the HereOut start page on a phone, with its photo button and three sample plans.</em></li>
+        <li>Photograph the plan when you arrive. Or open one of 203 real plans from 24 countries and regions. <em>On screen: the HereOut start page at phone size, in a phone frame, with its photo button and three sample plans.</em></li>
         <li>Muse Spark finds the exits. Meta's model reads the photo and points to each exit. <em>On screen: the evacuation plan of an arts centre in Moscow (floor −1) opens, dimmed. Green exit marks 1 to 4 grow in one by one, and the strip above the plan lights “Exits”.</em></li>
         <li>Code draws the ways out. It finds the walls in the ink and links the rooms to the exits. <em>On screen: glowing green lines grow out from the exits through the rooms. The strip lights “Ways out”.</em></li>
         <li>You tap where you stand. The start always comes from you, not from the model. <em>On screen: “Tap where you stand” on the plan, then a white ring where the tap is, in the middle hall.</em></li>
         <li>The route to the nearest exit. Your browser finds it in a moment, on the phone. <em>On screen: a blue line draws from YOU to Exit 4. A card under the plan shows “Exit 4 · Step 1 of 3” and the first step.</em></li>
         <li>One step at a time. Each step lights its part of the route. The speaker reads it aloud. <em>On screen: the next button moves to steps 2 and 3. Each step lights its part of the route in amber, and the walked parts turn grey.</em></li>
-        <li>Exit blocked? Tap the dashed line. The route switches to the next exit. <em>On screen: a tap on the dashed line, and the route goes to Exit 3.</em></li>
-        <li>Points far from any sign get a second look. Muse Spark sees numbered, zoomed crops and keeps, moves or drops each one. <em>On screen: the sheet of numbered crops that Muse Spark saw, opened large, with what came back for each crop.</em></li>
-        <li>The card speaks 13 languages. Here: Korean. The steps and the YOU mark change too. <em>On screen: the card in Korean, and “현재 위치” in place of YOU on the plan.</em></li>
-        <li>HereOut. hereout.devrives.com. Exits, second look and plan words: Muse Spark, through Baseten. Walls and routes: HereOut's own code, in your browser. Built solo for the Meta hackathon. Check every route against the plan. <em>On screen: the end card with the HereOut logo.</em></li>
+        <li>Exit blocked? Tap the dashed line. The route switches to the next exit. <em>On screen: a tap on the dashed line; YOU stays in the hall, and the route goes to Exit 3.</em></li>
+        <li>Points far from any green or red mark get a second look. Muse Spark sees numbered, zoomed crops and keeps, moves or drops each one. <em>On screen: the sheet of numbered crops that Muse Spark saw, opened large, with what came back for each crop.</em></li>
+        <li>The card comes in 13 languages. Here: Korean. The steps and the YOU mark change too. <em>On screen: the card in Korean, and “현재 위치” in place of YOU on the plan.</em></li>
+        <li>HereOut. hereout.devrives.com. Exits, second look and plan words: Muse Spark, through Baseten. Walls: HereOut's own code. Routes: in your browser. Built solo for the Meta hackathon. Check every route against the plan. <em>On screen: the end card with the HereOut logo.</em></li>
       </ol>
     </details>
   </section>

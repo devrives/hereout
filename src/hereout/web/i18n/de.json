@@ -80,7 +80,7 @@
  "found_exits": "Von HereOut gefundene Ausgänge nutzen",
  "fix_hint": "Tippen Sie auf den Ausgang im Plan. HereOut führt dann nur zu diesem Ausgang.",
  "fix_hint_add": "Tippen Sie auf den Ausgang oder die Treppe dieser Etage im Plan. Die anderen Ausgänge bleiben.",
- "exits_head": "Route zu anderem Ausgang",
+ "exits_head": "Route zu einem Ausgang",
  "exits_note": "Gestrichelt: HereOut fand von Ihrem Standort keinen Weg zu diesem Ausgang.",
  "exit_dead": "{exit}, kein Weg gefunden",
  "back_samples": "Zurück zu den Beispielen",

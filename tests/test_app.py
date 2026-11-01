@@ -376,13 +376,13 @@ def test_example_plays_the_loop(tmp_path):
 
 def test_counts_in_the_start_page(tmp_path):
     """The row of counts is in the page from the server, so the hero does not move when the gallery comes."""
-    from hereout.app import LANGUAGES, WEB, proof_page
+    from hereout.app import WEB, proof_page
     real = (WEB / "index.html").read_text()
     assert proof_page(real, None) == real
     shown = proof_page(real, make_gallery(tmp_path))
     assert '<p id="proof" class="proof js-only">' in shown
     assert '<b id="proof-plans">1</b>' in shown and '<b id="proof-countries">0</b>' in shown
-    assert f'<b id="proof-langs">{LANGUAGES}</b>' in shown and LANGUAGES == 13
+    assert 'proof-langs' not in shown  # the card languages are not a count of the samples (copy review)
     assert '<span id="gallery-count">1</span>' in shown
 
 
@@ -399,6 +399,6 @@ def test_start_page_links_and_credits_page(tmp_path):
     (tmp_path / "g").mkdir()
     client = TestClient(create_app(None, use_env=False, gallery=make_gallery(tmp_path / "g")))
     page = client.get("/credits").text
-    assert '<li id="XX-test_1"><a href="/?sample=XX-test_1">Sample plan 1</a> Photo: “T” by A, CC0 1.0' in page
+    assert '<li id="XX-test_1"><a href="/?sample=XX-test_1">Sample plan 1</a> · Photo: “T” by A, CC0 1.0' in page
     assert page.count("<li id=") == 1 and '/static/style.css?v=' in page
     assert TestClient(create_app(None, use_env=False)).get("/credits").status_code == 404

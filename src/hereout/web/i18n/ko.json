@@ -80,7 +80,7 @@
  "found_exits": "HereOut이 찾은 출구 사용하기",
  "fix_hint": "평면도에서 출구를 탭하세요. 그러면 HereOut이 그 출구로만 경로를 안내해요.",
  "fix_hint_add": "평면도에서 이 층의 출구나 계단을 탭하세요. 다른 출구는 그대로 있어요.",
- "exits_head": "다른 출구로 가는 경로",
+ "exits_head": "출구로 가는 경로",
  "exits_note": "점선: HereOut이 내 위치에서 그 출구까지 갈 길을 찾지 못했어요.",
  "exit_dead": "{exit} 쪽, 갈 길을 찾지 못했어요",
  "back_samples": "샘플로 돌아가기",

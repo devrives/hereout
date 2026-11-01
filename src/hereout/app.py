@@ -104,6 +104,7 @@ def video_url(folder: Path, name: str) -> str:
 
 # The changes to a sample photo in the hero loop and the demo video.
 RECORDED = ["cropped", "dimmed", "marks, ways out and route drawn on top", "shown in a recording of the HereOut page"]
+PREVIEW_RECORDED = ["cropped", "shown in a recording of the HereOut page"]
 LOOP_TOGGLE = ('<button id="loop-toggle" class="loop-toggle" type="button" aria-label="Pause the animation">'
                '<svg class="ico i-pause" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 5v14"/><path d="M15 5v14"/></svg>'
                '<svg class="ico i-play" aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></button>\n')
@@ -150,7 +151,6 @@ def example_page(page: str, gallery: Gallery | None, folder: Path | None = None)
 
 
 PROOF_TAG = '<p id="proof" class="proof js-only" hidden'
-LANGUAGES = 1 + len(list((WEB / "i18n").glob("*.json")))  # English and the catalogues of the plan card
 
 
 def proof_page(page: str, gallery: Gallery | None) -> str:
@@ -161,7 +161,7 @@ def proof_page(page: str, gallery: Gallery | None) -> str:
     if not plans:
         return page
     countries = len({p["country"] for p in plans if p["country"] != "XX"})
-    for key, n in (("proof-plans", len(plans)), ("proof-countries", countries), ("proof-langs", LANGUAGES),
+    for key, n in (("proof-plans", len(plans)), ("proof-countries", countries),
                    ("gallery-count", len(plans)), ("gallery-countries", countries)):
         page = page.replace(f'id="{key}"></', f'id="{key}">{n}</', 1)
     return page.replace(PROOF_TAG, PROOF_TAG.removesuffix(" hidden"), 1)
@@ -174,7 +174,7 @@ def credits_page(page: str, gallery: Gallery) -> str:
     """The page of photo credits (web/credits.html): one entry for each sample
     plan, in the order of the gallery, with the sample id as its anchor."""
     rows = "".join(f'\n    <li id="{html.escape(p["id"])}"><a href="/?sample={html.escape(p["id"])}">Sample plan {n}</a> '
-                   f'{credit_html(p["credit"], [])}</li>'
+                   f'· {credit_html(p["credit"], [])}</li>'
                    for n, p in enumerate(gallery.listing(), 1))
     return page.replace(CREDITS_LIST, CREDITS_LIST.replace("></", f">{rows}\n  </"), 1)
 
@@ -198,7 +198,9 @@ def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
         return re.sub(DEMO_TAG + r".*?</section>\n?", "", page, count=1, flags=re.S)
 
     poster = f' poster="{video_url(folder, "demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
-    credits = " ".join(credit_html(gallery.items[i]["credit"], RECORDED) for i in ids)
+    # The first plan is the one the film opens; the others show only as start-page previews.
+    credits = " ".join(credit_html(gallery.items[i]["credit"], RECORDED if k == 0 else PREVIEW_RECORDED)
+                       for k, i in enumerate(ids))
     return (page.replace('src="/video/demo.mp4"', f'src="{video_url(folder, "demo.mp4")}"{poster}', 1)
                 .replace(DEMO_TAG, DEMO_TAG.removesuffix(" hidden"), 1)
                 .replace(DEMO_CREDITS, DEMO_CREDITS.replace("></", f">{credits}</"), 1))

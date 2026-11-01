@@ -533,3 +533,6 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 @media (max-width: 480px) {
   .stages { font-size: 0.74rem; }
 }
+
+/* Korean breaks lines between words, not inside them (judge 6). */
+:lang(ko) { word-break: keep-all; overflow-wrap: anywhere; }

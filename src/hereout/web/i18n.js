@@ -104,7 +104,7 @@ const HereOutI18n = (() => {
     found_exits: "Use the exits HereOut found",
     fix_hint: "Tap the exit on the plan. HereOut then routes to that exit only.",
     fix_hint_add: "Tap the exit or the stairs of this floor on the plan. The other exits stay.",
-    exits_head: "Route to another exit",
+    exits_head: "Route to an exit",
     exits_note: "Dashed: HereOut found no way from your spot to that exit.",
     exit_dead: "{exit}, no way found",
     back_samples: "Back to the samples",

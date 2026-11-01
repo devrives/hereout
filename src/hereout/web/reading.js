@@ -45,12 +45,12 @@ const zoomMoved = (row) => row.zoom === "moved" &&
 
 // What happened to one exit point, in words.
 function readFate(row) {
-  if (row.zoom === "dropped") return `dropped by the zoom check (crop ${row.crop})`;
+  if (row.zoom === "dropped") return `dropped by the second look (crop ${row.crop})`;
   if (row.drop === "legend") return "dropped by HereOut: in the legend";
   if (row.drop) return "dropped by HereOut: not on the drawing";
   const parts = [`Exit ${row.exit + 1}`];
   const crop = row.crop ? ` (crop ${row.crop})` : "";
-  if (row.zoom) parts.push((zoomMoved(row) ? "moved by the zoom check" : "kept by the zoom check") + crop);
+  if (row.zoom) parts.push((zoomMoved(row) ? "moved by the second look" : "kept by the second look") + crop);
   if (row.placed_at) parts.push("moved onto the building by HereOut");
   return parts.join(", ");
 }
@@ -60,13 +60,13 @@ function readZoomText(read) {
   const count = (f) => rows.filter(f).length;
   switch (read.zoom) {
     case null: case undefined:
-      return "This sample uses a saved reading without its zoom check.";
+      return "This sample uses a saved reading without its second look.";
     case "none":
-      return "Every point was near a green or red plan mark, so no zoom check ran.";
+      return "Every point was near a green or red plan mark, so no second look ran.";
     case "skipped":
-      return "The first call was slow, so the zoom check did not run.";
+      return "The first call was slow, so the second look did not run.";
     case "failed":
-      return "The zoom check gave no answer, so the first points stay.";
+      return "The second look gave no answer, so the first points stay.";
     case "done": {
       const checked = count((r) => r.zoom);
       const moved = count(zoomMoved), dropped = count((r) => r.zoom === "dropped");

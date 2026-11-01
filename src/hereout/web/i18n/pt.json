@@ -80,7 +80,7 @@
  "found_exits": "Usar as saídas que HereOut encontrou",
  "fix_hint": "Toque na saída na planta. HereOut traça a rota só para essa saída.",
  "fix_hint_add": "Toque na saída ou na escada deste piso na planta. As outras saídas continuam.",
- "exits_head": "Rota para outra saída",
+ "exits_head": "Rota para uma saída",
  "exits_note": "Tracejado: HereOut não encontrou caminho do seu ponto até essa saída.",
  "exit_dead": "{exit}, sem caminho encontrado",
  "back_samples": "Voltar aos exemplos",
