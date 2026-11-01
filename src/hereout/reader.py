@@ -70,7 +70,7 @@ ZOOM_GATE = 0.015      # suspect: the nearest green or red is farther than this 
 ZOOM_CROP = 0.18       # side of each crop, as a share of the long side
 ZOOM_SIDE = 448        # crops are sent at this side
 ZOOM_GUTTER = 24
-ZOOM_MAX_MOVE = 0.07   # a larger move is not used
+ZOOM_MAX_MOVE = 0.07   # a larger move is used only when its point passes far_point_ok
 MAX_IMAGES = 8         # Baseten refuses a request with more images
 ZOOM_PER_SHEET = 4
 ZOOM_MAX = (MAX_IMAGES - 1) * ZOOM_PER_SHEET
@@ -88,7 +88,7 @@ MAIN_TRIES = 2  # a timeout or a 5xx answer gets one more try
 ZOOM_WHY = {
     "no answer": "the answer had no usable entry for the crop",
     "off the crop": "the point was outside its crop, or on another sheet",
-    "too far": "the move was larger than ZOOM_MAX_MOVE",
+    "too far": "the move was larger than ZOOM_MAX_MOVE, and the new point was off the route marks or the floor box",
     "last exit": "the model saw no exit in any crop, and one exit must stay",
 }
 
@@ -188,20 +188,74 @@ def parse_translation(text: str, ids: list[str], limit: int = TRANSLATE_CHARS) -
     return out
 
 
-def suspect_exits(img: np.ndarray, exits: list[dict]) -> list[int]:
-    """The exits far from any green or red mark (route band, arrow or exit sign), farthest first."""
-    if not exits:
-        return []
+def mark_distance(img: np.ndarray) -> np.ndarray:
+    """For each pixel, the distance in pixels to the nearest green or red mark
+    (route band, arrow or exit sign)."""
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
     a = lab[..., 1] - 128
     a0 = float(np.median(a))  # the tint of the paper
     mark = ((a < a0 - 6) | (a > a0 + 14)).astype(np.uint8)
     mark = cv2.morphologyEx(mark, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    dist = cv2.distanceTransform(1 - mark, cv2.DIST_L2, 5)
-    h, w = img.shape[:2]
-    far = ZOOM_GATE * max(h, w)
-    d = [float(dist[min(h - 1, max(0, int(e["y"]))), min(w - 1, max(0, int(e["x"])))]) for e in exits]
+    return cv2.distanceTransform(1 - mark, cv2.DIST_L2, 5)
+
+
+def _at(dist: np.ndarray, x: float, y: float) -> float:
+    h, w = dist.shape[:2]
+    return float(dist[min(h - 1, max(0, int(y))), min(w - 1, max(0, int(x)))])
+
+
+def suspect_exits(img: np.ndarray, exits: list[dict]) -> list[int]:
+    """The exits far from any green or red mark (route band, arrow or exit sign), farthest first."""
+    if not exits:
+        return []
+    dist = mark_distance(img)
+    far = ZOOM_GATE * max(img.shape[:2])
+    d = [_at(dist, e["x"], e["y"]) for e in exits]
     return sorted((i for i, v in enumerate(d) if v > far), key=lambda i: -d[i])[:ZOOM_MAX]
+
+
+def far_point_ok(dist: np.ndarray, x: float, y: float, plan_box) -> bool:
+    """True when a zoom point farther than ZOOM_MAX_MOVE from its first point
+    can still be used: it passes the test that made the first point suspect
+    (a green or red mark within ZOOM_GATE), and it is inside the model's box of
+    the floor drawing. On the 60 refused points of the gallery, the points
+    that pass were on exit signs, stairs and arrow ends; the points that fail
+    were on blank paper, the margin or the text panels
+    (wiki/decisions/second-look-on-samples.md). No box: no long move."""
+    if plan_box is None:
+        return False
+    x0, y0, x1, y1 = plan_box
+    return x0 <= x <= x1 and y0 <= y <= y1 and _at(dist, x, y) <= ZOOM_GATE * max(dist.shape[:2])
+
+
+def zoom_boxes(shape: tuple, exits: list[dict], suspects: list[int]) -> list[tuple[int, int, int, int]]:
+    """The crop round each suspect exit: x0, y0, width, height in the image."""
+    h, w = shape[:2]
+    side = max(160, round(ZOOM_CROP * max(h, w)))
+    out = []
+    for i in suspects:
+        e = exits[i]
+        x0 = int(min(max(0, e["x"] - side / 2), max(0, w - side)))
+        y0 = int(min(max(0, e["y"] - side / 2), max(0, h - side)))
+        out.append((x0, y0, min(side, w - x0), min(side, h - y0)))
+    return out
+
+
+def seen_points(shape: tuple, exits: list[dict], suspects: list[int], seen: dict[int, tuple]) -> dict[int, tuple]:
+    """The image points of saved answers of the zoom call. seen: {crop number:
+    (x, y) as a share of its sheet}, as Reading.trace keeps it. The crops and
+    sheets are found again from the exits that the call checked, so a saved
+    record gives its points with no call."""
+    boxes = zoom_boxes(shape, exits, suspects)
+    sheets, where = zoom_sheets([np.zeros((ch, cw, 3), np.uint8) for _, _, cw, ch in boxes])
+    out = {}
+    for n, (sx, sy) in seen.items():
+        if not 1 <= n <= len(boxes):
+            continue
+        (x0, y0, cw, ch), (sheet, tx, ty, tw, th) = boxes[n - 1], where[n - 1]
+        H, W = sheets[sheet].shape[:2]
+        out[n] = (x0 + (sx * W - tx) / tw * cw, y0 + (sy * H - ty) / th * ch)
+    return out
 
 
 def zoom_sheets(crops: list[np.ndarray]) -> tuple[list[np.ndarray], list[tuple[int, int, int, int, int]]]:
@@ -452,7 +506,8 @@ class ModelClient:
         reading.zoom = "done" if suspects else "none"
         if suspects:
             try:
-                reading.exits, extra, checked, reading.sheets = self.zoom_exits(img, reading.exits, suspects)
+                reading.exits, extra, checked, reading.sheets = self.zoom_exits(img, reading.exits, suspects,
+                                                                                reading.plan_box)
                 reading.cost_usd += extra
                 for i, result in checked.items():
                     reading.trace[i].update(result)
@@ -460,22 +515,22 @@ class ModelClient:
                 reading.zoom = "failed"
         return reading
 
-    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int]
+    def zoom_exits(self, img: np.ndarray, exits: list[dict], suspects: list[int], plan_box=None
                    ) -> tuple[list[dict], float, dict, list[np.ndarray]]:
         """Look again at crops around the suspect exits. Returns the exits after
         the look, its cost, for each suspect what the look did, and the sheets
         that the call sent. Each result has the number of its crop ("crop"):
         {"zoom": "moved", "to": (x, y)}, {"zoom": "dropped"} or
         {"zoom": "unchanged", "why": <ZOOM_WHY key>}. A point of the model
-        inside its crop is also "seen": (x, y) as a share of its sheet."""
+        inside its crop is also "seen": (x, y) as a share of its sheet. A move
+        farther than ZOOM_MAX_MOVE is used only when far_point_ok (with the
+        floor box plan_box); its result also has "far": True."""
         h, w = img.shape[:2]
         side = max(160, round(ZOOM_CROP * max(h, w)))
         crops = []
-        for i in suspects:
+        for i, (x0, y0, cw, ch) in zip(suspects, zoom_boxes(img.shape, exits, suspects)):
             e = exits[i]
-            x0 = int(min(max(0, e["x"] - side / 2), max(0, w - side)))
-            y0 = int(min(max(0, e["y"] - side / 2), max(0, h - side)))
-            c = img[y0:y0 + side, x0:x0 + side].copy()
+            c = img[y0:y0 + ch, x0:x0 + cw].copy()
             cv2.drawMarker(c, (int(e["x"] - x0), int(e["y"] - y0)), (255, 0, 255), cv2.MARKER_CROSS,
                            max(8, side // 14), max(1, side // 120))
             crops.append((c, x0, y0))
@@ -487,6 +542,7 @@ class ModelClient:
         except (json.JSONDecodeError, TypeError, ValueError, KeyError, AttributeError):
             answers = {}
         out = [dict(e) for e in exits]
+        dist = None
         drop = set()
         checked = {i: {"zoom": "unchanged", "why": "no answer", "crop": n} for n, i in enumerate(suspects, 1)}
         for n, (i, (c, x0, y0), (sheet, tx, ty, tw, th)) in enumerate(zip(suspects, crops, where), 1):
@@ -512,10 +568,13 @@ class ModelClient:
             seen = (round((tx + sx) / W, 4), round((ty + sy) / H, 4))
             ch, cw = c.shape[:2]
             x, y = x0 + sx / tw * cw, y0 + sy / th * ch
-            if np.hypot(x - exits[i]["x"], y - exits[i]["y"]) <= ZOOM_MAX_MOVE * max(h, w):
+            far = np.hypot(x - exits[i]["x"], y - exits[i]["y"]) > ZOOM_MAX_MOVE * max(h, w)
+            if far and dist is None:
+                dist = mark_distance(img)
+            if not far or far_point_ok(dist, x, y, plan_box):
                 out[i]["x"], out[i]["y"] = x, y
                 out[i].pop("model", None)  # the zoom point replaces the first point (exit_fix)
-                checked[i] = {"zoom": "moved", "to": (x, y), "crop": n, "seen": seen}
+                checked[i] = {"zoom": "moved", "to": (x, y), "crop": n, "seen": seen, **({"far": True} if far else {})}
             else:
                 checked[i].update(why="too far", seen=seen)
         kept = [e for i, e in enumerate(out) if i not in drop]

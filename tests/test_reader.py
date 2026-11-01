@@ -4,8 +4,9 @@ import httpx
 import numpy as np
 import pytest
 
-from hereout.reader import (ModelClient, ModelError, Prices, SpendCapReached, SpendLedger, parse_answer,
-                            suspect_exits)
+from hereout.reader import (ZOOM_MAX_MOVE, ModelClient, ModelError, Prices, SpendCapReached, SpendLedger,
+                            far_point_ok, mark_distance, parse_answer, seen_points, suspect_exits, zoom_boxes,
+                            zoom_sheets)
 
 
 def answer(content, usage=None):
@@ -226,6 +227,83 @@ def test_zoom_ignores_a_large_move(tmp_path, monkeypatch):
     assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(300, 200)]
     assert reading.trace[0]["zoom"] == "unchanged" and reading.trace[0]["why"] == "too far"
     assert reading.trace[0]["seen"] == pytest.approx((0.9, 0.9), abs=0.002)
+
+
+def plan_with_two_signs():
+    """plan_with_sign, with a second green sign at (360, 150): 78 px (more
+    than ZOOM_MAX_MOVE) from the exit at (300, 200)."""
+    img = plan_with_sign()
+    img[142:158, 348:372] = (40, 140, 40)
+    return img
+
+
+def far_read(tmp_path, monkeypatch, box: str, zoom_xy: tuple[int, int]):
+    """read_plan with one suspect exit at (300, 200) and a zoom answer at zoom_xy (sheet grid)."""
+    monkeypatch.setattr("hereout.exit_fix.Y_PULL", 0.0)
+    first = '{"final_exits": [{"x": 750, "y": 667}]' + box + '}'
+    zoom = '{"exits": [{"n": 1, "sheet": 2, "x": %d, "y": %d}]}' % zoom_xy
+
+    def handler(request):
+        content = json.loads(request.content)["messages"][0]["content"]
+        return httpx.Response(200, json=answer(zoom if len(content) > 2 else first))
+
+    client, _ = make_client(tmp_path, handler)
+    return client.read_plan(plan_with_two_signs())
+
+
+WHOLE = ', "floor_drawing": {"x_min": 0, "y_min": 0, "x_max": 1000, "y_max": 1000}'
+LEFT = ', "floor_drawing": {"x_min": 0, "y_min": 0, "x_max": 800, "y_max": 1000}'
+ON_SIGN = (839, 218)    # (360, 150) on the single sheet: crop at (220, 120), 160 px shown at 448 px
+ON_PAPER = (839, 822)   # (360, 290): blank paper
+
+
+def test_zoom_uses_a_large_move_onto_a_route_mark_in_the_floor_box(tmp_path, monkeypatch):
+    reading = far_read(tmp_path, monkeypatch, WHOLE, ON_SIGN)
+    assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(360, 150)]
+    assert reading.trace[0]["zoom"] == "moved" and reading.trace[0]["far"] is True
+    # The saved share on the sheet gives the same point again, with no call (scripts/far_points.py).
+    again = seen_points((300, 400), [{"x": 300, "y": 200}], [0], {1: reading.trace[0]["seen"]})[1]
+    assert again == pytest.approx(reading.trace[0]["to"], abs=0.1)
+    assert np.hypot(60, 50) > ZOOM_MAX_MOVE * 400
+
+
+@pytest.mark.parametrize("box, xy", [(WHOLE, ON_PAPER), (LEFT, ON_SIGN), ("", ON_SIGN)],
+                         ids=["blank paper", "outside the floor box", "no floor box"])
+def test_zoom_refuses_a_large_move_elsewhere(tmp_path, monkeypatch, box, xy):
+    reading = far_read(tmp_path, monkeypatch, box, xy)
+    assert [(round(e["x"]), round(e["y"])) for e in reading.exits] == [(300, 200)]
+    assert reading.trace[0]["zoom"] == "unchanged" and reading.trace[0]["why"] == "too far"
+
+
+def test_far_point_ok_needs_a_mark_and_the_box():
+    dist = mark_distance(plan_with_two_signs())
+    box = (0, 0, 400, 300)
+    assert far_point_ok(dist, 360, 150, box)
+    assert far_point_ok(dist, 360 + 0.015 * 400 + 11, 150, box)      # within ZOOM_GATE of the sign edge
+    assert not far_point_ok(dist, 360 + 0.015 * 400 + 14, 150, box)
+    assert not far_point_ok(dist, 360, 150, (0, 0, 320, 300))
+    assert not far_point_ok(dist, 360, 150, None)
+
+
+def test_seen_points_give_the_point_of_the_zoom_answer_again():
+    """The point that zoom_exits finds from an answer comes back from its saved "seen" share."""
+    shape = (900, 1200, 3)
+    exits = [{"x": 30, "y": 40}, {"x": 600, "y": 450}, {"x": 1190, "y": 890}, {"x": 900, "y": 100},
+             {"x": 100, "y": 800}]
+    suspects = [2, 0, 4, 1, 3]
+    boxes = zoom_boxes(shape, exits, suspects)
+    sheets, where = zoom_sheets([np.zeros((ch, cw, 3), np.uint8) for _, _, cw, ch in boxes])
+    seen, want = {}, {}
+    for n, ((x0, y0, cw, ch), (sheet, tx, ty, tw, th)) in enumerate(zip(boxes, where), 1):
+        H, W = sheets[sheet].shape[:2]
+        sx, sy = 0.3 * tw, 0.7 * th
+        seen[n] = ((tx + sx) / W, (ty + sy) / H)
+        want[n] = (x0 + sx / tw * cw, y0 + sy / th * ch)
+    got = seen_points(shape, exits, suspects, seen)
+    assert got.keys() == want.keys()
+    for n in want:
+        assert got[n] == pytest.approx(want[n], abs=1e-6)
+    assert len(sheets) == 2 and boxes[0][2] == boxes[0][3] == round(0.18 * 1200)
 
 
 def test_zoom_keeps_one_exit_when_it_drops_all(tmp_path):
