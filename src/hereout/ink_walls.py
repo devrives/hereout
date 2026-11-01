@@ -34,6 +34,7 @@ import cv2
 import numpy as np
 
 from .route import GRID_SIDE, blocked_grid
+from .voids import void_mask
 from .walls import outside_box, strong_ink, stroke_width
 
 CHROMA = 14.0          # Lab chroma above the paper: coloured ink, not a wall
@@ -561,7 +562,8 @@ def ink_walls(img: np.ndarray, plan_box=None, boxes=None, exits=(), strong=None)
                             cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))) > 0
     grow = lambda m: cv2.dilate(m.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0
     box_out = outside_box(ink.shape, plan_box)
-    base = grow(core) | box_out
+    # A lift shaft or a void crossed by an X is no floor (voids.py).
+    base = grow(core) | box_out | void_mask(img, plan_box, exits)
 
     def walls_for(exits):
         fill = fills(img, plan_box, boxes, exits, chroma)

@@ -10,7 +10,7 @@ import cv2
 import numpy as np
 
 from .ink_walls import ink_walls, text_boxes
-from .legend import drop_legend_exits
+from .legend import drop_legend_exits, drop_text_exits
 from .photo_map import is_photo_map
 from .plan import rectify
 from .reader import ModelClient, ModelError, Reading, SpendCapReached
@@ -51,13 +51,15 @@ class Plan:
         return plan
 
     def use_reading(self, reading: Reading) -> None:
-        """Drop the exits in a legend, then find the walls again inside the box
-        the model saw. An exit off the drawing goes; one on the street moves
-        to the building (ink_walls.place_exits)."""
+        """Drop the exits in a legend or a text block, then find the walls again
+        inside the box the model saw. An exit off the drawing goes; one on the
+        street moves to the building (ink_walls.place_exits)."""
         if self.text is None:
             self.text = text_boxes(self.image)
         given = list(reading.exits)
         exits = drop_legend_exits(self.image, self.text, given, reading.plan_box)
+        legend = {id(e) for e in given} - {id(e) for e in exits}
+        exits = drop_text_exits(self.image, self.text, exits)
         # Walls found in an aerial photo are roofs and trees: the page shows
         # the exits and points to the printed route.
         self.photo_map = is_photo_map(self.image, reading.plan_box)
@@ -70,8 +72,8 @@ class Plan:
         # What the code did with each exit of the model, for the page (model_reading).
         at = {id(e): p for e, p in zip(exits, placed)}
         reading.given = given
-        reading.code = [{"drop": "legend"} if id(e) not in at else {"drop": "off"} if at[id(e)] is None
-                        else {"at": at[id(e)]} for e in given]
+        reading.code = [{"drop": "legend"} if id(e) in legend else {"drop": "text"} if id(e) not in at
+                        else {"drop": "off"} if at[id(e)] is None else {"at": at[id(e)]} for e in given]
 
     def no_reading(self) -> None:
         """Find the walls with no reading, for marks that the user places by hand."""

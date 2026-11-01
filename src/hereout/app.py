@@ -203,7 +203,11 @@ class Jobs:
 
 
 def create_app(client: ModelClient | None = None, use_env: bool = True,
-               gallery: Gallery | None = None, video: Path | None = None) -> FastAPI:
+               gallery: Gallery | None = None, video: Path | None = None, review: bool | None = None) -> FastAPI:
+    """review: serve the owner's test pages (/review/ and the "?set=review" gallery).
+    They are off unless HEREOUT_REVIEW=1: the live site must not show them."""
+    if review is None:
+        review = use_env and os.environ.get("HEREOUT_REVIEW") == "1"
     if client is None and use_env:
         client = ModelClient.from_env()
     if gallery is None and use_env and os.environ.get("HEREOUT_GALLERY"):
@@ -268,11 +272,14 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
 
     # A review set read with code under test, opened with "?set=review". It is a gallery
     # folder inside review/, so its thumbnails come from the /review/ mount.
+    # Only with review on: else "?set=review" gives 404.
     review_set = None
-    if gallery and (gallery.folder / "review" / "gallery" / "items").is_dir():
+    if review and gallery and (gallery.folder / "review" / "gallery" / "items").is_dir():
         review_set = Gallery(gallery.folder / "review" / "gallery", "/review/gallery/thumbs")
 
     def pick(set: str | None) -> Gallery | None:
+        if set == "review" and review_set is None:
+            raise HTTPException(404, "not found")
         return review_set if set == "review" else gallery
 
     @app.get("/api/gallery")
@@ -316,8 +323,8 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         if (gallery.folder / "answers").is_dir():
             app.mount("/gallery/answers", LongCache(directory=gallery.folder / "answers"), name="answers")
         # Review pages for the owner, written outside the repository by test scripts.
-        # robots.txt keeps them out of search.
-        if (gallery.folder / "review").is_dir():
+        # Only with review on (HEREOUT_REVIEW=1, a local server): they are test pages.
+        if review and (gallery.folder / "review").is_dir():
             app.mount("/review", StaticFiles(directory=gallery.folder / "review", html=True), name="review")
     return app
 

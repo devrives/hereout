@@ -130,11 +130,32 @@ def test_directions_detour_out_and_back_gets_two_side_steps():
 
 
 def test_directions_side_step_before_a_turn_back():
-    """Down, then a side step to the plan left and back up: the walker steps
-    to their right (facing down), then turns around."""
+    """Down, then a side step to the plan left and back up: round the end of
+    a wall. Facing down, the walker turns right, then right again (judge
+    review 2026-11-01: "Step right, then turn around" read as going back)."""
     pts = [(100, 50), (100, 300), (80, 300), (80, 200)]
     walks = [s for s in directions(pts, 500, 500) if s["kind"] == "walk"]
-    assert walks[1]["text"] == "Step right, then turn around and go back a medium way."
+    assert [s["text"] for s in walks[1:]] == ["Turn right and walk a short way.", "Turn right and walk a medium way."]
+    assert walks[1]["path"] == [(100, 300), (80, 300)]
+    # A longer way back after the side step, past a bend at its end.
+    pts = [(200, 100), (900, 100), (900, 146), (700, 146), (700, 170)]
+    walks = [s["text"] for s in directions(pts, 1600, 1100) if s["kind"] == "walk"]
+    assert walks == ["Start toward the right of the plan and walk a long way.",
+                     "Turn right and walk a short way.", "Turn right and walk a short way."]
+
+
+def test_directions_slanted_corridor_is_one_walk():
+    """A slanted corridor comes as a staircase of short legs on the grid. Its
+    two ways take turns, so it is one walk on its straight line, with no
+    slight turns and no side steps (judge review 2026-11-01: seven steps,
+    most of them "Turn slightly")."""
+    pts = [(700, 600), (650, 540)]
+    x, y = 650.0, 540.0
+    for _ in range(8):
+        pts += [(x - 20, y), (x - 40, y + 20)]
+        x, y = x - 40, y + 20
+    walks = [s for s in directions(pts, 1600, 900) if s["kind"] == "walk"]
+    assert [s["text"] for s in walks[1:]] == ["Turn left and walk a medium way."]
 
 
 def test_directions_zigzag_takes_the_main_way():
