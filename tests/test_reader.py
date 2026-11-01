@@ -43,7 +43,8 @@ def test_parse_needs_json():
         parse_answer("sorry", 10, 10)
 
 
-def test_read_plan_records_cost(tmp_path):
+def test_read_plan_records_cost(tmp_path, monkeypatch):
+    monkeypatch.setattr("hereout.exit_fix.Y_PULL", 0.0)  # exact crop positions; the fix has its own tests
     seen = []
 
     def handler(request):
@@ -134,7 +135,8 @@ def test_suspects_are_far_from_route_colour():
     assert suspect_exits(plan_with_sign(), []) == []
 
 
-def test_zoom_moves_and_drops_suspect_exits(tmp_path):
+def test_zoom_moves_and_drops_suspect_exits(tmp_path, monkeypatch):
+    monkeypatch.setattr("hereout.exit_fix.Y_PULL", 0.0)  # exact crop positions; the fix has its own tests
     first = '{"final_exits": [{"x": 250, "y": 333}, {"x": 750, "y": 667}, {"x": 750, "y": 200}]}'
     # Exit 2 (300, 200) is suspect 1: crop x0 220, y0 120, 160 px, sent at 448 px on a 968 x 496 sheet.
     # Sheet point (314, 500) is crop point (100, 80): image point (320, 200), a move of 20 px.
@@ -210,7 +212,8 @@ def test_call_timeouts_are_short():
     assert reader.ZOOM_SKIP_AFTER < reader.CALL_TIMEOUT
 
 
-def test_zoom_ignores_a_large_move(tmp_path):
+def test_zoom_ignores_a_large_move(tmp_path, monkeypatch):
+    monkeypatch.setattr("hereout.exit_fix.Y_PULL", 0.0)  # exact crop positions; the fix has its own tests
     first = '{"final_exits": [{"x": 750, "y": 667}]}'
     zoom = '{"exits": [{"n": 1, "sheet": 2, "x": 900, "y": 900}]}'
 
