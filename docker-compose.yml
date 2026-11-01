@@ -10,6 +10,8 @@ services:
       HEREOUT_SPEND_CAP_USD: "60"
       HEREOUT_GALLERY: /gallery
       HEREOUT_VIDEO: /video
+      # Translations of the sample plans' words (src/hereout/translate.py), on the spend volume.
+      HEREOUT_TEXT_CACHE: /data/translations
     volumes:
       - hereout-spend:/data
       # Open-licensed plan photos with saved readings, made by scripts/run_set.py.

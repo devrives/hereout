@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 import cv2
@@ -164,6 +164,26 @@ def model_reading(reading: Reading) -> dict:
         rows.append(row)
     box = [round(v) for v in reading.plan_box] if reading.plan_box else None
     return {"box": box, "zoom": reading.zoom, "exits": rows}
+
+
+# The text read (reader.read_text) waits on the network beside the main call.
+# Its own pool: a job does not wait for it when it is late.
+WORDS_POOL = ThreadPoolExecutor(4, thread_name_prefix="words")
+
+
+def start_words(client: ModelClient | None, image: np.ndarray) -> Future | None:
+    """Start the read of the words on the plan. The future gives the plan text,
+    or None when the read fails: the plan opens without its words."""
+    read = getattr(client, "read_text", None)
+    if read is None:
+        return None
+
+    def run() -> dict | None:
+        try:
+            return read(image)[0]
+        except Exception:  # noqa: BLE001 - the words are extra; the plan never fails for them
+            return None
+    return WORDS_POOL.submit(run)
 
 
 def read_marks(plan: Plan, client: ModelClient | None) -> tuple[Reading | None, str | None]:
