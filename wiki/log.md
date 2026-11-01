@@ -377,3 +377,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/judge-round-3.md`: far zoom points, wall lines off the building, staircase walks, and why item 2 did not ship.
 - Updated `decisions/second-look-on-samples.md` and `index.md`.
 - Source: the third judge report, the agent branches judge3-exits and judge3-polish, the dev scores and the tests.
+
+## [2026-11-01] ingest | DESIGN.md in the Google format
+
+- Added `DESIGN.md` at the root: the design file of the page in the Google DESIGN.md format. It holds the tokens from `src/hereout/web/style.css`, the short design rules, the gaps from the house rules and the table of screens.
+- Reason: the kit skill `core:design-foundation` (owner request, 2026-11-01).
+- Source: `src/hereout/web/style.css`, `src/hereout/web/index.html` and `decisions/page-layout-a.md`.
