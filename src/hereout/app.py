@@ -31,7 +31,7 @@ from .gallery import Gallery
 from .ink_walls import warm_text_models
 from .pipeline import BadPhoto, answer, decode_photo, prepare, read_marks, start_words
 from .reader import ModelClient, ModelError, SpendCapReached
-from .translate import LANGS, DiskCache, apply, cache_key, items_of, labels_of
+from .translate import FOREIGN, LANGS, DiskCache, apply, cache_key, items_of, labels_of
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
@@ -399,7 +399,10 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
                 return JSONResponse({"working": True}, status_code=202, headers=NO_STORE)
             plan_text, labels = entry["plan_text"], entry["labels"]
         items = items_of(plan_text, labels)
-        if lang == "en" or not items:
+        if lang == "en":
+            # The plan words have their English text; only labels in another script need a call.
+            items = [i for i in items if i["id"].startswith("x") and FOREIGN.search(i["text"])]
+        if not items:
             return JSONResponse(apply(plan_text, labels, lang, {}), headers=NO_STORE)
         key = cache_key(items, lang, client.model if client else "")
         # Photo words stay in memory (nothing of a photo goes to disk); sample words in the disk cache.

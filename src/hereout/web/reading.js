@@ -34,6 +34,13 @@ function setReading(on) {
   draw();
 }
 
+// A label in another script is in the language of the plan, so a screen reader
+// reads it with the right voice (the card itself is English).
+function labelLang(el, text) {
+  const tag = state && state.plan_text && state.plan_text.language;
+  if (tag && tag !== "und" && /[^\u0000-\u024f]/.test(text)) el.lang = tag;
+}
+
 const readSide = () => Math.max(state.width, state.height);
 const zoomMoved = (row) => row.zoom === "moved" &&
   Math.hypot(row.zoom_at[0] - row.at[0], row.zoom_at[1] - row.at[1]) >= READ_SAME * readSide();
@@ -107,10 +114,11 @@ function lookItems(rows) {
     const sr = document.createElement("span");
     sr.className = "sr";
     sr.textContent = `Crop ${row.crop}: `;
-    const rest = document.createElement("span");
-    rest.dir = "auto";
-    rest.textContent = `: ${label}, ${why}.${then}`;
-    text.append(sr, b, rest);
+    const name = document.createElement("span");
+    name.dir = "auto";
+    name.textContent = label;
+    labelLang(name, row.label);
+    text.append(sr, b, ": ", name, `, ${why}.${then}`);
     li.append(n, text);
     return li;
   });
@@ -216,6 +224,7 @@ function showReading() {
     label.className = "rl";
     label.dir = "auto";
     label.textContent = row.label.trim() ? `“${row.label.trim()}”` : "(no label)";
+    labelLang(label, row.label);
     const fate = document.createElement("span");
     fate.className = "rf";
     fate.textContent = readFate(row);

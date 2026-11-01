@@ -190,6 +190,8 @@ canvas:focus-visible { outline: none; }
 
 /* The answer: the exit, the steps and what to do next. */
 .answer-col { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+/* On a phone the answer comes first, so the steps stay near the plan; the language row is under it. */
+.answer-col > .answer { order: -1; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
 .card > :first-child { margin-top: 0; }
 .answer-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
@@ -271,6 +273,7 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
   html.has-plan .layout { grid-template-areas: "status status" "result result" "gallery gallery"; }
   .result { display: grid; grid-template-columns: minmax(0, 1fr) 380px; column-gap: 28px; align-items: start; }
   .answer-col { margin-top: 0; }
+  .answer-col > .answer { order: 0; }
 }
 
 /* What Muse Spark read (reading.js): a card under the answer, and a view of the plan. */

@@ -177,6 +177,22 @@ def test_gallery_words_english_needs_no_call(tmp_path):
     assert model.translations == []
 
 
+def test_label_in_another_script_gets_an_english_name(tmp_path):
+    gallery = with_words(tmp_path)
+    path = gallery.folder / "items" / "XX-test_1.json"
+    item = json.loads(path.read_text())
+    item["reading"]["exits"][0]["label"] = "ВЫХОД"
+    path.write_text(json.dumps(item))
+    model = FakeModel()
+    client = TestClient(create_app(model, use_env=False, gallery=Gallery(gallery.folder),
+                                   text_cache=DiskCache(tmp_path / "cache")))
+    data = client.get("/api/text/g-XX-test_1?lang=en").json()
+    # Only the label goes to the call; the plan words keep their English text.
+    assert data["labels"] == {"ВЫХОД": "[en] ВЫХОД"}
+    assert data["plan_text"]["title"]["text"] == "Evacuation plan"
+    assert model.translations == ["en"]
+
+
 def test_gallery_words_translated_once_then_cached(tmp_path):
     model = FakeModel()
     cache = DiskCache(tmp_path / "cache")

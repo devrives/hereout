@@ -29,6 +29,10 @@ VERSION = "1"
 PLAIN_LABEL = re.compile(r"^\s*(exit|[\d.]*)\s*$", re.I)
 
 
+# A label in another script ("ВЫХОД") needs an English name too.
+FOREIGN = re.compile(r"[^\u0000-\u024f]")
+
+
 def labels_of(exits: list[dict]) -> list[str]:
     """The exit labels that need a translation, once each, in order."""
     out = []

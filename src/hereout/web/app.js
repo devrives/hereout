@@ -79,6 +79,7 @@ async function setLang(tag, chosen) {
   if (n !== langSeq) return;
   lang = tag;
   I.use(tag, cat || {});
+  $("words-status").textContent = "";
   $("lang").value = tag;
   // The texts of the card are in the language once its catalogue is there.
   $("result").lang = cat ? tag : "en";
@@ -89,7 +90,9 @@ async function setLang(tag, chosen) {
     history.replaceState(history.state, "", url);
   }
   retext();
-  loadWords();
+  // Arrow keys on the select change the language at each press: the words call waits for the last one.
+  clearTimeout(wordsTimer);
+  wordsTimer = setTimeout(loadWords, chosen ? 500 : 0);
 }
 
 function setUpLang() {
@@ -127,8 +130,30 @@ function retext() {
   showBackup();
   showExits();
   showAnswer();
-  $("plan-status").textContent = planSaid();
+  sayPlanSoon();
   showWords();
+}
+
+// After a change of language the route sentence is said once: after the last
+// change, and with the exit names in the language when they still have to come.
+const SAY_AFTER = 600;
+const SAY_WAIT = 2500;
+let sayTimer = 0;
+let wordsTimer = 0;
+function needsLabels() {
+  if (!state) return false;
+  const have = (wordsIn(lang) || {}).labels || {};
+  return state.exits.some((e) => {
+    const l = (e.label || "").trim();
+    return l && !PLAIN_LABEL.test(l) && (lang !== "en" || FOREIGN.test(l)) && !have[l];
+  });
+}
+function sayPlanSoon() {
+  clearTimeout(sayTimer);
+  const s = state;
+  sayTimer = setTimeout(() => {
+    if (state === s) $("plan-status").textContent = planSaid();
+  }, needsLabels() ? SAY_WAIT : SAY_AFTER);
 }
 
 // The exit names after their labels came in the language.
@@ -140,6 +165,7 @@ function renameExits() {
     b.setAttribute("aria-label", b.title);
   });
   showBackup();
+  clearTimeout(sayTimer);
   const said = planSaid();
   if ($("plan-status").textContent !== said) $("plan-status").textContent = said;
 }
@@ -147,12 +173,17 @@ function renameExits() {
 // The words of the plan in a language, once the server sent them: {plan_text, labels}.
 function wordsIn(tag) {
   if (!state) return null;
-  if (tag === "en") return state.plan_text ? { plan_text: state.plan_text, labels: {} } : null;
+  if (tag === "en") {
+    const labels = (state.tr && state.tr.en && state.tr.en.labels) || {};
+    return state.plan_text || Object.keys(labels).length ? { plan_text: state.plan_text, labels } : null;
+  }
   return (state.tr && state.tr[tag]) || null;
 }
 
 // An exit label that only says "exit", or only a number, needs no words (translate.py PLAIN_LABEL).
 const PLAIN_LABEL = /^\s*(exit|[\d.]*)\s*$/i;
+// A label in another script ("ВЫХОД") gets an English name too (translate.py FOREIGN).
+const FOREIGN = /[^\u0000-\u024f]/;
 const WORDS_TRIES = 30;  // asks every ASK_EVERY ms while the server still reads the words of a photo
 let wordsSeq = 0;
 let wordsState = "";     // "wait" while a translation comes, "failed" when none came
@@ -171,7 +202,8 @@ async function loadWords() {
   const n = ++wordsSeq;
   const tag = lang;
   wordsState = "";
-  const english = !s || !s.text_id || s.plan_text || !s.text_pending;
+  const english = (!s || !s.text_id || s.plan_text || !s.text_pending) &&
+    !(s && s.exits.some((e) => FOREIGN.test(e.label || "")) && !(s.tr && s.tr.en));
   const nothing = s && !s.plan_text && !s.text_pending && !s.exits.some((e) => !PLAIN_LABEL.test(e.label || ""));
   if (!s || !s.text_id || (tag === "en" ? english : wordsIn(tag) || nothing)) { showWords(); return; }
   if (tag !== "en") wordsState = "wait";
@@ -194,7 +226,7 @@ async function loadWords() {
     if (!data) break;
     s.text_pending = false;
     if (data.plan_text && !s.plan_text) s.plan_text = data.plan_text;
-    if (tag !== "en") (s.tr = s.tr || {})[tag] = { plan_text: data.plan_text, labels: data.labels || {} };
+    (s.tr = s.tr || {})[tag] = { plan_text: data.plan_text, labels: data.labels || {} };
     wordsState = "";
     remember();
     showWords();
