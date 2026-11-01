@@ -152,7 +152,8 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
 /* The pause and play button sits on the foot of the phone screen. --pw is the phone width. */
 .hero.has-loop { --pw: min(280px, 72vw); }
 .loop-phone { width: var(--pw) !important; }
-.loop-toggle { position: absolute; top: calc(2 * var(--pw) - 78px); left: calc(50% + var(--pw) / 2 - 62px); width: 44px; height: 44px; min-height: 0; padding: 0;
+/* Beside the phone, at its foot, so it covers nothing in the loop. */
+.loop-toggle { position: absolute; top: calc(2 * var(--pw) - 64px); left: min(calc(50% + var(--pw) / 2 + 16px), calc(100% - 44px)); width: 44px; height: 44px; min-height: 0; padding: 0;
   border-radius: 50%; background: rgb(7 16 12 / 0.82); border-color: #2f4339; color: var(--fg); }
 .loop-toggle:hover { background: var(--raise); }
 .loop-toggle[data-playing="true"] .i-play, .loop-toggle[data-playing="false"] .i-pause { display: none; }
