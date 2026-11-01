@@ -121,6 +121,9 @@ class Gallery:
         plan, reading, item = found
         out = answer(f"g-{pid}", plan, reading, None)
         out["credit"] = item["credit"]
+        # The words on the plan (scripts/read_text.py), as a photo answer has them.
+        out["text_id"] = f"g-{pid}"
+        out["plan_text"] = item.get("plan_text")
         return out, plan
 
     def answer_to_save(self, pid: str) -> tuple[dict, bytes] | None:

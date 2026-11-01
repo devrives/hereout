@@ -205,8 +205,9 @@ canvas:focus-visible { outline: none; }
 #steps { list-style: none; counter-reset: step; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
 #steps li { counter-increment: step; display: flex; align-items: center; gap: 10px; margin: 0; min-height: 44px; }
 #steps li::before { content: counter(step); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--soft); font-size: 0.85rem; font-weight: 700; }
-button.step { display: block; flex: 1; width: 100%; text-align: left; font-weight: 500; padding: 8px 12px; min-height: 44px; }
-button.step[aria-pressed="true"] { border-color: #d9480f; box-shadow: inset 5px 0 0 #d9480f; padding-left: 16px; }
+button.step { display: block; flex: 1; width: 100%; text-align: start; font-weight: 500; padding: 8px 12px; min-height: 44px; }
+button.step[aria-pressed="true"] { border-color: #d9480f; box-shadow: inset 5px 0 0 #d9480f; padding-inline-start: 16px; }
+[dir="rtl"] button.step[aria-pressed="true"] { box-shadow: inset -5px 0 0 #d9480f; }
 .check { margin: 0 0 10px; font-size: 0.9rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .actions button { flex: 1 1 auto; }
@@ -326,3 +327,21 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 @media (prefers-color-scheme: dark) {
   #show-read[aria-pressed="true"] { border-color: #c58af0; box-shadow: inset 0 0 0 1.5px #c58af0; }
 }
+
+/* The language of the plan card (i18n.js). */
+.lang-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lang-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
+.lang-row select { min-height: 44px; min-width: 10em; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--fg); font: inherit; }
+.lang-row select:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+
+/* What the plan says: the words that Muse Spark read on the plan, each with its original. */
+.words h3 { margin: 0 0 6px; }
+.words h4 { font-size: 0.95rem; margin: 14px 0 6px; }
+#words-lang { margin: 0 0 8px; }
+.w-title { margin: 0 0 4px; font-weight: 700; font-size: 1.05rem; }
+.w-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.w-list li { padding-inline-start: 12px; border-inline-start: 3px solid var(--line); }
+.w-text { display: block; overflow-wrap: anywhere; }
+.w-orig { display: block; margin-top: 2px; font-size: 0.85rem; color: var(--muted); overflow-wrap: anywhere; }
+.w-title .w-orig { font-weight: 400; }
+#words-note { margin: 14px 0 0; font-size: 0.85rem; }

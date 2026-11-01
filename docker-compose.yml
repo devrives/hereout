@@ -13,6 +13,8 @@ services:
       # The owner's test pages (/review/, ?set=review) stay off on the live site.
       # This line wins over an entry in .env.
       HEREOUT_REVIEW: "0"
+      # Translations of the sample plans' words (src/hereout/translate.py), on the spend volume.
+      HEREOUT_TEXT_CACHE: /data/translations
     volumes:
       - hereout-spend:/data
       # Open-licensed plan photos with saved readings, made by scripts/run_set.py.

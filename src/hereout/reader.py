@@ -97,6 +97,94 @@ The coordinates should be integers in the 0-1000 range of the whole sheet: x fro
 Answer with JSON only: {"exits": [{"n": 1, "sheet": 2, "x": <int>, "y": <int>}, {"n": 2, "sheet": 2, "point": null}]}, with one entry for each numbered part. "sheet" is the image number of its sheet."""
 
 
+# The words on the plan, for a reader who cannot read its language. In the style
+# of PROMPT: a direct request and JSON only. The start comes only from the tap,
+# so the "you are here" entry is left out and no point is asked for.
+TEXT_PROMPT = """This is a photo of a posted evacuation plan (fire escape plan). Read the words printed on it.
+Give:
+- "language": the main language of the text on the plan, as a BCP 47 tag, for example "ru", "ja", "de", "zh-Hans", "zh-Hant" or "en".
+- "title": the title of the plan.
+- "legend": the entries of the legend (the key to the symbols): what each symbol means. Leave out the entry for the "you are here" mark (also called "your position" or "location of this plan").
+- "instructions": the instructions printed on the plan for the people in the building, for example what to do in a fire, the number to call, or "do not use the lift".
+Give at most 12 legend entries and instructions together. When there are more, keep those that matter most to a person who must leave the building now.
+For each text give "original": the text as printed, in its own language and script, and "english": its meaning in plain English. Copy the original exactly; never translate it. One entry or one instruction for each item, at most about 120 characters: shorten a long one to its main point.
+Leave out addresses, company names, dates, signatures and approval stamps.
+Do not give positions or coordinates.
+Answer with JSON only, in this format:
+{"language": "<BCP 47 tag>", "title": {"original": "<text>", "english": "<text>"} or null, "legend": [{"original": "<text>", "english": "<text>"}], "instructions": [{"original": "<text>", "english": "<text>"}]}"""
+
+TEXT_TIMEOUT = 40.0   # the text read runs beside the main call; a late one is not waited for
+TEXT_ITEMS = 12       # legend entries and instructions together
+TEXT_CHARS = 200      # a longer item is cut
+LEAD = re.compile(r"^[\s\-\u2010-\u2015\u2022\u00b7*]+")
+LANG_TAG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$")
+
+
+def parse_plan_text(text: str) -> dict:
+    """The model's text read as {"language", "title", "legend", "instructions"}.
+    Each text is {"original", "english"}; an item with neither goes. The
+    instructions come first when the items are more than TEXT_ITEMS."""
+    m = re.search(r"\{.*\}", text or "", re.S)
+    if not m:
+        raise ModelError("no JSON in the answer")
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise ModelError(f"bad JSON in the answer: {e}") from e
+    if not isinstance(data, dict):
+        raise ModelError("the answer is not an object")
+
+    def item(v) -> dict | None:
+        if isinstance(v, str):
+            v = {"original": v}
+        if not isinstance(v, dict):
+            return None
+        # A leading dash or bullet is the layout of the sign, not text.
+        out = {k: LEAD.sub("", " ".join(str(v.get(k) or "").split()))[:TEXT_CHARS] for k in ("original", "english")}
+        if not out["original"] and not out["english"]:
+            return None
+        return {"original": out["original"] or out["english"], "english": out["english"] or out["original"]}
+
+    def items(v) -> list[dict]:
+        return [i for i in map(item, v if isinstance(v, list) else []) if i]
+
+    lang = str(data.get("language") or "").strip()
+    instructions = items(data.get("instructions"))[:TEXT_ITEMS]
+    legend = items(data.get("legend"))[:max(0, TEXT_ITEMS - len(instructions))]
+    return {"language": lang if LANG_TAG.match(lang) else "", "title": item(data.get("title")),
+            "legend": legend, "instructions": instructions}
+
+
+# The texts that a plan shows in the user's language: the plan text read and
+# the exit labels. Text only, no image.
+TRANSLATE_PROMPT = """Translate these texts from a posted evacuation plan into {name} ({tag}). A person who stands in front of the plan and must leave the building reads them on a phone.
+Each item has "text", in English, and sometimes "original", the same text as printed on the plan. Translate the meaning; use "original" to get it right. Keep numbers, phone numbers, exit numbers, room numbers and names as they are. Keep each translation as short as the text, in the style of a sign.
+Answer with JSON only: {{"<id>": "<translation>"}}, with one entry for each id.
+Items:
+{items}"""
+TRANSLATE_TIMEOUT = 40.0
+TRANSLATE_CHARS = 240
+
+
+def parse_translation(text: str, ids: list[str], limit: int = TRANSLATE_CHARS) -> dict[str, str]:
+    """The translations by id. An id with no string answer is left out."""
+    m = re.search(r"\{.*\}", text or "", re.S)
+    if not m:
+        raise ModelError("no JSON in the answer")
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise ModelError(f"bad JSON in the answer: {e}") from e
+    if not isinstance(data, dict):
+        raise ModelError("the answer is not an object")
+    out = {}
+    for i in ids:
+        v = data.get(i)
+        if isinstance(v, str) and v.strip():
+            out[i] = " ".join(v.split())[:limit]
+    return out
+
+
 def suspect_exits(img: np.ndarray, exits: list[dict]) -> list[int]:
     """The exits far from any green or red mark (route band, arrow or exit sign), farthest first."""
     if not exits:
@@ -292,17 +380,19 @@ class ModelClient:
         effort = os.environ.get("HEREOUT_EFFORT", DEFAULT_EFFORT) or None
         return cls(key, ledger, os.environ.get("HEREOUT_MODEL", DEFAULT_MODEL), prices, effort=effort)
 
-    def _ask(self, prompt: str, *imgs: np.ndarray, timeout: float = CALL_TIMEOUT) -> tuple[str, float, dict]:
-        """One call with one or more images. Returns the answer text, its cost and usage."""
+    def _ask(self, prompt: str, *imgs: np.ndarray, timeout: float = CALL_TIMEOUT,
+             max_tokens: int = MAX_TOKENS) -> tuple[str, float, dict]:
+        """One call with no, one or more images. Returns the answer text, its cost and usage."""
         images = [{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encode_image(i)}"}} for i in imgs]
-        # Worst case: a large prompt for each image plus every output token.
-        reserve = self.prices.cost(6000 * len(imgs), MAX_TOKENS)
+        # Worst case: a large prompt for each image, the text (a token is at
+        # least one byte) and every output token.
+        reserve = self.prices.cost(6000 * len(imgs) + len(prompt.encode()), max_tokens)
         self.ledger.reserve(reserve)
         actual = 0.0
         try:
             body = {
                 "model": self.model,
-                "max_tokens": MAX_TOKENS,
+                "max_tokens": max_tokens,
                 "temperature": 0,
                 **({"reasoning_effort": self.effort} if self.effort else {}),
                 "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}, *images]}],
@@ -428,3 +518,17 @@ class ModelClient:
             checked[i] = {"zoom": "dropped", "crop": checked[i]["crop"]} if kept else \
                 {"zoom": "unchanged", "why": "last exit", "crop": checked[i]["crop"]}
         return (kept or out), cost, checked, sheets
+
+    def read_text(self, img: np.ndarray) -> tuple[dict, float]:
+        """The words on the plan (parse_plan_text) and the cost. One try: the
+        plan opens without the words when this call fails."""
+        text, cost, _ = self._ask(TEXT_PROMPT, img, timeout=TEXT_TIMEOUT)
+        return parse_plan_text(text), cost
+
+    def translate(self, items: list[dict], tag: str, name: str) -> tuple[dict[str, str], float]:
+        """Translate [{"id", "text", "original"?}] into one language. Returns the
+        translations by id and the cost."""
+        listing = "\n".join(json.dumps(i, ensure_ascii=False) for i in items)
+        text, cost, _ = self._ask(TRANSLATE_PROMPT.format(name=name, tag=tag, items=listing),
+                                  timeout=TRANSLATE_TIMEOUT)
+        return parse_translation(text, [i["id"] for i in items]), cost

@@ -29,8 +29,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .gallery import Gallery
 from .ink_walls import warm_text_models
-from .pipeline import BadPhoto, answer, decode_photo, prepare, read_marks
-from .reader import ModelClient
+from .pipeline import BadPhoto, answer, decode_photo, prepare, read_marks, start_words
+from .reader import ModelClient, ModelError, SpendCapReached
+from .translate import LANGS, DiskCache, apply, cache_key, items_of, labels_of
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
@@ -41,6 +42,12 @@ JOB_WORKERS = 4         # the model calls wait on the network, the wall pass on 
 JOB_KEEP = 10 * 60      # seconds a job and its answer stay in memory
 JOBS_HELD = 64
 NO_STORE = {"Cache-Control": "no-store"}
+TRANSLATIONS_PER_WINDOW = 30  # translation calls (not cache hits) for each address in READ_WINDOW
+WORDS_KEEP = 6 * 60 * 60  # seconds the words of a photo stay in memory, for a later change of language
+WORDS_HELD = 256
+# After the walls, a job waits this long for a text read that is not done. A
+# later read reaches the page through /api/text: the plan never waits for it.
+WORDS_GRACE = 2.0
 mimetypes.add_type("image/webp", ".webp")  # the slim image has no mime.types
 LONG_CACHE = "public, max-age=31536000, immutable"
 
@@ -57,7 +64,12 @@ def index_html() -> str:
     """
     def versioned(m: re.Match) -> str:
         return f'{m.group(1)}/static/{m.group(2)}?v={static_digest(m.group(2))}"'
-    return re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / "index.html").read_text())
+    page = re.sub(r'((?:src|href)=")/static/([\w.-]+)"', versioned, (WEB / "index.html").read_text())
+    # The catalogues of the plan card (web/i18n/), loaded by the page with this hash.
+    h = hashlib.sha256()
+    for p in sorted((WEB / "i18n").glob("*.json")):
+        h.update(p.name.encode() + b"\0" + p.read_bytes())
+    return page.replace('data-i18n=""', f'data-i18n="{h.hexdigest()[:10]}"', 1)
 
 
 EXAMPLE_PHOTO = "/gallery/example-photo"  # in index.html: the server puts the URL of the saved image here
@@ -202,8 +214,39 @@ class Jobs:
             return True, j["answer"]
 
 
+class Words:
+    """The words of the photo plans, by a random id: the plan text read, the
+    exit labels and their translations. In memory only, like the jobs, but
+    kept longer, so that a change of language works while the plan is open."""
+
+    def __init__(self):
+        self._items: OrderedDict[str, dict] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def new(self) -> str:
+        tid = secrets.token_urlsafe(16)
+        now = time.monotonic()
+        with self._lock:
+            for k in [k for k, w in self._items.items() if now - w["at"] > WORDS_KEEP]:
+                del self._items[k]
+            while len(self._items) >= WORDS_HELD:
+                self._items.popitem(last=False)
+            self._items[tid] = {"at": now, "done": False, "plan_text": None, "labels": [], "tr": {}}
+        return tid
+
+    def get(self, tid: str) -> dict | None:
+        with self._lock:
+            return self._items.get(tid)
+
+    def update(self, tid: str, **fields) -> None:
+        with self._lock:
+            if tid in self._items:
+                self._items[tid].update(fields)
+
+
 def create_app(client: ModelClient | None = None, use_env: bool = True,
-               gallery: Gallery | None = None, video: Path | None = None, review: bool | None = None) -> FastAPI:
+               gallery: Gallery | None = None, video: Path | None = None, review: bool | None = None,
+               text_cache: DiskCache | None = None) -> FastAPI:
     """review: serve the owner's test pages (/review/ and the "?set=review" gallery).
     They are off unless HEREOUT_REVIEW=1: the live site must not show them."""
     if review is None:
@@ -219,7 +262,13 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         # Load the text models now, not in the first request (seconds on one CPU).
         threading.Thread(target=warm_text_models, daemon=True).start()
     reads = RateLimit(READS_PER_WINDOW, READ_WINDOW)
+    translations = RateLimit(TRANSLATIONS_PER_WINDOW, READ_WINDOW)
     jobs = Jobs()
+    words = Words()
+    if text_cache is None:
+        text_cache = DiskCache.from_env() if use_env else DiskCache(None)
+    # One translation call at a time for each text and language; a second request waits for the first.
+    text_locks = [threading.Lock() for _ in range(16)]
     page = index_html()
 
     @app.api_route("/", methods=["GET", "HEAD"])
@@ -248,14 +297,29 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
         except BadPhoto as e:
             raise HTTPException(400, str(e))
         allowed = reads.allow(client_ip(request))
+        tid = words.new()
 
         def work() -> dict:
+            # The words on the plan: a second call on the same image, beside the main call.
+            said = start_words(client, plan.image) if allowed else None
             if allowed:
                 reading, err = read_marks(plan, client)
             else:
                 plan.no_reading()
                 reading, err = None, "too many photos; mark the plan by hand"
-            return answer(None, plan, reading, err)
+            out = answer(None, plan, reading, err)
+            words.update(tid, labels=labels_of(out["exits"]))
+            out["text_id"], out["plan_text"] = f"p-{tid}", None
+            if said is None:
+                words.update(tid, done=True)
+                return out
+            try:
+                out["plan_text"] = said.result(timeout=WORDS_GRACE)
+                words.update(tid, plan_text=out["plan_text"], done=True)
+            except TimeoutError:
+                out["text_pending"] = True
+                said.add_done_callback(lambda f: words.update(tid, plan_text=f.result(), done=True))
+            return out
 
         return JSONResponse({"job": jobs.start(work)}, status_code=202, headers=NO_STORE)
 
@@ -312,6 +376,58 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
             while len(opened) > OPENED_PLANS:
                 opened.popitem(last=False)
         return out
+
+    @app.get("/api/text/{tid}")
+    def plan_words(tid: str, request: Request, lang: str = "en", set: str | None = None):
+        """The words of a plan in one language: the plan text read, with a
+        "text" in that language for each item, and the exit labels. tid is
+        "g-<gallery id>" or the "p-<id>" of a photo answer (text_id)."""
+        if lang not in LANGS:
+            raise HTTPException(400, "this language is not supported")
+        entry = None
+        if tid.startswith("g-"):
+            g = pick(set)
+            item = g.items.get(tid[2:]) if g else None
+            if item is None:
+                raise HTTPException(404, "this sample plan is not available")
+            plan_text, labels = item.get("plan_text"), labels_of(item["reading"].get("exits") or [])
+        else:
+            entry = words.get(tid[2:]) if tid.startswith("p-") else None
+            if entry is None:
+                raise HTTPException(404, "the server no longer has the words of this photo")
+            if not entry["done"]:
+                return JSONResponse({"working": True}, status_code=202, headers=NO_STORE)
+            plan_text, labels = entry["plan_text"], entry["labels"]
+        items = items_of(plan_text, labels)
+        if lang == "en" or not items:
+            return JSONResponse(apply(plan_text, labels, lang, {}), headers=NO_STORE)
+        key = cache_key(items, lang, client.model if client else "")
+        # Photo words stay in memory (nothing of a photo goes to disk); sample words in the disk cache.
+        cached = (lambda: entry["tr"].get(lang)) if entry is not None else (lambda: text_cache.get(key))
+        done = cached()
+        if done is None:
+            with text_locks[int(key[:4], 16) % len(text_locks)]:
+                done = cached()
+                if done is None:
+                    if client is None:
+                        raise HTTPException(503, "translation is not available now")
+                    if not translations.allow(client_ip(request)):
+                        raise HTTPException(429, "too many translations; try again in a few minutes")
+                    try:
+                        done, _ = client.translate(items, lang, LANGS[lang])
+                    except SpendCapReached:
+                        raise HTTPException(503, "translation is not available now")
+                    except ModelError:
+                        raise HTTPException(502, "the translation failed; try again")
+                    if not done:
+                        raise HTTPException(502, "the translation failed; try again")
+                    # Only a whole answer is kept: a part answer is tried again next time.
+                    if len(done) == len(items):
+                        if entry is not None:
+                            entry["tr"][lang] = done
+                        else:
+                            text_cache.put(key, done)
+        return JSONResponse(apply(plan_text, labels, lang, done), headers=NO_STORE)
 
     app.mount("/static", LongCache(directory=WEB, versioned=True), name="static")
     # The demo video, made by the recorder in the hub (docs/hackathon-hereout-submission-*).
