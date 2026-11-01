@@ -10,7 +10,7 @@ Entry for the Meta Global AI Developer Hackathon (2026-10-26 to 2026-11-04 ET).
 
 1. Open <https://hereout.devrives.com/>.
 2. Pick a plan from the gallery: 203 open-licensed photos of real posted plans. A gallery plan opens from a saved reading, so it makes no model call for the exits. Or upload your own photo of a plan.
-3. Tap where you stand on the plan. The route and the steps appear. Tap another spot for another route.
+3. The plan opens in the order of the work: the exits that Muse Spark found, then the ways out that the code drew. Tap where you stand: the route draws in from your spot, with the steps. Tap another spot for another route.
 4. Pick a language in the plan card, or let the browser pick it: Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Japanese, Korean, Simplified Chinese, Hindi or Arabic. "What the plan says" shows the plan's own title, legend and instructions, translated, each with its original text under it.
 5. Open "What Muse Spark read" to see the floor box and exit points that the model gave, what the second look did with each one (with the zoomed crops the model saw), and what the code changed after the model.
 
@@ -76,21 +76,21 @@ On the 203 gallery plans, the second look was run on the saved readings (`script
 | 2026-10-29 run (before later changes) | 2.5 % | 0.23 | 0.29 | 1 / 26 | 26 / 28 |
 | | **5 %** | **0.42** | **0.52** | **4 / 26** | |
 | | 10 % | 0.62 | 0.74 | 8 / 26 | |
-| Current code (2026-11-01) | 2.5 % | 0.28 | 0.32 | 2 / 26 | 28 / 28 |
+| Run of 2026-11-01 | 2.5 % | 0.28 | 0.32 | 2 / 26 | 28 / 28 |
 | | **5 %** | **0.47** | **0.53** | **6 / 26** | |
 | | 10 % | 0.64 | 0.71 | 7 / 26 | |
 
 "Photos with a route" means that the code found a way out for at least half of the open floor (`route_found` in `scripts/run_set.py`). It does not mean that the route is right.
 
-Each code version was run once. Two reads of the same photo can differ, so a change of a few hundredths is within noise.
+The run of 2026-11-01 came before three later changes (far points of the second look on route marks, wall lines off the building, staircase steps). Each code version was run once. Two reads of the same photo can differ, so a change of a few hundredths is within noise.
 
-**Dev set.** The code was tuned on a separate dev set: 30 gallery plans picked at random by country (seed 20261101), labelled the same way, by agents that had not seen the readings. On it, Muse Spark's exits in the lower half of the image were consistently a little too low, so `exit_fix.py` moves them up by 10 % of their distance below the middle (dev set, 5 %: precision 0.357 to 0.391, recall 0.348 to 0.383, four reads; better on both random halves of the dev set, and no read got worse). A new prompt scored within the noise between two reads and did not ship. No exit rule was chosen on the holdout photos. Only the time limits of the model calls, and the skip of the second look after a slow first call, came from their slow calls on 2026-10-29.
+**Dev set.** The code was tuned on a separate dev set: 30 gallery plans picked at random by country (seed 20261101), labelled the same way, by agents that had not seen the readings. On it, Muse Spark's exits in the lower half of the image were consistently a little too low, so `exit_fix.py` moves them up by 10 % of their distance below the middle (dev set, 5 %: precision 0.357 to 0.391, recall 0.348 to 0.383, four reads; better on both random halves of the dev set, and no read got worse). A new prompt scored within the noise between two reads and did not ship. A vote of three reads of each plan (an exit where two reads agree) gained 1 to 3 points at 5 % for three times the calls, so it did not ship either (`scripts/vote_reads.py`, `wiki/decisions/exit-vote.md`). No exit rule was chosen on the holdout photos. Only the time limits of the model calls, and the skip of the second look after a slow first call, came from their slow calls on 2026-10-29.
 
 On the overlays of the 2026-10-29 run, the misses and false exits were points on the sign or the name plate beside a stair instead of its door, points on the paper or the street outside the building, the same exit given twice (stair and sign), direction signs along a corridor taken as exits, and staircases on a ground floor where every printed route goes past them to the main door. Some points are on the right door but just outside R, which is why the scores at 10 % are higher.
 
 ## Limits
 
-- The exits are the weak part. On the photo set above, the current code found about half of the labelled exits, and about half of the exits it gave were false (radius 5 %). A wrong exit gives a wrong route, so every route says to check it against the plan, and the user can mark an exit by hand.
+- The exits are the weak part. On the photo set above, the run of 2026-11-01 found about half of the labelled exits, and about half of the exits it gave were false (radius 5 %). A wrong exit gives a wrong route, so every route says to check it against the plan, and the user can mark an exit by hand.
 - The model can give different exits for the same photo in different reads.
 - A route does not go from the stairs of one level to the exits of another level. Each level is a separate drawing.
 - Walls come from the ink. Wavy walls and the grey middle of a printed escape arrow can give wrong walls, so a route can cross a wall or find no way.
@@ -158,6 +158,7 @@ wiki/             decisions, components and history (why and when)
 
 - Gallery: 203 photos of posted plans, 164 from Wikimedia Commons and 39 from Flickr, all under open licences (CC0, public domain mark, CC BY, CC BY-SA). The app shows the credit of each photo: title, author, licence, source link and what was changed.
 - The photos, the gallery readings and the evaluation labels are not in this repository. The photos belong to their authors.
+- Fonts: Geist and Geist Mono (SIL Open Font License, `src/hereout/web/fonts/OFL.txt`).
 
 ## Built during the hackathon
 
