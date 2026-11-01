@@ -27,6 +27,7 @@ HereOut reads a photo of a posted evacuation plan and shows the way out. The use
 
 ## Rules
 
+- Design tokens and rules: `DESIGN.md` (Google DESIGN.md format, tokens of `src/hereout/web/style.css`). Check it from the hub: `node kit/plugins/core/scripts/ui-review/design-md.mjs hereout/DESIGN.md`.
 - All code in this repository is written during the hackathon. Never copy code from another repository.
 - Use Standard mode models only. Never call a `-contributor` model: those send the content to model training.
 - Every model call goes through one client with a spend cap. A spend-limit notice from Meta does not stop billing.
