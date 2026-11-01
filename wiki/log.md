@@ -345,3 +345,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/judge-round-2.md`: test pages off, text-block exits, X-marked voids, step fixes, gallery order, exit labels and scores.
 - Updated `components/plan-reader.md`, `timelines/photo-set-tests.md` and `index.md`.
 - Source: the owner words of 2026-11-01, the judge review, the agent branches and the tests.
+
+## [2026-11-01] ingest | Review fixes of judge review 2
+
+- Updated `decisions/plan-language.md`: three hand fixes of the catalogue, English names for labels in another script, the language row on a phone.
+- Source: the ux and a11y reviews of 2026-11-01 and the code.

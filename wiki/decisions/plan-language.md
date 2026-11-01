@@ -41,7 +41,10 @@ sources:
 
 ## Consequences
 
-- The agent checked the output in Korean, Japanese, Spanish, German and Russian. It fixed problems through the prompt and the key notes only. The catalogue has no hand edits.
+- The agent checked the output in Korean, Japanese, Spanish, German and Russian. It fixed problems through the prompt and the key notes only.
+- The reviews found three more problems, fixed by hand: a doubled word in two Arabic steps, a wrong Korean particle after a number, and a Korean button text.
+- An exit label in another script (for example "ВЫХОД") gets an English name from a text-only call. The plan words already have an English text, so they make no call.
+- On a phone the answer card comes before the language row, so the steps stay near the plan (ux review).
 - A text read cost 0.0068 USD and took 10 s on average in the agent test. A translation costs about 0.003 to 0.005 USD for each plan and language, once.
 - `scripts/read_text.py` adds the words to the gallery items. The item content is part of the key of the saved answers, so `save_answers.py` runs after it.
 - A test rebuilds the English steps of `route.js` from the catalogue on random steps. A new step form needs a catalogue key, or the test fails.
