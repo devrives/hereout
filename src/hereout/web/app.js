@@ -2,6 +2,8 @@
 
 const $ = (id) => document.getElementById(id);
 const R = HereOutRoute;
+const I = HereOutI18n;
+const t = I.t;
 const canvas = $("plan");
 const ctx = canvas.getContext("2d");
 let img = new Image();  // the image of state; a new plan loads into its own image first
@@ -47,16 +49,230 @@ const WALL = "#7a818b";  // lighter than the ways out, so a way and a wall diffe
 const BLOCK = "#d3d6db";  // a filled area of the plan, in Routes only
 const WAY = "rgb(6, 64, 34)";  // the ways out, opaque so they keep their contrast over a photo
 
+// The language of the plan card (i18n.js), from the address (lang=) or the
+// browser. The start page stays English. Muse Spark translated the catalogue
+// once (scripts/translate_ui.py); the words of each plan are translated when
+// the plan opens in another language (loadWords).
+let lang = "en";
+const catalogues = { en: I.EN };
+let langSeq = 0;
+
+// A step in the language: English is the text of route.js itself.
+function stepText(s) {
+  return lang === "en" || !s.say ? s.text : I.stepText(s.say);
+}
+
+async function catalogue(tag) {
+  if (catalogues[tag]) return catalogues[tag];
+  try {
+    const r = await fetch(`/static/i18n/${tag}.json?v=${document.documentElement.dataset.i18n || ""}`);
+    if (r.ok) return (catalogues[tag] = await r.json());
+  } catch (e) { /* offline: the English texts */ }
+  return null;
+}
+
+// chosen: the user picked it, so the address keeps it.
+async function setLang(tag, chosen) {
+  const n = ++langSeq;
+  const cat = await catalogue(tag);
+  if (n !== langSeq) return;
+  lang = tag;
+  I.use(tag, cat || {});
+  $("lang").value = tag;
+  // The texts of the card are in the language once its catalogue is there.
+  $("result").lang = cat ? tag : "en";
+  $("result").dir = cat ? I.dir(tag) : "ltr";
+  if (chosen) {
+    const url = new URL(location.href);
+    url.searchParams.set("lang", tag);
+    history.replaceState(history.state, "", url);
+  }
+  retext();
+  loadWords();
+}
+
+function setUpLang() {
+  const sel = $("lang");
+  for (const [tag, name] of Object.entries(I.LANGS)) {
+    const o = document.createElement("option");
+    o.value = tag;
+    o.lang = tag;
+    o.dir = I.dir(tag);
+    o.textContent = name;
+    sel.append(o);
+  }
+  sel.addEventListener("change", () => setLang(sel.value, true));
+  const asked = new URL(location.href).searchParams.get("lang");
+  const browser = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language];
+  setLang(asked && I.LANGS[asked] ? asked : I.pick(browser), false);
+}
+
+// Every text of the plan card again, in the language now.
+function retext() {
+  document.querySelectorAll("#result [data-t]").forEach((el) => { el.textContent = t(el.dataset.t); });
+  document.querySelectorAll("#result [data-t-label]").forEach((el) => el.setAttribute("aria-label", t(el.dataset.tLabel)));
+  $("fix-text").textContent = t(marking ? "fix_cancel" : "fix");
+  $("fix-hint").textContent = t(addExit ? "fix_hint_add" : "fix_hint");
+  $("tap-text").textContent = tapSaid();
+  hints();
+  if (!state || !view) { $("speak-text").textContent = t("speak"); return; }
+  const keep = selected;
+  showSteps();  // stops the speech: it was in the old language
+  if (keep >= 0 && view.steps[keep]) {
+    selected = keep;
+    $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === keep)));
+  }
+  draw();
+  showBackup();
+  showExits();
+  showAnswer();
+  $("plan-status").textContent = planSaid();
+  showWords();
+}
+
+// The exit names after their labels came in the language.
+function renameExits() {
+  if (!state || !view) return;
+  showAnswer();
+  [...$("exits").children].forEach((b, i) => {
+    b.title = b.classList.contains("dead") ? t("exit_dead", { exit: exitName(i) }) : exitName(i);
+    b.setAttribute("aria-label", b.title);
+  });
+  showBackup();
+  const said = planSaid();
+  if ($("plan-status").textContent !== said) $("plan-status").textContent = said;
+}
+
+// The words of the plan in a language, once the server sent them: {plan_text, labels}.
+function wordsIn(tag) {
+  if (!state) return null;
+  if (tag === "en") return state.plan_text ? { plan_text: state.plan_text, labels: {} } : null;
+  return (state.tr && state.tr[tag]) || null;
+}
+
+// An exit label that only says "exit", or only a number, needs no words (translate.py PLAIN_LABEL).
+const PLAIN_LABEL = /^\s*(exit|[\d.]*)\s*$/i;
+const WORDS_TRIES = 30;  // asks every ASK_EVERY ms while the server still reads the words of a photo
+let wordsSeq = 0;
+let wordsState = "";     // "wait" while a translation comes, "failed" when none came
+
+function languageName(tag) {
+  if (!tag) return "";
+  try {
+    return new Intl.DisplayNames([lang], { type: "language" }).of(tag) || tag;
+  } catch (e) { return tag; }
+}
+
+// The words of the plan and the exit labels in the language. The page shows
+// the English words first and puts the translation in place when it comes.
+async function loadWords() {
+  const s = state;
+  const n = ++wordsSeq;
+  const tag = lang;
+  wordsState = "";
+  const english = !s || !s.text_id || s.plan_text || !s.text_pending;
+  const nothing = s && !s.plan_text && !s.text_pending && !s.exits.some((e) => !PLAIN_LABEL.test(e.label || ""));
+  if (!s || !s.text_id || (tag === "en" ? english : wordsIn(tag) || nothing)) { showWords(); return; }
+  if (tag !== "en") wordsState = "wait";
+  showWords();
+  const q = new URLSearchParams({ lang: tag });
+  if (SET) q.set("set", "review");
+  for (let k = 0; k < WORDS_TRIES; k++) {
+    let r = null;
+    try {
+      r = await fetch(`/api/text/${encodeURIComponent(s.text_id)}?${q}`, { cache: "no-store" });
+    } catch (e) { /* no connection */ }
+    if (n !== wordsSeq || state !== s) return;
+    if (r && r.status === 202) {
+      await sleep(ASK_EVERY);
+      if (n !== wordsSeq || state !== s) return;
+      continue;
+    }
+    const data = r && r.ok ? await r.json().catch(() => null) : null;
+    if (n !== wordsSeq || state !== s) return;
+    if (!data) break;
+    s.text_pending = false;
+    if (data.plan_text && !s.plan_text) s.plan_text = data.plan_text;
+    if (tag !== "en") (s.tr = s.tr || {})[tag] = { plan_text: data.plan_text, labels: data.labels || {} };
+    wordsState = "";
+    remember();
+    showWords();
+    renameExits();
+    if (tag !== "en") $("words-status").textContent = t("words_loaded");
+    return;
+  }
+  if (tag === "en") s.text_pending = false;
+  wordsState = tag === "en" ? "" : "failed";
+  showWords();
+  if (tag !== "en") $("words-status").textContent = t("words_failed");
+}
+
+// "What the plan says": the title, the instructions and the legend, each in
+// the language with its original under it, so the user can find it on the plan.
+function showWords() {
+  const box = $("words-wrap");
+  const own = wordsIn(lang);
+  const en = wordsIn("en");
+  const pt = (own && own.plan_text) || (en && en.plan_text);
+  box.hidden = !pt || (!pt.title && !pt.legend.length && !pt.instructions.length);
+  if (box.hidden) return;
+  // Until the translation comes, the texts are English.
+  const textLang = lang !== "en" && !(own && own.plan_text) ? "en" : null;
+  // An English plan in English: the text as printed is enough.
+  const asPrinted = lang === "en" && /^en\b/i.test(pt.language || "");
+  const name = languageName(pt.language);
+  const note = wordsState ? t(wordsState === "wait" ? "words_wait" : "words_failed") : "";
+  $("words-lang").textContent = I.join([name ? t("words_lang", { language: name }) : t("words_lang_unknown"), note]);
+  const item = (e, el) => {
+    const main = document.createElement("span");
+    main.className = "w-text";
+    main.textContent = asPrinted ? e.original : (e.text || e.english);
+    if (textLang) { main.lang = textLang; main.dir = "ltr"; }
+    el.append(main);
+    if (e.original && e.original !== main.textContent) {
+      const o = document.createElement("span");
+      o.className = "w-orig";
+      const sr = document.createElement("span");
+      sr.className = "sr";
+      sr.textContent = `${t("words_on_plan")} `;
+      const txt = document.createElement("span");
+      txt.lang = pt.language || "";
+      txt.dir = "auto";
+      txt.textContent = e.original;
+      o.append(sr, txt);
+      el.append(o);
+    }
+  };
+  const title = $("words-title");
+  title.replaceChildren();
+  title.hidden = !pt.title;
+  if (pt.title) item(pt.title, title);
+  for (const [key, list, head] of [["instructions", "words-instr", "words-instr-head"], ["legend", "words-legend", "words-legend-head"]]) {
+    const ul = $(list);
+    ul.replaceChildren();
+    for (const e of pt[key] || []) {
+      const li = document.createElement("li");
+      item(e, li);
+      ul.append(li);
+    }
+    ul.hidden = $(head).hidden = !(pt[key] || []).length;
+  }
+}
+
 // Two status lines: one by the photo button for loading, one under the plan
 // for what happens on the plan, so the answer to a tap is in view.
 function say(text) { $("status").textContent = text; }
 // The same text again is no change, and a screen reader stays silent: an
 // Enter with no answer sounds like a dead key. Empty the line first, and set
 // the text in a later task.
+// The line keeps how it made its text, so a change of language says it again in the new one.
 let sayAgain = 0;
-function sayPlan(text) {
+let planSaid = () => "";
+function sayPlan(say) {
+  planSaid = typeof say === "function" ? say : () => say;
+  const text = planSaid();
   const el = $("plan-status");
-  if (text === FINDING && el.textContent === FINDING) return;  // one open, one message
+  if (text === finding() && el.textContent === text) return;  // one open, one message
   clearTimeout(sayAgain);
   if (text && el.textContent === text) {
     el.textContent = "";
@@ -204,7 +420,7 @@ function makeNetwork(field) {
   }
 }
 
-const FINDING = "Finding the route…";
+const finding = () => t("finding");
 
 // While the worker makes the ways out, the page shows no route: a grid route
 // first and a different route a second later would confuse. A spot with no
@@ -545,7 +761,7 @@ function drawMarks(unit) {
   if (state.exits.length === 1) {
     const e = state.exits[0];
     const near = here && Math.hypot(e.x - here[0], e.y - here[1]) < unit * 14;
-    label("EXIT", e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
+    label(t("exit_word"), e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
   }
 
   // The second way out: dashed, under the route, so the route stays on top
@@ -602,7 +818,7 @@ function drawMarks(unit) {
     const r = unit * 2.4;
     hereMark(here[0], here[1], r);
     const at = youLabelAt(here, r, unit * 2.2);
-    label("YOU", at.x, at.y, r, at.baseline, at.align);
+    label(t("you"), at.x, at.y, r, at.baseline, at.align);
     you = [Math.min(at.box[0], here[0] - r), Math.min(at.box[1], here[1] - r), Math.max(at.box[2], here[0] + r), Math.max(at.box[3], here[1] + r)];
   }
   if (step && step.kind === "walk") {
@@ -656,7 +872,7 @@ function exitMark(x, y, r, n, used) {
 // whichever first stays on the plan and covers no exit mark (its number).
 function youLabelAt(here, r, exitR) {
   ctx.font = `bold ${Math.round(r * 1.6)}px system-ui, sans-serif`;
-  const w = ctx.measureText("YOU").width, h = r * 1.6, gap = r * 1.8;
+  const w = ctx.measureText(t("you")).width, h = r * 1.6, gap = r * 1.8;
   const [x, y] = here;
   const places = [
     { x, y: y - gap, baseline: "bottom", align: "center", box: [x - w / 2, y - gap - h, x + w / 2, y - gap] },
@@ -705,18 +921,18 @@ function showSteps() {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "step";
-      b.textContent = s.text;
+      b.textContent = stepText(s);
       b.setAttribute("aria-pressed", "false");
       b.addEventListener("click", () => select(selected === i && !speaking ? -1 : i));
       li.append(b);
     } else {
-      li.textContent = s.text;
+      li.textContent = stepText(s);
     }
     list.append(li);
   });
   if (view.pending) {
     const li = document.createElement("li");
-    li.textContent = FINDING;
+    li.textContent = finding();
     list.append(li);
   }
   const none = view.steps.length === 0;
@@ -767,12 +983,18 @@ function select(i) {
 }
 
 // Model labels are often all "Exit", so the number tells the exits apart.
+// In another language the label is its translation, once it has come (loadWords).
 function exitName(i) {
   const l = (state.exits[i].label || "").trim();
-  if (!l || /^exit$/i.test(l)) return `Exit ${i + 1}`;
+  if (!l || /^exit$/i.test(l)) return t("exit_n", { n: i + 1 });
+  const words = wordsIn(lang);
+  const shown = (words && words.labels && words.labels[l]) || l;
+  // A label that only says "exit" in the language ("ВЫХОД" in Korean) is the plain name too.
+  const bare = (s) => s.trim().toLocaleLowerCase();
+  if (shown !== l && [t("exit_word"), t("exit_n", { n: "" })].some((w) => bare(w) === bare(shown))) return t("exit_n", { n: i + 1 });
   // A label that already has the number ("Exit 4") needs it only once. Else the
   // number comes first, so it matches the mark on the plan.
-  return new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? l : `Exit ${i + 1}: ${l}`;
+  return new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? shown : t("exit_n_label", { n: i + 1, label: shown });
 }
 
 // One button for each exit, in number order, so the route can go to another
@@ -792,7 +1014,7 @@ function showExits() {
     b.type = "button";
     // The number, as on the plan. The name is in the label and the tooltip.
     b.textContent = String(i + 1);
-    b.title = open[i] ? exitName(i) : `${exitName(i)}, no way found`;
+    b.title = open[i] ? exitName(i) : t("exit_dead", { exit: exitName(i) });
     b.setAttribute("aria-label", b.title);
     b.classList.toggle("dead", !open[i]);
     b.setAttribute("aria-pressed", String(i === current));
@@ -802,12 +1024,12 @@ function showExits() {
       remember();
       if (view.pending) {
         view.pendingHow = "exit-button";
-        sayPlan(FINDING);
+        sayPlan(finding);
         $("exits").children[i].focus();
         return;
       }
-      sayPlan(view.route ? `Route to ${exitName(i)}.${otherWay()} Check it against the plan.`
-                         : `HereOut found no way to ${exitName(i)} in this photo. Try another exit.`);
+      sayPlan(view.route ? () => I.join([t("msg_route_to", { exit: exitName(i) }), otherWay(), t("msg_check")])
+                         : () => t("msg_no_way_to", { exit: exitName(i) }));
       if (!view.route) { $("exits").children[i].focus(); return; }
       // On a phone, the plan with the new route comes into view; the steps take the focus.
       if (narrow()) $("stage").scrollIntoView({ block: "start" });
@@ -849,8 +1071,8 @@ function showAnswer() {
   if (!on) return;
   const i = r.exitIndex;
   $("answer-num").textContent = String(i + 1);
-  $("answer-kind").textContent = state.exits[i].marked ? "The exit you marked"
-    : state.exitChoice >= 0 ? "The exit you chose" : "Nearest exit";
+  $("answer-kind").textContent = t(state.exits[i].marked ? "kind_marked"
+    : state.exitChoice >= 0 ? "kind_chosen" : "kind_nearest");
   $("answer-name").textContent = exitName(i);
 }
 
@@ -889,68 +1111,70 @@ function showLegend() {
 // The walls come from the photo, so the messages say what HereOut read,
 // not what the building is.
 const ROUTE_ERRORS = {
-  "start is inside a wall": "HereOut reads that spot as wall, or as outside the plan. Tap a spot in a corridor or a room.",
-  "no open way to an exit": "HereOut found no way from that spot to an exit in this photo. Try a spot in a corridor.",
-  "every exit is inside a wall": 'HereOut reads every exit as part of a wall. Tap "Mark the exit" and mark one in a doorway.',
+  "start is inside a wall": () => t("err_wall"),
+  "no open way to an exit": () => t("err_no_way"),
+  "every exit is inside a wall": () => t("err_exits_wall", { fix: t("fix") }),
 };
 // A sheet can show several floors, and the model can miss the exits of one.
 // The exit marked after this message is added to the others.
-const NO_EXIT_HERE = 'No exit that HereOut found is on this part of the plan. If it is another floor, tap "Mark the exit" and mark the exit or the stairs of that floor. The other exits stay.';
+const NO_EXIT_HERE = () => t("msg_no_exit_here", { fix: t("fix") });
 // Walls found in an aerial photo are roofs and trees (photo_map.py). The
 // exits are only marks on the photo, so the text names them.
 function photoMapText() {
   const n = state.exits.length;
   const names = state.exits.map((e, i) => exitName(i)).join(", ");
-  return `This is a photo map. HereOut marks ${n === 1 ? "the exit" : `${n} exits`} (${names}), but draws no routes over a photo. ` +
-         'Follow the route printed on the map. "Larger plan" shows it bigger.';
+  return I.join([t(n === 1 ? "photo_map_one" : "photo_map_many", { n, names }), t("photo_map_follow", { enlarge: t("enlarge") })]);
 }
 
 // how: "tap" (a start the user chose) or "exit" (an exit the user marked).
 function explain(how = "tap") {
   addExit = false;
+  // Each message is a function: a change of language says it again (sayPlan).
   if (!state.exits.length) {
-    sayPlan(state.model_error
-      ? 'Could not read the plan. Tap "Mark the exit" and mark it, then tap where you are.'
-      : 'No exit found. Tap "Mark the exit" and mark it on the plan.');
+    const key = state.model_error ? "msg_unread" : "msg_no_exit";
+    sayPlan(() => t(key, { fix: t("fix") }));
   } else if (state.photo_map) {
-    sayPlan(photoMapText());
+    sayPlan(photoMapText);
   } else if (!state.start && how === "exit") {
-    sayPlan(view.reachable ? "Exit marked. Now tap where you are on the plan."
-                           : "HereOut reads that exit as wall. Mark it in a doorway.");
+    const key = view.reachable ? "msg_exit_marked" : "msg_exit_wall";
+    sayPlan(() => t(key));
   } else if (!state.start) {
     // A sample is not where the user stands: its own mark is the natural start.
-    sayPlan(state.credit
-      ? 'Tap the plan\'s own "you are here" mark, or any open spot, to see the route to the nearest exit.'
-      : "Tap where you are on the plan to see the route to the nearest exit.");
+    const key = state.credit ? "msg_tap_sample" : "msg_tap";
+    sayPlan(() => t(key));
   } else if (view.pending) {
     view.pendingHow = how;
-    sayPlan(FINDING);
+    sayPlan(finding);
   } else if (view.error && state.exitChoice >= 0) {
-    sayPlan(`HereOut found no way to ${exitName(state.exitChoice)} in this photo. Try another exit.`);
+    const i = state.exitChoice;
+    sayPlan(() => t("msg_no_way_to", { exit: exitName(i) }));
   } else if (view.error && how === "exit") {
-    sayPlan(`HereOut found no way to the exit you marked. Mark it at a doorway${
-      state.foundExits.length ? ", or use the exits HereOut found" : ""}.`);
+    const key = state.foundExits.length ? "msg_no_way_marked_found" : "msg_no_way_marked";
+    sayPlan(() => t(key));
   } else if (view.error === "no open way to an exit" && view.field.areaShare(state.start) >= FLOOR_SHARE) {
     sayPlan(NO_EXIT_HERE);
     addExit = true;
     return;
   } else if (view.error) {
-    sayPlan(ROUTE_ERRORS[view.error] || "HereOut found no route from that spot.");
+    sayPlan(ROUTE_ERRORS[view.error] || (() => t("err_other")));
   } else if (state.exits[view.route.exitIndex].marked) {
-    sayPlan("Route to the exit you marked. Check it against the plan.");
+    sayPlan(() => I.join([t("msg_route_marked"), t("msg_check")]));
   } else if (state.exitChoice >= 0) {
-    sayPlan(`Route to ${exitName(state.exitChoice)}.${otherWay()} Check it against the plan.`);
+    const i = state.exitChoice;
+    sayPlan(() => I.join([t("msg_route_to", { exit: exitName(i) }), otherWay(), t("msg_check")]));
   } else if (exampleStart()) {
-    sayPlan(`Example start, picked by hand. Route to the nearest exit, ${exitName(view.route.exitIndex)}.${otherWay()} Tap the plan to start from another spot.`);
+    const i = view.route.exitIndex;
+    sayPlan(() => I.join([t("msg_example", { exit: exitName(i) }), otherWay(), t("msg_tap_other")]));
   } else {
-    sayPlan(`Route from the spot you chose to the nearest exit, ${exitName(view.route.exitIndex)}.${otherWay()} Check it against the plan.`);
+    const i = view.route.exitIndex;
+    sayPlan(() => I.join([t("msg_route_nearest", { exit: exitName(i) }), otherWay(), t("msg_check")]));
   }
 }
 
 // The second way out, as words for the status line.
 function otherWay() {
-  if (!view.backup) return "";
-  return ` If it is blocked, use ${exitName(view.backup.exitIndex)}${photoOnly ? "" : " (dashed line)"}.`;
+  if (!view || !view.backup) return "";
+  return t(photoOnly ? "backup_plain" : "backup", { exit: exitName(view.backup.exitIndex) });
 }
 
 // The second way out under the steps too, where the eyes are after a tap
@@ -959,8 +1183,8 @@ function showBackup() {
   const b = view.backup;
   $("backup").hidden = !b || !view.route;
   if ($("backup").hidden) return;
-  $("backup-text").textContent = `If it is blocked, use ${exitName(b.exitIndex)}${photoOnly ? "" : " (dashed line)"}.`;
-  $("backup-go").textContent = `Route to Exit ${b.exitIndex + 1}`;
+  $("backup-text").textContent = t(photoOnly ? "backup_plain" : "backup", { exit: exitName(b.exitIndex) });
+  $("backup-go").textContent = t("route_to_n", { n: b.exitIndex + 1 });
 }
 
 // Photo only and Routes only change what is under the marks, so at most one is on.
@@ -992,20 +1216,19 @@ $("show-routes").addEventListener("click", () => {
 function startMarking() {
   clearRefusal();
   marking = true;
-  $("fix-text").textContent = "Cancel";
-  $("fix-hint").textContent = addExit
-    ? "Tap the exit or the stairs of this floor on the plan. The other exits stay."
-    : "Tap the exit on the plan. HereOut then routes to that exit only.";
+  $("fix-text").textContent = t("fix_cancel");
+  $("fix-hint").textContent = t(addExit ? "fix_hint_add" : "fix_hint");
   $("fix-hint").hidden = false;
   $("tap-text").hidden = true;
   hints();
   if (photoOnly) setPhotoOnly(false);
-  sayPlan(addExit ? "Tap the exit or the stairs of this floor on the plan." : "Tap the exit on the plan.");
+  const key = addExit ? "msg_mark_tap_add" : "msg_mark_tap";
+  sayPlan(() => t(key));
 }
 
 function stopMarking() {
   marking = false;
-  $("fix-text").textContent = "Mark the exit";
+  $("fix-text").textContent = t("fix");
   $("fix-hint").hidden = true;
   if (state) $("tap-text").hidden = !state.start;
   hints();
@@ -1046,8 +1269,9 @@ function setStart(x, y) {
 // A tap off the floor drawing gives no route, and the old route stays. A tap
 // on a wall or on ink next to open floor starts on that floor (route.js
 // Field.tapStart). The keyboard marker follows the same rules.
-const OFF_PLAN = "That spot is outside the floor plan. Tap a corridor or a room on the plan.";
-const TAP_TEXT = $("tap-text").textContent;
+const OFF_PLAN = () => t("off_plan");
+const tapText = () => t("tap_hint");
+let tapSaid = tapText;  // the text under the plan, as a function (sayPlan)
 function startFromTap(x, y) {
   const t = view.field.tapStart([x, y]);
   if (t.at === "outside") { refuseTap(OFF_PLAN); return; }
@@ -1060,7 +1284,8 @@ function startFromTap(x, y) {
 // the live status line (in the answer card) for a screen reader. The card
 // line stays hidden then, so the message shows once.
 function refuseTap(text) {
-  $("tap-text").textContent = text;
+  tapSaid = text;
+  $("tap-text").textContent = text();
   $("tap-text").hidden = false;
   $("tap-hint").classList.add("refused");
   $("plan-status").classList.add("sr");
@@ -1070,16 +1295,17 @@ function refuseTap(text) {
 function clearRefusal() {
   if (!$("tap-hint").classList.contains("refused")) return;
   $("tap-hint").classList.remove("refused");
-  $("tap-text").textContent = TAP_TEXT;
+  tapSaid = tapText;
+  $("tap-text").textContent = tapText();
   $("tap-text").hidden = !state || !state.start || marking;
   if (view) showAnswer();
 }
 
 function place(x, y) {
   if (marking) setExit(x, y);
-  else if (state.photo_map && state.exits.length) sayPlan(photoMapText());
+  else if (state.photo_map && state.exits.length) sayPlan(photoMapText);
   else if (state.exits.length) startFromTap(x, y);
-  else sayPlan('Mark an exit first: tap "Mark the exit".');
+  else sayPlan(() => t("msg_mark_first", { fix: t("fix") }));
 }
 
 // The button of the second way out does what its exit button does.
@@ -1101,16 +1327,12 @@ $("found-exits").addEventListener("click", () => {
 
 function hints() {
   if (state && state.photo_map) {
-    $("kbd-hint").textContent = "Arrow keys move the marker, Shift moves it faster. The marker names the closest exit.";
-    canvas.setAttribute("aria-label", "Plan, a photo map. HereOut marks the exits only. Move the marker with the arrow keys to hear the closest exit.");
+    $("kbd-hint").textContent = t("kbd_map");
+    canvas.setAttribute("aria-label", t("plan_label_map"));
     return;
   }
-  $("kbd-hint").textContent = marking
-    ? "Arrow keys move the marker, Shift moves it faster. Enter places the exit. Escape cancels."
-    : "Arrow keys move the marker, Shift moves it faster. Enter starts the route there.";
-  canvas.setAttribute("aria-label", marking
-    ? "Plan. Mark the exit: tap it, or move the marker with the arrow keys and press Enter."
-    : "Plan. Tap a spot to see the route from there, or move the marker with the arrow keys and press Enter.");
+  $("kbd-hint").textContent = t(marking ? "kbd_mark" : "kbd_start");
+  canvas.setAttribute("aria-label", t(marking ? "plan_label_mark" : "plan_label"));
 }
 
 // The old plan stays in state, with its map, until the image of the new plan
@@ -1174,6 +1396,8 @@ function showPlan(answer, focusResult, push) {
     if (typeof showReading === "function") showReading();  // reading.js
     update();
     explain();
+    showWords();
+    loadWords();
     if ($("stage").classList.contains("big")) centreOnStart();
     markOpenSample(push);
     remember();
@@ -1654,12 +1878,13 @@ function sayMarker() {
     const [x0, y0, x1, y1] = shownFrame();
     const col = ["left", "middle", "right"][Math.max(0, Math.min(2, Math.floor(3 * (x - x0) / (x1 - x0))))];
     const row = ["top", "middle", "bottom"][Math.max(0, Math.min(2, Math.floor(3 * (y - y0) / (y1 - y0))))];
-    const at = row === col ? "middle" : `${row} ${col}`;
+    const at = t(row === col ? "pos_middle" : `pos_${row}_${col}`);
     let near = -1, best = Infinity;
     state.exits.forEach((e, i) => { const d = Math.hypot(e.x - x, e.y - y); if (d < best) { best = d; near = i; } });
     // Enter there gives no route: say so before the user presses it.
-    const off = !marking && !state.photo_map && view && view.field.tapStart([x, y]).at === "outside" ? ", outside the floor plan" : "";
-    $("marker-status").textContent = `Marker: ${at} of the plan${off}` + (near >= 0 ? `, closest exit mark ${exitName(near)}.` : ".");
+    const off = !marking && !state.photo_map && view && view.field.tapStart([x, y]).at === "outside";
+    const key = (off ? "marker_off" : "marker") + (near >= 0 ? "_near" : "");
+    $("marker-status").textContent = t(key, { at, exit: near >= 0 ? exitName(near) : "" });
   }, 400);
 }
 canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; draw(); });
@@ -1699,23 +1924,35 @@ let speaking = false;
 function stopSpeaking() {
   if (canSpeak) speechSynthesis.cancel();
   speaking = false;
-  $("speak-text").textContent = "Read the steps aloud";
+  $("speak-text").textContent = t("speak");
+}
+
+// A voice for the language, when the browser has one: else the browser picks.
+function voiceFor(tag) {
+  const norm = (s) => s.replace(/_/g, "-").toLowerCase();
+  const voices = speechSynthesis.getVoices();
+  return voices.find((v) => norm(v.lang) === norm(tag)) ||
+         voices.find((v) => norm(v.lang).split("-")[0] === norm(tag).split("-")[0]) || null;
 }
 
 $("speak").addEventListener("click", () => {
   if (!canSpeak || !state) return;
   if (speaking) { stopSpeaking(); return; }
   speechSynthesis.cancel();
-  const lines = ["Check this route against the plan.", ...view.steps.map((s) => s.text)];
-  if (view.backup) lines.push(`If ${exitName(view.route.exitIndex)} is blocked, use ${exitName(view.backup.exitIndex)}.`);
+  const lines = [t("speak_check"), ...view.steps.map(stepText)];
+  if (view.backup) lines.push(t("speak_backup", { exit: exitName(view.route.exitIndex), backup: exitName(view.backup.exitIndex) }));
+  const tag = I.SPEECH[lang] || lang;
+  const voice = voiceFor(tag);
   lines.forEach((text, i) => {
     const u = new SpeechSynthesisUtterance(text);
+    u.lang = tag;
+    if (voice) u.voice = voice;
     if (i > 0) u.onstart = () => select(i - 1);
     if (i === lines.length - 1) u.onend = stopSpeaking;
     speechSynthesis.speak(u);
   });
   speaking = true;
-  $("speak-text").textContent = "Stop reading";
+  $("speak-text").textContent = t("speak_stop");
 });
 
 function lastPlan(key = STORE_KEY) {
@@ -1761,6 +1998,7 @@ document.querySelector(".brand").addEventListener("click", (ev) => {
   openFromAddress(ev);
   window.scrollTo(0, 0);
 });
+setUpLang();
 openFromAddress();
 // early.js hid the start page for a plan that is not there: show it again.
 if (!state && !opening && !loading) layout();

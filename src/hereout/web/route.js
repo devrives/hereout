@@ -2127,22 +2127,34 @@ const HereOutRoute = (() => {
       // A side step is at the start of its walk (the walk split there). The
       // first step names it in the plan frame, the others for the walker.
       const aside = sideStep(a, b, head, planSize);
-      let text;
+      // say: the parts of the text, for the page in other languages (i18n.js stepText).
+      let text, say;
       if (i === 0) {
         text = `Start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
-        if (aside) text = `Move over toward the ${planSide(head + (aside === "right" ? 90 : -90))} of the plan, then start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
+        say = { key: "start", side: planSide(head), length };
+        if (aside) {
+          text = `Move over toward the ${planSide(head + (aside === "right" ? 90 : -90))} of the plan, then start toward the ${planSide(head)} of the plan and walk a ${length} way.`;
+          say = { key: "start_aside", side2: planSide(head + (aside === "right" ? 90 : -90)), side: planSide(head), length };
+        }
       }
-      else if (turn === "straight") text = aside ? `Step ${aside}, then keep going straight for a ${length} way.` : `Keep going straight for a ${length} way.`;
+      else if (turn === "straight") {
+        text = aside ? `Step ${aside}, then keep going straight for a ${length} way.` : `Keep going straight for a ${length} way.`;
+        say = aside ? { key: "straight_aside", aside, length } : { key: "straight", length };
+      }
       else if (turn === "back") {
         // The side step comes before the turn: its side is that of the way the walker still faces.
         const side = sideStep(a, b, prev, planSize);
         text = side ? `Step ${side}, then turn around and go back a ${length} way.` : `Turn around and go back a ${length} way.`;
+        say = side ? { key: "back_aside", aside: side, length } : { key: "back", length };
       }
-      else text = aside ? `Turn ${turn.replace("slight", "slightly")}, step ${aside}, then walk a ${length} way.` : `Turn ${turn.replace("slight", "slightly")} and walk a ${length} way.`;
-      steps.push({ kind: "walk", turn, length, text, from: a, to: b, path: points.slice(idx[i], idx[i + 1] + 1) });
+      else {
+        text = aside ? `Turn ${turn.replace("slight", "slightly")}, step ${aside}, then walk a ${length} way.` : `Turn ${turn.replace("slight", "slightly")} and walk a ${length} way.`;
+        say = aside ? { key: "turn_aside", turn, aside, length } : { key: "turn", turn, length };
+      }
+      steps.push({ kind: "walk", turn, length, text, say, from: a, to: b, path: points.slice(idx[i], idx[i + 1] + 1) });
       prev = end;
     }
-    steps.push({ kind: "arrive", text: "Then you reach the exit.", at: pts[pts.length - 1] });
+    steps.push({ kind: "arrive", text: "Then you reach the exit.", say: { key: "arrive" }, at: pts[pts.length - 1] });
     return steps;
   }
 

@@ -27,12 +27,12 @@ function setReading(on) {
   $("show-map").setAttribute("aria-pressed", String(!readShown && showMap && !photoOnly));
   $("show-photo").setAttribute("aria-pressed", String(!readShown && photoOnly));
   $("show-routes").setAttribute("aria-pressed", String(!readShown && routesOnly));
-  $("tap-text").textContent = readShown ? READ_TAP_TEXT : TAP_TEXT;
+  tapSaid = readShown ? () => t("read_tap") : tapText;
+  $("tap-text").textContent = tapSaid();
   $("tap-text").hidden = !readShown && (!state || !state.start || marking);
-  if (readShown !== was) sayPlan(readShown ? "Showing what Muse Spark read on all of the photo." : "Back to the plan and the route.");
+  if (readShown !== was) sayPlan(readShown ? () => t("read_showing") : () => t("read_back"));
   draw();
 }
-const READ_TAP_TEXT = "Tap the plan or press Enter to go back to the route.";
 
 const readSide = () => Math.max(state.width, state.height);
 const zoomMoved = (row) => row.zoom === "moved" &&

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-i18n="">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -70,28 +70,28 @@
   </div>
 
   <section id="result" class="result" hidden aria-labelledby="result-head">
-    <h2 id="result-head" class="sr" tabindex="-1">Plan and route</h2>
+    <h2 id="result-head" class="sr" tabindex="-1" data-t="result_head">Plan and route</h2>
     <div class="plan-col">
-      <div class="view" role="group" aria-label="What the plan shows">
+      <div class="view" role="group" aria-label="What the plan shows" data-t-label="view_group">
         <div class="seg">
-          <button id="show-map" type="button" aria-pressed="true">Escape map</button>
-          <button id="show-photo" type="button" aria-pressed="false">Photo only</button>
-          <button id="show-routes" type="button" aria-pressed="false">Routes only</button>
+          <button id="show-map" type="button" aria-pressed="true" data-t="view_map">Escape map</button>
+          <button id="show-photo" type="button" aria-pressed="false" data-t="view_photo">Photo only</button>
+          <button id="show-routes" type="button" aria-pressed="false" data-t="view_routes">Routes only</button>
         </div>
-        <button id="enlarge" class="enlarge" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg><span class="enlarge-text">Larger plan</span></button>
+        <button id="enlarge" class="enlarge" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></svg><span class="enlarge-text" data-t="enlarge">Larger plan</span></button>
       </div>
-      <div class="stage" id="stage" role="region" aria-label="Plan">
+      <div class="stage" id="stage" role="region" aria-label="Plan" data-t-label="stage">
         <canvas id="plan" tabindex="0" role="application" aria-describedby="tap-hint"></canvas>
       </div>
       <div id="legend" class="legend" hidden>
-        <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i>Wall, as HereOut reads it</span>
-        <span id="legend-field"><i class="sw-field" aria-hidden="true"></i>Near an exit … far from one</span>
-        <span id="legend-way"><i class="sw-way" aria-hidden="true"></i>Ways out, arrows to the exits</span>
-        <span id="legend-route"><i class="sw-route" aria-hidden="true"></i>Your route</span>
-        <span id="legend-other" hidden><i class="sw-other" aria-hidden="true"></i>Route if your exit is blocked</span>
-        <span><i class="sw-exit" aria-hidden="true"></i>Exit, by number</span>
+        <span id="legend-wall" hidden><i class="sw-wall" aria-hidden="true"></i><span data-t="legend_wall">Wall, as HereOut reads it</span></span>
+        <span id="legend-field"><i class="sw-field" aria-hidden="true"></i><span data-t="legend_field">Near an exit … far from one</span></span>
+        <span id="legend-way"><i class="sw-way" aria-hidden="true"></i><span data-t="legend_way">Ways out, arrows to the exits</span></span>
+        <span id="legend-route"><i class="sw-route" aria-hidden="true"></i><span data-t="legend_route">Your route</span></span>
+        <span id="legend-other" hidden><i class="sw-other" aria-hidden="true"></i><span data-t="legend_other">Route if your exit is blocked</span></span>
+        <span><i class="sw-exit" aria-hidden="true"></i><span data-t="legend_exit">Exit, by number</span></span>
       </div>
-      <div id="read-legend" class="legend read-legend">
+      <div id="read-legend" class="legend read-legend" lang="en" dir="ltr">
         <span id="rl-box"><i class="sw-rbox" aria-hidden="true"></i>Floor box, from Muse Spark</span>
         <span><i class="sw-rpt" aria-hidden="true"></i>Exit point from Muse Spark, by exit number</span>
         <span id="rl-zoom"><i class="sw-rzoom" aria-hidden="true"></i>Moved by the zoom check</span>
@@ -102,30 +102,45 @@
       <p id="marker-status" class="sr" role="status" aria-live="polite"></p>
     </div>
     <div class="answer-col">
+      <div class="lang-row">
+        <label for="lang"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg><span data-t="lang_label">Language</span></label>
+        <select id="lang"></select>
+      </div>
       <div class="card answer">
         <div id="answer-head" class="answer-head" hidden>
           <span id="answer-num" class="badge" aria-hidden="true"></span>
           <p><span id="answer-kind" class="kicker"></span> <strong id="answer-name"></strong></p>
         </div>
-        <p id="answer-check" class="muted check" hidden>Check the route and the exits against the plan.</p>
+        <p id="answer-check" class="muted check" hidden data-t="check_card">Check the route and the exits against the plan.</p>
         <p id="plan-status" class="plan-status" role="status" aria-live="polite"></p>
-        <h3 id="steps-head">Steps</h3>
-        <p id="steps-hint" class="muted">Tap a step to see it on the plan.</p>
+        <h3 id="steps-head" data-t="steps_head">Steps</h3>
+        <p id="steps-hint" class="muted" data-t="steps_hint">Tap a step to see it on the plan.</p>
         <ol id="steps" role="list" tabindex="-1" aria-labelledby="steps-head"></ol>
         <p id="backup" class="backup" hidden><i class="sw-other" aria-hidden="true"></i><span id="backup-text"></span> <button id="backup-go" type="button"></button></p>
         <div class="actions">
           <button id="speak" type="button"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><span id="speak-text">Read the steps aloud</span></button>
           <button id="fix" type="button"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg><span id="fix-text">Mark the exit</span></button>
-          <button id="found-exits" type="button" hidden>Use the exits HereOut found</button>
+          <button id="found-exits" type="button" hidden data-t="found_exits">Use the exits HereOut found</button>
         </div>
         <p id="fix-hint" class="muted" hidden>Tap the exit on the plan. HereOut then routes to that exit only.</p>
       </div>
       <div id="exits-wrap" class="card" hidden>
-        <h3 id="exits-head">Route to another exit</h3>
+        <h3 id="exits-head" data-t="exits_head">Route to another exit</h3>
         <div id="exits" class="exits" role="group" aria-labelledby="exits-head"></div>
-        <p id="exits-note" class="muted" hidden>Dashed: HereOut found no way from your spot to that exit.</p>
+        <p id="exits-note" class="muted" hidden data-t="exits_note">Dashed: HereOut found no way from your spot to that exit.</p>
       </div>
-      <div id="read-wrap" class="card read" hidden>
+      <div id="words-wrap" class="card words" hidden>
+        <h3 id="words-head" data-t="words_head">What the plan says</h3>
+        <p id="words-lang" class="muted"></p>
+        <p id="words-title" class="w-title"></p>
+        <h4 id="words-instr-head" data-t="words_instructions">Instructions on the plan</h4>
+        <ul id="words-instr" class="w-list" role="list" aria-labelledby="words-instr-head"></ul>
+        <h4 id="words-legend-head" data-t="words_legend">Legend</h4>
+        <ul id="words-legend" class="w-list" role="list" aria-labelledby="words-legend-head"></ul>
+        <p id="words-note" class="muted" data-t="words_note">Muse Spark read these words on the photo and translated them. Check them against the plan.</p>
+        <p id="words-status" class="sr" role="status" aria-live="polite"></p>
+      </div>
+      <div id="read-wrap" class="card read" hidden lang="en" dir="ltr">
         <h3 id="read-head">What Muse Spark read</h3>
         <p id="read-sum"></p>
         <button id="show-read" type="button" aria-pressed="false"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span id="show-read-text">Show the reading on the plan</span></button>
@@ -133,8 +148,8 @@
         <p id="read-zoom" class="muted"></p>
         <p class="muted">Muse Spark's part ends here. HereOut's own code finds the walls in the ink (OpenCV, with RapidOCR text detection to skip lettering) and works out every route in your browser.</p>
       </div>
-      <button id="back-to-samples" type="button" hidden>Back to the samples</button>
-      <p id="credit" class="credit" hidden></p>
+      <button id="back-to-samples" type="button" hidden data-t="back_samples">Back to the samples</button>
+      <p id="credit" class="credit" hidden lang="en" dir="ltr"></p>
     </div>
   </section>
   <section id="gallery-wrap" class="gallery-wrap" hidden aria-labelledby="gallery-head">
@@ -174,6 +189,7 @@
 </main>
 <link id="network-worker" rel="prefetch" href="/static/network-worker.js">
 <script src="/static/route.js"></script>
+<script src="/static/i18n.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/reading.js"></script>
 </body>
