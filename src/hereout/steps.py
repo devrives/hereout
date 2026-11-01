@@ -25,6 +25,9 @@ SIDE_STEP_SHARE = 0.02   # a straight walk that ends farther than this share of 
 SLANT_ANGLE = 50.0       # degrees: two ways this close that take turns are one slanted way drawn on the grid
 SLANT_SHARE = 0.85       # those two ways are this share of the walk or more
 SLANT_TURNS = 3          # and the walk changes between them this many times or more
+STAIR_ANGLE = 90.0 + SAME_WAY  # degrees: two square ways that take turns in short legs are a slanted way too (_slanted)
+STAIR_PART = 0.5         # in such a staircase, no leg is more than this share of its way
+STAIR_EVEN = 0.25        # and the smaller way is this share of the two or more (a diagonal, not a walk with jogs)
 
 
 def _line_gap(p, a, b) -> float:
@@ -73,7 +76,7 @@ def _heading(a, b) -> float:
     return math.degrees(math.atan2(b[0] - a[0], -(b[1] - a[1])))
 
 
-def _walk_headings(points, i: int, j: int) -> tuple:
+def _walk_headings(points, i: int, j: int, plan_size: float) -> tuple:
     """The headings of the walk from route point i to route point j, as
     (where it starts, where it ends). Its legs that go the same way (within
     SAME_WAY degrees of each other) add up. A walk on a slanted staircase of
@@ -92,7 +95,7 @@ def _walk_headings(points, i: int, j: int) -> tuple:
     for k, (d, _) in enumerate(legs):
         if best < 0 or ways[k] > ways[best] + 1e-9 or (abs(ways[k] - ways[best]) <= 1e-9 and d > legs[best][0]):
             best = k
-    if best >= 0 and _slanted(legs, ways, best, total):
+    if best >= 0 and _slanted(legs, ways, best, total, MIN_LEG_SHARE * plan_size):
         h = _heading(points[i], points[j])
         return h, h
     if best >= 0 and ways[best] > 0 and ways[best] >= MAIN_LEG_SHARE * total:
@@ -110,17 +113,29 @@ def _walk_headings(points, i: int, j: int) -> tuple:
     return first, last
 
 
-def _slanted(legs, ways, best: int, total: float) -> bool:
+def _slanted(legs, ways, best: int, total: float, short: float) -> bool:
     """True when the legs of a walk take turns between two close ways (a
     slanted corridor drawn on the grid as a staircase of short legs). Its
-    heading is then that of the straight line, with no turn and no side step."""
+    heading is then that of the straight line, with no turn and no side step.
+    Two square ways (up to STAIR_ANGLE apart) count too when each of their
+    legs is shorter than short (MIN_LEG_SHARE of the plan) and at most
+    STAIR_PART of its way, and the smaller way is STAIR_EVEN of the two or
+    more: the drawn lines are level and upright, so a diagonal corridor
+    gives a staircase of right angles too small to be steps (judge review 3,
+    DE-commons_000022). An L with a small jog has one long leg on a way, and
+    a walk with small jogs has a small second way, so both keep their words."""
     near = lambda g, h: abs((g - h + 180) % 360 - 180) <= SAME_WAY
     a = legs[best][1]
     other = [k for k, (d, g) in enumerate(legs) if d > 0 and not near(g, a)]
     if not other:
         return False
     b = legs[max(other, key=lambda k: (ways[k], legs[k][0]))][1]
-    if abs((b - a + 180) % 360 - 180) > SLANT_ANGLE or ways[best] + sum(d for d, g in legs if near(g, b)) < SLANT_SHARE * total:
+    way_b = sum(d for d, g in legs if near(g, b))
+    apart = abs((b - a + 180) % 360 - 180)
+    stair = way_b >= STAIR_EVEN * (ways[best] + way_b) and all(
+        d < short and d <= STAIR_PART * (ways[best] if near(g, a) else way_b)
+        for d, g in legs if near(g, a) or near(g, b))
+    if apart > (STAIR_ANGLE if stair else SLANT_ANGLE) or ways[best] + way_b < SLANT_SHARE * total:
         return False
     seq = [0 if near(g, a) else 1 for d, g in legs if d > 0 and (near(g, a) or near(g, b))]
     return sum(p != q for p, q in zip(seq, seq[1:])) >= SLANT_TURNS
@@ -213,7 +228,7 @@ def directions(points: list[tuple[float, float]], plan_w: float, plan_h: float) 
     for _ in range(SPLIT_PASSES):
         out = [idx[0]]
         for a, b in zip(idx, idx[1:]):
-            w = _walk_headings(points, a, b)
+            w = _walk_headings(points, a, b, plan_size)
             # A walk that steps aside and back (round a wall) splits where it
             # is farthest out, so both side steps get words (a11y review).
             # A walk with a side step splits where the side step starts, so
@@ -232,7 +247,7 @@ def directions(points: list[tuple[float, float]], plan_w: float, plan_h: float) 
     i = 0
     while i < len(idx) - 1:
         a, b = points[idx[i]], points[idx[i + 1]]
-        head, end = _walk_headings(points, idx[i], idx[i + 1])[:2]
+        head, end = _walk_headings(points, idx[i], idx[i + 1], plan_size)[:2]
         turn = _turn(head - prev)
         if i > 0 and turn == "back":
             # A turn back round the end of a wall: the side step and the way

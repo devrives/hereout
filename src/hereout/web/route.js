@@ -36,6 +36,9 @@ const HereOutRoute = (() => {
   const SLANT_ANGLE = 50;       // degrees: two ways this close that take turns are one slanted way drawn on the grid
   const SLANT_SHARE = 0.85;     // those two ways are this share of the walk or more
   const SLANT_TURNS = 3;        // and the walk changes between them this many times or more
+  const STAIR_ANGLE = 90 + SAME_WAY;  // degrees: two square ways that take turns in short legs are a slanted way too (slanted)
+  const STAIR_PART = 0.5;       // in such a staircase, no leg is more than this share of its way
+  const STAIR_EVEN = 0.25;      // and the smaller way is this share of the two or more (a diagonal, not a walk with jogs)
 
   class NoRoute extends Error {}
 
@@ -2021,7 +2024,7 @@ const HereOutRoute = (() => {
   // side step of two equal legs. With no such way, both are the heading of
   // the straight line. A third item is the route point where the walk must
   // split, when two of its ways make a turn.
-  function walkHeadings(points, i, j) {
+  function walkHeadings(points, i, j, planSize) {
     const legs = [];
     for (let k = i; k < j; k++) legs.push({ d: dist(points[k], points[k + 1]), h: heading(points[k], points[k + 1]) });
     const total = legs.reduce((a, l) => a + l.d, 0);
@@ -2030,7 +2033,7 @@ const HereOutRoute = (() => {
     legs.forEach((l, k) => {
       if (best < 0 || ways[k] > ways[best] + 1e-9 || (Math.abs(ways[k] - ways[best]) <= 1e-9 && l.d > legs[best].d)) best = k;
     });
-    if (best >= 0 && slanted(legs, ways, best, total)) { const h = heading(points[i], points[j]); return [h, h]; }
+    if (best >= 0 && slanted(legs, ways, best, total, MIN_LEG_SHARE * planSize)) { const h = heading(points[i], points[j]); return [h, h]; }
     if (best >= 0 && ways[best] > 0 && ways[best] >= MAIN_LEG_SHARE * total) return [legs[best].h, legs[best].h];
     const ends = [];
     legs.forEach((l, k) => { if (l.d > 0 && ways[k] >= END_WAY_SHARE * total) ends.push(k); });
@@ -2047,7 +2050,14 @@ const HereOutRoute = (() => {
   // True when the legs of a walk take turns between two close ways (a
   // slanted corridor drawn on the grid as a staircase of short legs). Its
   // heading is then that of the straight line, with no turn and no side step.
-  function slanted(legs, ways, best, total) {
+  // Two square ways (up to STAIR_ANGLE apart) count too when each of their
+  // legs is shorter than short (MIN_LEG_SHARE of the plan) and at most
+  // STAIR_PART of its way, and the smaller way is STAIR_EVEN of the two or
+  // more: the drawn lines are level and upright, so a diagonal corridor
+  // gives a staircase of right angles too small to be steps (judge review 3,
+  // DE-commons_000022). An L with a small jog has one long leg on a way, and
+  // a walk with small jogs has a small second way, so both keep their words.
+  function slanted(legs, ways, best, total, short) {
     const near = (g, h) => Math.abs(mod(g - h + 180, 360) - 180) <= SAME_WAY;
     const a = legs[best].h;
     let o = -1;
@@ -2056,8 +2066,11 @@ const HereOutRoute = (() => {
     });
     if (o < 0) return false;
     const b = legs[o].h;
-    if (Math.abs(mod(b - a + 180, 360) - 180) > SLANT_ANGLE) return false;
-    if (ways[best] + legs.reduce((s, l) => s + (near(l.h, b) ? l.d : 0), 0) < SLANT_SHARE * total) return false;
+    const wayB = legs.reduce((s, l) => s + (near(l.h, b) ? l.d : 0), 0);
+    const stair = wayB >= STAIR_EVEN * (ways[best] + wayB) && legs.every((l) => !(near(l.h, a) || near(l.h, b)) ||
+      (l.d < short && l.d <= STAIR_PART * (near(l.h, a) ? ways[best] : wayB)));
+    if (Math.abs(mod(b - a + 180, 360) - 180) > (stair ? STAIR_ANGLE : SLANT_ANGLE)) return false;
+    if (ways[best] + wayB < SLANT_SHARE * total) return false;
     const seq = legs.filter((l) => l.d > 0 && (near(l.h, a) || near(l.h, b))).map((l) => (near(l.h, a) ? 0 : 1));
     let turns = 0;
     for (let k = 1; k < seq.length; k++) if (seq[k] !== seq[k - 1]) turns++;
@@ -2140,7 +2153,7 @@ const HereOutRoute = (() => {
     for (let pass = 0; pass < SPLIT_PASSES; pass++) {
       const out = [idx[0]];
       for (let k = 0; k + 1 < idx.length; k++) {
-        const w = walkHeadings(points, idx[k], idx[k + 1]);
+        const w = walkHeadings(points, idx[k], idx[k + 1], planSize);
         // A walk that steps aside and back (round a wall) splits where it
         // is farthest out, so both side steps get words (a11y review).
         // A walk with a side step splits where the side step starts, so
@@ -2157,7 +2170,7 @@ const HereOutRoute = (() => {
     let prev = 0.0;  // facing the plan = facing "up"
     for (let i = 0; i < idx.length - 1;) {
       const a = points[idx[i]], b = points[idx[i + 1]];
-      const [head, end] = walkHeadings(points, idx[i], idx[i + 1]);
+      const [head, end] = walkHeadings(points, idx[i], idx[i + 1], planSize);
       const turn = turnOf(head - prev);
       if (i > 0 && turn === "back") {
         // A turn back round the end of a wall: the side step and the way

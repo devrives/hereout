@@ -158,6 +158,40 @@ def test_directions_slanted_corridor_is_one_walk():
     assert [s["text"] for s in walks[1:]] == ["Turn left and walk a medium way."]
 
 
+# The route of a tap on DE-commons_000022 (1011 x 1600) along a diagonal
+# corridor: the drawn lines are level and upright, so the route is a
+# staircase of right angles (judge review 3, 2026-11-01).
+SQUARE_STAIRCASE = [(468, 912), (467.5, 877.5), (442.5, 877.5), (442.5, 862.5), (422.5, 862.5), (422.5, 842.5),
+                    (402.5, 842.5), (402.5, 817.5), (316, 817.5), (316, 827)]
+
+
+def test_directions_square_staircase_is_one_walk():
+    """Short right angles that take turns on a diagonal are one slanted walk,
+    not five steps of "Turn left / Turn right"."""
+    walks = [s["text"] for s in directions(SQUARE_STAIRCASE, 1011, 1600) if s["kind"] == "walk"]
+    assert walks == ["Start toward the top left of the plan and walk a short way.",
+                     "Turn slightly left and walk a short way."]
+
+
+def test_directions_l_with_a_jog_keeps_its_turn():
+    """An L whose first way is one long leg, with a small jog in its second
+    way, is not a staircase: the turn stays."""
+    pts = [(500, 300), (430, 300), (430, 330), (422, 330), (422, 400)]
+    walks = [s["text"] for s in directions(pts, 800, 800) if s["kind"] == "walk"]
+    assert walks == ["Start toward the left of the plan and walk a short way.", "Turn left and walk a short way."]
+
+
+def test_directions_square_jogs_on_a_long_way_keep_the_main_way():
+    """Small side jogs on a way up are not a diagonal: the second way is too
+    small, so the walk keeps the heading of its main way."""
+    pts = [(400, 600)]
+    for _ in range(4):
+        x, y = pts[-1]
+        pts += [(x, y - 25), (x + 5, y - 25)]
+    walks = [s for s in directions(pts, 1000, 1000) if s["kind"] == "walk"]
+    assert walks[0]["text"] == "Start toward the top of the plan and walk a short way."
+
+
 def test_directions_zigzag_takes_the_main_way():
     """Short legs across a long walk down: the legs down add up, so the walk
     goes down and the turn after it is a right angle."""
