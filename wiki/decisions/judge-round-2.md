@@ -45,3 +45,5 @@ sources:
 - Labels: 112 exits on 26 photos, 22 of them unsure. Two photos cannot be judged: a town map and a photo that cuts the plan.
 - Score of the 2026-10-29 run, radius 5 % of the floor box: precision 0.42, recall 0.52, every exit right on 4 of 26 photos. At 10 %: 0.62, 0.74, 8 of 26.
 - Errors of that run: points on name plates or signs, points on the street, one exit given twice, direction signs taken as exits.
+- A third judge agent (2026-11-01, code read as public) gave 6.4 of 10: Impact 5.5, Meta tooling 7.0, Technical depth 7.0, Demo 6.5.
+- It found exit 3 of RU-commons_000033 under the paper, and the second look's point there refused by the 7 % limit. That plan left the first plans, and the submission links DE-commons_000022.

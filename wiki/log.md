@@ -361,3 +361,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/demo-video.md`: the phone layout, the reasons from the second judge review, the owner choice of samples only.
 - Source: the owner words of 2026-11-01, the judge review and the new video.
+
+## [2026-11-01] ingest | Third judge review
+
+- Updated `decisions/judge-round-2.md`: the score of the third judge agent and the change of the first plans.
+- Source: the judge report of 2026-11-01.
