@@ -29,8 +29,7 @@
   --logo-dot: #ff7a59;
   --exit: #3dffa0;   /* the exit marks on the plan (app.js EXIT) */
   --route: #5aa2ff;  /* the route on the plan (app.js ROUTE) */
-  --lit: #ff9a3d;    /* the step the user taps (app.js LIT) */
-  --done: #aebdcc;   /* the legs before the lit step (app.js DONE) */
+  --done: #aebdcc;   /* the legs before the current step (app.js DONE) */
   --reading: #d29bff;
   color-scheme: dark;
 }
@@ -236,8 +235,13 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
   box-shadow: 0 0 24px rgb(61 255 160 / 0.25); }
 .tap-prompt .ico { color: var(--accent); }
 .tap-prompt.placed { bottom: auto; transform: none; }
+/* A refused tap: the same pill with the reason, for a while (app.js refuseTap). */
+.tap-prompt.note { border-color: var(--muted); box-shadow: none; border-radius: 16px; font-weight: 500; }
+.tap-prompt.note .ico { display: none; }
 @media (prefers-reduced-motion: no-preference) {
   .tap-prompt { animation: prompt-in 0.4s ease-out; }
+  /* The step card comes in with the route, as the prompt went (one motion). */
+  .now-card { animation: prompt-in 0.25s ease-out; }
   @keyframes prompt-in { from { opacity: 0; translate: 0 8px; } }
 }
 
@@ -267,7 +271,6 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
 /* A turn: one outline glyph for each kind of step, in the step list and in the card. */
 .turn { width: 28px; height: 28px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .now-text .turn { width: 36px; height: 36px; color: var(--route); }
-.now-text.lit .turn { color: var(--lit); }
 .now-text .turn.door { color: var(--exit); }
 @media (max-width: 600px) {
   /* On a phone the card is the foot of the plan, from edge to edge. */
@@ -358,14 +361,14 @@ canvas:focus-visible { outline: none; }
   border: 1.5px solid var(--route); color: var(--route); font: 600 0.8rem "Geist Mono", ui-monospace, monospace; }
 button.step { display: flex; justify-content: flex-start; gap: 12px; flex: 1; width: 100%; text-align: start; font-weight: 450; padding: 10px 4px; min-height: 48px; border: 0; border-radius: 10px; background: transparent; color: #d5e2db; }
 #steps .turn { width: 24px; height: 24px; color: var(--muted); }
-#steps button.step[aria-pressed="true"] .turn { color: var(--lit); }
+#steps button.step[aria-pressed="true"] .turn { color: var(--route); }
 #steps .turn.door { color: var(--exit); }
 /* "Then you reach the exit." ends the last walk: no number of its own (app.js walkCount). */
 #steps li.arrive { counter-increment: none; gap: 16px; padding: 10px 4px 10px 0; color: var(--muted); }
 #steps li.arrive::before { content: ""; border-color: transparent; }
 button.step:hover { background: var(--raise); }
-button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background: rgb(255 154 61 / 0.12); padding-inline-start: 12px; }
-#steps li:has(button.step[aria-pressed="true"])::before { border-color: var(--lit); background: var(--lit); color: var(--accent-fg); }
+button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background: rgb(90 162 255 / 0.12); padding-inline-start: 12px; }
+#steps li:has(button.step[aria-pressed="true"])::before { border-color: var(--route); background: var(--route); color: var(--accent-fg); }
 .check { margin: 0 0 10px; font-size: 0.9rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .actions button { flex: 1 1 auto; }
@@ -418,7 +421,8 @@ button.sample[aria-current="true"] span { color: var(--accent); }
 ol:focus-visible, h2:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; }
 /* The plan opens right under the header, so a scroll to it keeps the header in view. */
 .result { scroll-margin-top: 140px; }
-#result-head:focus-visible + .plan-col { outline: 2px solid var(--muted); outline-offset: 4px; border-radius: 4px; }
+/* Only after a key: a plan opened from a link or a tap shows no frame (ux review, 2026-11-02). */
+.kbd #result-head:focus + .plan-col { outline: 2px solid var(--muted); outline-offset: 4px; border-radius: 4px; }
 ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 
 @media (min-width: 600px) {

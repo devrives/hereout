@@ -18,7 +18,6 @@ colors:
   logo-dot: "#ff7a59"
   exit: "#3dffa0"
   route: "#5aa2ff"
-  lit: "#ff9a3d"
   done: "#aebdcc"
   reading: "#d29bff"
 typography:
@@ -241,7 +240,7 @@ components:
 
 # HereOut
 
-This file holds the tokens and the design rules of the HereOut page (hereout.devrives.com). The direction is Afterglow (owner, 2026-11-01). The code reads the colours from the custom properties at the top of `src/hereout/web/style.css`. The marks on the plan are drawn on a canvas by `src/hereout/web/app.js`, with constants of the same values (`EXIT`, `ROUTE`, `LIT`, `WAY`, `DARK`, `VEIL`). The rules for every devrives product are in the kit skill `core:design-foundation` (`references/house-ui-rules.md`).
+This file holds the tokens and the design rules of the HereOut page (hereout.devrives.com). The direction is Afterglow (owner, 2026-11-01). The code reads the colours from the custom properties at the top of `src/hereout/web/style.css`. The marks on the plan are drawn on a canvas by `src/hereout/web/app.js`, with constants of the same values (`EXIT`, `ROUTE`, `WAY`, `DARK`, `VEIL`). The rules for every devrives product are in the kit skill `core:design-foundation` (`references/house-ui-rules.md`).
 
 Check this file after each token change: `node kit/plugins/core/scripts/ui-review/design-md.mjs hereout/DESIGN.md` (from the hub). With `--fix`, it copies the CSS values into the tokens.
 
@@ -263,11 +262,11 @@ On a phone the marks have a floor size, so an exit mark is at least about 18 CSS
 
 ## Colors
 
-- `bg` is the dark ground of the page. `card` is the ground of the cards, the buttons and the controls. `raise` is a button under the pointer and the lit step. `line` is every border.
+- `bg` is the dark ground of the page. `card` is the ground of the cards, the buttons and the controls. `raise` is a button under the pointer and the current step. `line` is every border.
 - `accent` is the glow green: the photo buttons, the links, the stage that shows now, and the "Out" of the word mark. It is the one brand colour. Text on it is `accent-fg`.
 - `exit` is the same glow green: the exit marks on the plan, the exit badge and the exit buttons, with dark numbers.
 - `route` is the light blue of the route on the plan, the step numbers and the ring round the chosen exit.
-- `lit` (amber) is the current step: its number, its turn icon and its part of the route on the plan. On the last step it is a ring round the exit.
+- `route` (blue) is everything of the route: the line, the start dot, the frame of the exit in use, and the current step (its number, its turn icon, its part of the line, and on the last step a ring round the exit). The route has no second colour (owner, 2026-11-02: one consistent flow).
 - `done` (light grey blue) is the part of the route before the current step. It is light, so a walked leg stays clear on the dimmed photo (judge review, 2026-11-01).
 - `reading` is the purple of the reading view (what Muse Spark read). That view shows the whole photo, not dimmed, with its own fixed colours in `reading.js`.
 - `logo-wall`, `logo-route` and `logo-dot` colour the three parts of the logo SVG.
@@ -325,8 +324,12 @@ All in `style.css` and `index.html`.
 - The exit buttons (`button-exit`): the number, as the mark on the plan. The full name is in the label. The nearest exit and the exit of the second way also have a word beside the number ("Nearest", "If blocked"). The name starts with the visible words: "Exit 4, Nearest: ВЫХОД" (WCAG 2.5.3). The words stay when the user chooses another exit, so the buttons do not move. After the user chose an exit, a dashed way to the nearest exit says "The dashed line leads to the nearest exit", not "If it is blocked". An exit with no way from the start is dashed (`button-exit-dead`).
 - The steps are the walks of the route. "Then you reach the exit." is no step: the list shows it after the walks with the exit door and no number, and the card adds it to the words of the last walk.
 - The current step (`now-card`, `badge-now`, `button-now-step`): under the plan after a tap, under 960 px only. A small exit badge, "Exit 4 · Step 2 of 4", a speaker button that reads this step only, then the turn icon and the words of the step between a previous and a next button (56 × 64 px, the thumb zone). The plan lights the same step. At the first step the previous button keeps its place but does not show. At the last walk the exit door (`exit`) takes the place of the next button. So the card does not move. When a button reaches either end, the focus goes to the words of the step (`tabindex="-1"`), so a held Enter stops there. Each step change goes once to the live line of the plan. The full list stays in the answer card. After an exit button on a narrow screen, the plan and the card come into view and the next button takes the focus.
-- Turn icons: one outline glyph for each step, left of its words in the step list and in the card: straight, left, right, slight left, slight right, back, a side step (the line jogs to the left or the right, then goes on), and an exit door for the end. A turn with a side step keeps its turn glyph. Step 1 names a side of the plan, so its arrow points to that side. 24 viewBox, stroke 2, `currentColor`: muted in the list, `lit` for the current step, `exit` for the door.
-- On the plan: no step numbers (owner, 2026-11-02: fewer marks). The current step is `lit`, the legs before it are `done`, the rest is `route`. At the last walk an amber ring goes round the exit. The start is a location dot as on a map app: a blue dot with a white rim in a soft blue halo, with no text and no arrow. The route line and step 1 give the first move. An exit near the dot goes over it. The legend names the dot "You" while a start shows (owner, 2026-11-02: the mark must look natural).
+- Turn icons: one outline glyph for each step, left of its words in the step list and in the card: straight, left, right, slight left, slight right, back, a side step (the line jogs to the left or the right, then goes on), and an exit door for the end. A turn with a side step keeps its turn glyph. Step 1 names a side of the plan, so its arrow points to that side. 24 viewBox, stroke 2, `currentColor`: muted in the list, `route` for the current step, `exit` for the door.
+- On the plan: no step numbers (owner, 2026-11-02: fewer marks). The current step is the full route line (glow, edge, blue, light core), the steps after it are a thin blue line, and the legs before it are `done`. The route draws in with these widths. At the last walk a blue ring goes round the exit. The start is a location dot as on a map app: a blue dot with a white rim in a soft blue halo, with no text and no arrow. The route line and step 1 give the first move. An exit near the dot goes over it. The legend names the dot "You" while a start shows (owner, 2026-11-02: the mark must look natural).
+- The start pick (owner, 2026-11-02: consistent and smooth): a tap reaches floor with a way out within a fingertip (24 CSS px) or the tap reach of `route.js`, whichever is larger. A tap with no such floor gives no start: the old dot and route stay, a ring fades out at the tap, and the pill on the plan shows the reason for 3.5 s (off the route, the dot and the exits), as does the line under the plan. A large floor with no exit is another floor: the start stays there, and the plan asks for the exit of that floor. Off the plan and on a wall give the same words.
+- One pill on the plan for each wait: "Tap where you stand", the exit to mark (the step card hides while marking), or a refused tap.
+- Motion: the dot grows in at the first tap and glides from the old start at a new tap (220 ms) while the ways out fade; the route draws in from it with an ease-out as it lands; the second way and the exit ring fade in after it (200 ms); the step card fades in. A new route from an exit button or a marked exit draws in the same way. The clocks start at the first frame. A new tap does not scroll the page. A plan opened from a link or a tap has no focus frame; the frame shows after Tab, Enter or Space.
+- The dashed second way shows only where it leaves the route. When it leads to the nearest exit, the legend says "Nearest exit".
 - The samples: a grid of photos with the country under each one in Geist Mono. Under the first rows, one faded row and a round chevron button open the rest. A "Photo credits" link beside the heading opens `/credits`.
 - Disclosures: the start page has one, the text of the video, right under the video. The credit of the photo in the video is in the caption line under the video.
 - Icons: inline outline SVG, 24 viewBox, stroke 1.8, 20 px, `currentColor`.

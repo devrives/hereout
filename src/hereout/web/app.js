@@ -53,7 +53,6 @@ const HERE_HALO = "rgba(90, 162, 255, 0.22)";
 const EXIT = "#3dffa0";
 const EXIT_INK = "#03140b";
 const EXIT_GLOW = "rgba(61, 255, 160, 0.75)";
-const LIT = "#ff9a3d";
 const DONE = "#aebdcc";  // the legs before the lit step: walked, so grey, but light on the dimmed photo
 const DARK = "#07100c";  // the ground of the page: the edge of every mark
 const VEIL = "rgba(7, 16, 12, 0.6)";  // over the photo in the escape map, so the marks stand out
@@ -460,7 +459,7 @@ function updateAfterWait() {
   const how = view.pendingHow;
   view.pendingHow = null;
   update();
-  if (how === "tap" && view.route) { startRouteDraw(); showNowInView(); }  // the route of a tap that waited for the worker
+  if ((how === "tap" || how === "exit" || how === "exit-button") && view.route) { startRouteDraw(); if (how === "tap") showNowInView(); }  // the route of a tap that waited for the worker
   if (exitAt >= 0) $("exits").children[exitAt]?.focus();
   if (state.start && how) explain(how);
 }
@@ -886,7 +885,8 @@ function draw() {
       } else {
         // With a route, the ways out step back: the route is the answer.
         ctx.save();
-        if (view.route && state.start) ctx.globalAlpha = WAY_UNDER_ROUTE;
+        // They fade while the dot comes in, not in one frame (ux review).
+        if (view.route && state.start) ctx.globalAlpha = 1 - (1 - WAY_UNDER_ROUTE) * hereShare();
         drawLayer(mapLayer());
         drawArrows(unit);
         ctx.restore();
@@ -979,6 +979,12 @@ const ROUTE_SPEED = 0.45; // shares of the frame for each second: the route draw
 const ROUTE_MIN = 700, ROUTE_MAX = 1200;  // ms
 let reveal = null;     // { t0, waysAt } while the plan opens
 let routeAnim = null;  // { t0, ms, start, exit } while the route draws in
+// The start dot comes in after a tap: it grows in at the first tap and
+// glides from the old start at a new tap; then the route draws in from it
+// (owner, 2026-11-02: the start pick must be smooth).
+const HERE_MS = 220;
+let hereAnim = null;  // { t0, from, to } while the dot comes in
+const hereShare = () => (hereAnim && hereAnim.t0 !== null ? easeOut((performance.now() - hereAnim.t0) / HERE_MS) : hereAnim ? 0 : 1);
 let frameAsked = false;
 const stillMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const easeOut = (k) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
@@ -999,7 +1005,9 @@ function startRouteDraw() {
   const len = r.points.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - r.points[i][0], q[1] - r.points[i][1]), 0);
   const [w, h] = frameSize();
   const ms = Math.min(ROUTE_MAX, Math.max(ROUTE_MIN, len / Math.max(w, h) / ROUTE_SPEED * 1000));
-  routeAnim = { t0: performance.now(), ms, start: state.start, exit: r.exitIndex };
+  const wait = hereAnim ? HERE_MS * 0.6 : 0;  // the line leaves the dot as it lands
+  routeAnim = { t0: null, wait, ms, start: state.start, exit: r.exitIndex };
+  afterRoute = null;
   animate();
 }
 
@@ -1009,10 +1017,10 @@ function animate() {
   frameAsked = true;
   requestAnimationFrame(() => {
     frameAsked = false;
-    if (!state || !view || (!reveal && !routeAnim)) return;
+    if (!state || !view || (!reveal && !routeAnim && !hereAnim && !afterRoute && !tapRing)) return;
     draw();
     showStages();
-    if (reveal || routeAnim) animate();
+    if (reveal || routeAnim || hereAnim || afterRoute || tapRing) animate();
   });
 }
 
@@ -1039,9 +1047,23 @@ function routeDrawn() {
   if (!routeAnim) return 1;
   // update() finds the route again (a new object): the draw goes on while the start and the exit stay.
   if (routeAnim.start !== state.start || !view.route || routeAnim.exit !== view.route.exitIndex) { routeAnim = null; return 1; }
-  const k = easeInOut((performance.now() - routeAnim.t0) / routeAnim.ms);
-  if (k >= 1) { routeAnim = null; return 1; }
+  // The clock starts at the first frame, after the route was found (ux review).
+  if (routeAnim.t0 === null) routeAnim.t0 = performance.now() + routeAnim.wait;
+  // Ease out: the line leaves the dot at once and slows into the exit.
+  const k = easeOut((performance.now() - routeAnim.t0) / routeAnim.ms);
+  if (k >= 1) { routeAnim = null; afterRoute = { t0: performance.now() }; return 1; }
   return k;
+}
+
+// The second way and the ring round the exit fade in after the route is in,
+// so nothing pops in at its end (ux review). 1 when no fade runs.
+const AFTER_MS = 200;
+let afterRoute = null;  // { t0 } while they fade in
+function afterShare() {
+  if (!afterRoute) return 1;
+  const k = (performance.now() - afterRoute.t0) / AFTER_MS;
+  if (k >= 1) { afterRoute = null; return 1; }
+  return Math.max(0, k);
 }
 
 // The first share of a line of points, by length.
@@ -1072,11 +1094,21 @@ function showStages() {
     li.classList.toggle("done", i < at);
     li.classList.toggle("now", i === at);
   });
-  // The plan waits for the tap: it says so on the plan, where the eyes are (ux review).
+  // The plan waits for a tap: it says so on the plan, where the eyes are (ux
+  // review). One pill for each wait: the start, the exit to mark, and for a
+  // while the words of a refused tap.
   const prompt = $("tap-prompt");
   const was = prompt.hidden;
-  prompt.hidden = !(now === "you" && !state.start && !marking && !photoOnly && view.reachable);
-  if (!prompt.hidden && (was || prompt.dataset.for !== promptKey())) placePrompt();
+  const note = pillNote && performance.now() < pillNote.until ? pillNote : null;
+  const words = photoOnly ? "" : note ? note.text()
+    : marking ? t(addExit ? "msg_mark_tap_add" : "msg_mark_tap")
+    : now === "you" && !state.start && view.reachable ? t("tap_prompt") : "";
+  prompt.hidden = !words;
+  prompt.classList.toggle("note", !!note);
+  const span = prompt.querySelector("span");
+  const changed = span.textContent !== words;
+  if (changed) span.textContent = words;
+  if (!prompt.hidden && (was || changed || prompt.dataset.for !== promptKey())) placePrompt();
 }
 
 // The place of the tap prompt: the edge of the plan where it covers the
@@ -1105,6 +1137,15 @@ function placePrompt() {
     for (let k = 0; k <= n; k++) pts.push([leg.a[0] + (leg.b[0] - leg.a[0]) * k / n, leg.a[1] + (leg.b[1] - leg.a[1]) * k / n, 1]);
   }
   for (const e of state.exits) pts.push([e.x, e.y, 50]);
+  // A refused tap keeps the old route: the pill does not cover it or the dot.
+  if (state.start) pts.push([state.start[0], state.start[1], 80]);
+  for (const r of [view.route, view.backup]) {
+    const line = r && r.points;
+    for (let k = 1; line && k < line.length; k++) {
+      const n = Math.max(1, Math.ceil(Math.hypot(line[k][0] - line[k - 1][0], line[k][1] - line[k - 1][1]) / step));
+      for (let j = 0; j <= n; j++) pts.push([line[k - 1][0] + (line[k][0] - line[k - 1][0]) * j / n, line[k - 1][1] + (line[k][1] - line[k - 1][1]) * j / n, 5]);
+    }
+  }
   const cost = ([x, y]) => {
     const [px0, py0] = toPlan(x - 6, y - 6), [px1, py1] = toPlan(x + w + 6, y + h + 6);
     return pts.reduce((a, [px, py, k]) => a + (px >= px0 && px <= px1 && py >= py0 && py <= py1 ? k : 0), 0);
@@ -1141,8 +1182,19 @@ function drawMarks(unit, rv = null) {
   // where the two share a corridor.
   // In the reveal the route and YOU wait (the example has a start).
   const draw = rv ? 0 : routeDrawn();
-  const alt = draw === 1 && view.backup && view.backup.points;
+  const fade = draw === 1 ? afterShare() : 0;
+  // Only where it leaves the route: under the route it does not show, and
+  // the words "the dashed line" name a line that shows (ux review).
+  const b0 = draw === 1 && view.backup && view.backup.points && view.route ? view.backup : null;
+  if (b0 && (b0._apartUnit !== unit || b0._apartOf !== view.route)) {
+    b0._apart = apartFrom(b0.points, view.route.points, unit * 1.5);
+    b0._apartUnit = unit;
+    b0._apartOf = view.route;
+  }
+  const alt = b0 && b0._apart;
   if (alt && alt.length > 1) {
+    ctx.save();
+    ctx.globalAlpha = fade;
     ctx.lineJoin = ctx.lineCap = "round";
     for (const [color, width, dash] of [[DARK, unit * 1.5, []], [ROUTE, unit * 0.8, [unit * 1.6, unit * 1.2]]]) {
       ctx.strokeStyle = color;
@@ -1154,23 +1206,30 @@ function drawMarks(unit, rv = null) {
       ctx.stroke();
     }
     ctx.setLineDash([]);
+    ctx.restore();
     // Its exit goes over the dashed line again, so its number shows.
     const b = state.exits[view.backup.exitIndex];
     exitMark(b.x, b.y, unit * 2.2, view.backup.exitIndex + 1, false);
   }
 
-  // The route and YOU go over the exits, so a short route stays visible.
-  // The route draws in from YOU after a tap (routeDrawn).
-  // With a step lit, the legs before it are walked: they are dimmed, and
-  // the rest of the route keeps its glow (Mappedin, research brief 2).
+  // The route and the start go over the exits, so a short route stays
+  // visible. The route draws in from the start after a tap (routeDrawn).
+  // The route has one colour (owner, 2026-11-02: one consistent flow): the
+  // current step is the full route line, the steps after it are a thin line
+  // of the same blue, and the legs before it are walked, so grey (Mappedin,
+  // research brief 2). The route draws in with these widths, so nothing
+  // changes when it is in.
   const pts = !rv && view.route && view.route.points && partOfLine(view.route.points, draw);
   if (pts && pts.length > 1) {
-    const split = draw === 1 ? routeSplit() : null;
-    if (split) {
-      strokeLine(split.done, [[DARK, unit * 1.9], [DONE, unit * 1.15]]);
-      strokeLine(split.rest, ROUTE_LINE(unit));
+    const parts = routeParts();
+    if (draw < 1 || !parts) {
+      strokeLine(pts, ROUTE_REST(unit));
+      if (parts) strokeLine(partOfLine(parts.now, Math.min(1, lineLength(pts) / Math.max(1e-6, lineLength(parts.now)))), ROUTE_LINE(unit));
+      else strokeLine(pts, ROUTE_LINE(unit));
     } else {
-      strokeLine(pts, ROUTE_LINE(unit));
+      strokeLine(parts.done, [[DARK, unit * 1.9], [DONE, unit * 1.15]]);
+      strokeLine(parts.after, ROUTE_REST(unit));
+      strokeLine(parts.now, ROUTE_LINE(unit));
     }
   }
 
@@ -1179,34 +1238,70 @@ function drawMarks(unit, rv = null) {
 
   if (rv) return;
   const step = draw === 1 ? view.steps[selected] : null;
-  if (step && step.kind === "walk") strokeLine(step.path, [[DARK, unit * 3.2], [LIT, unit * 2]]);
-  // The last walk ends at the exit: a ring in the lit colour round it, and
-  // the exit over the lit leg, so its number shows.
-  if (step && selected === walkCount() - 1 && used >= 0) {
-    exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
+  // The last walk ends at the exit: a ring in the route colour round it.
+  if (step && step.kind === "walk" && selected === walkCount() - 1 && used >= 0) {
     const e = state.exits[used], r = unit * 2.2 * 1.75;
-    for (const [color, width] of [[DARK, unit * 1.3], [LIT, unit * 0.7]]) {
+    ctx.save();
+    ctx.globalAlpha = afterShare();
+    for (const [color, width] of [[DARK, unit * 1.3], [ROUTE, unit * 0.7]]) {
       ctx.strokeStyle = color;
       ctx.lineWidth = width;
       ctx.beginPath();
       ctx.roundRect(e.x - r, e.y - r, r * 2, r * 2, r * 0.35);
       ctx.stroke();
     }
+    ctx.restore();
   }
   // The start is a location dot, as on a map app, with no text (owner,
   // 2026-11-02: the mark must look natural). The route line and step 1 give
   // the first move: a beam muddied the route (ux review). An exit near the
   // start goes over the dot again, so its number shows.
   if (here) {
-    hereMark(here[0], here[1], unit * 2.4);
+    // The dot comes in (hereAnim): it glides from the old start, or grows in.
+    let k = 1;
+    if (hereAnim && hereAnim.to !== here) hereAnim = null;
+    if (hereAnim) {
+      if (hereAnim.t0 === null) hereAnim.t0 = performance.now();  // the clock starts at the first frame (ux review)
+      k = easeOut((performance.now() - hereAnim.t0) / HERE_MS);
+      if (k >= 1) hereAnim = null;
+    }
+    const from = k < 1 && hereAnim.from;
+    const at = from ? [from[0] + (here[0] - from[0]) * k, from[1] + (here[1] - from[1]) * k] : here;
+    hereMark(at[0], at[1], unit * 2.4 * (from || k >= 1 ? 1 : 0.5 + 0.5 * k));
     state.exits.forEach((e, i) => {
       if (Math.hypot(e.x - here[0], e.y - here[1]) < unit * 9) exitMark(e.x, e.y, unit * 2.2, i + 1, i === used);
     });
   }
+  tapRingMark(unit);
 }
 
-// The layers of the route line: glow, dark edge, blue, light core.
+// The layers of the route line: glow, dark edge, blue, light core. The
+// steps after the current one: a thin line of the same blue.
 const ROUTE_LINE = (unit) => [[ROUTE_GLOW, unit * 3.4], [DARK, unit * 1.9], [ROUTE, unit * 1.25], [ROUTE_CORE, unit * 0.3]];
+const ROUTE_REST = (unit) => [[DARK, unit * 1.3], [ROUTE, unit * 0.65]];
+
+// The part of a line from where it leaves another line (more than tol away)
+// to its end. null when it never leaves it.
+function apartFrom(pts, other, tol) {
+  const gap = (p) => Math.min(...other.slice(1).map((q, i) => segmentGap(p, other[i], q)));
+  const total = lineLength(pts);
+  const step = Math.max(tol / 2, total / 400);
+  for (let d = 0; d <= total; d += step) {
+    const p = partOfLine(pts, d / total).at(-1);
+    if (gap(p) > tol) return d <= step ? pts : reversePart(pts, Math.max(0, d - step) / total);
+  }
+  return null;
+}
+
+// The line from a share of its length to its end.
+function reversePart(pts, share) {
+  const rev = [...pts].reverse();
+  return partOfLine(rev, 1 - share).reverse();
+}
+
+function lineLength(pts) {
+  return pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0);
+}
 
 function strokeLine(pts, layers) {
   if (!pts || pts.length < 2) return;
@@ -1221,16 +1316,34 @@ function strokeLine(pts, layers) {
   }
 }
 
-// The route split at the lit step: the legs before it and the legs from it
-// on, from the paths of the steps (route.js directions). null with step 1
-// or the last step lit, or no step lit: then the whole route shows as one.
-function routeSplit() {
-  const k = selected, steps = view.steps;
-  if (!(k > 0) || !steps[k] || steps[k].kind !== "walk") return null;
+// The route in three parts at the current step, from the paths of the steps
+// (route.js directions): the walks before it, the step, the walks after it.
+// null with no walk.
+function routeParts() {
+  const steps = view.steps, k = Math.max(0, selected);
+  if (!steps[k] || steps[k].kind !== "walk") return null;
   const join = (paths) => paths.reduce((a, p) => a.concat(a.length ? p.slice(1) : p), []);
   const walks = steps.map((s, j) => [s, j]).filter(([s]) => s.kind === "walk");
   return { done: join(walks.filter(([, j]) => j < k).map(([s]) => s.path)),
-           rest: join(walks.filter(([, j]) => j >= k).map(([s]) => s.path)) };
+           now: steps[k].path,
+           after: join(walks.filter(([, j]) => j > k).map(([s]) => s.path)) };
+}
+
+// The ring at a refused tap: it grows and fades out.
+function tapRingMark(unit) {
+  if (!tapRing) return;
+  const k = (performance.now() - tapRing.t0) / RING_MS;
+  if (k >= 1) { tapRing = null; return; }
+  ctx.save();
+  ctx.globalAlpha = 1 - k;
+  for (const [color, width] of [[DARK, unit * 0.9], ["#ffffff", unit * 0.45]]) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(tapRing.at[0], tapRing.at[1], unit * (1.5 + 2.5 * easeOut(k)), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 // The start: a blue dot with a white rim in a soft halo, as on a map app.
@@ -1405,7 +1518,7 @@ function showSteps() {
 function showNow() {
   const card = $("now-card");
   const n = walkCount();
-  const on = !!(state && view && view.route && state.start && n && !state.photo_map);
+  const on = !!(state && view && view.route && state.start && n && !state.photo_map && !marking);
   card.hidden = !on;
   if (!on) return;
   const i = Math.min(n - 1, Math.max(0, selected)), s = view.steps[i];
@@ -1414,7 +1527,6 @@ function showNow() {
   $("now-head").textContent = `${t("exit_n", { n: exit })} · ${t("step_of", { i: i + 1, count: n })}`;
   const text = $("now-text");
   text.replaceChildren(...stepRow(s, i, walkText(i)));
-  text.classList.toggle("lit", selected >= 0);
   // At either end the button keeps its place, so the card does not move.
   // At the last walk the exit door takes the place of "Next".
   $("step-prev").classList.toggle("gone", i === 0);
@@ -1495,6 +1607,8 @@ function pathMiddle(path) {
 
 // Show one step on the plan. -1 shows none.
 function select(i) {
+  routeAnim = afterRoute = null;  // a step chosen during the draw-in: the route shows whole (ux review)
+  clearRefusal();
   selected = Math.min(i, walkCount() - 1);
   i = selected;
   $("steps").querySelectorAll("button.step").forEach((b, j) => b.setAttribute("aria-pressed", String(j === i)));
@@ -1586,7 +1700,8 @@ function nameExitButton(b, i) {
 // The route to exit i, from its exit button ("button") or from a tap on its
 // mark or on the dashed second way ("plan").
 function chooseExit(i, from) {
-  state.exitChoice = i;
+  // The nearest exit is no choice: the answer keeps "Nearest exit" (ux review).
+  state.exitChoice = view.near && view.near.main === i ? -1 : i;
   update();
   remember();
   if (view.pending) {
@@ -1600,6 +1715,7 @@ function chooseExit(i, from) {
   // A tap on the plan keeps the focus there; the card shows the new first step.
   if (from === "plan") { if (view.route) { startRouteDraw(); showNowInView(); } return; }
   if (!view.route) { $("exits").children[i].focus(); return; }
+  startRouteDraw();
   // On a narrow screen the plan with the new route and the card of the step
   // come into view, and "Next" in the card takes the focus: the step list is
   // far below (a11y review). On a wide screen the steps are beside the plan.
@@ -1708,6 +1824,10 @@ function showLegend() {
   // text under the plan does not move after a tap.
   $("legend-other").hidden = state.exits.length < 2;
   $("legend-other").style.visibility = view.backup ? "" : "hidden";
+  // The dashed way to the nearest exit after a chosen exit: the legend says
+  // so, as its exit button does (ux review).
+  const toNearest = view.backup && state.exitChoice >= 0 && view.near && view.near.main === view.backup.exitIndex;
+  $("legend-other").lastElementChild.textContent = t(toNearest ? "kind_nearest" : "legend_other");
 }
 
 // The walls come from the photo, so the messages say what HereOut read,
@@ -1838,6 +1958,11 @@ function startMarking() {
   if (photoOnly) setPhotoOnly(false);
   const key = addExit ? "msg_mark_tap_add" : "msg_mark_tap";
   sayPlan(() => t(key));
+  // The pill on the plan asks for the exit; the line says it to a screen
+  // reader only, so the words show once (ux review).
+  $("plan-status").classList.add("sr");
+  showNow();
+  showStages();
 }
 
 function stopMarking() {
@@ -1846,6 +1971,7 @@ function stopMarking() {
   $("fix-hint").hidden = true;
   if (state) $("tap-text").hidden = !state.start;
   hints();
+  if (state && view) { showAnswer(); showNow(); showStages(); }
 }
 
 $("fix").addEventListener("click", (ev) => {
@@ -1867,40 +1993,70 @@ function setExit(x, y) {
   state.exitChoice = -1;
   buildField();
   update();
+  if (view.route && state.start) startRouteDraw();
   remember();
   explain("exit");
 }
 
 function setStart(x, y) {
+  const cardWas = !$("now-card").hidden;
+  const from = state.start;
   state.start = [Math.round(x), Math.round(y)];
+  hereAnim = stillMotion() ? null : { t0: null, from, to: state.start };
   state.exitChoice = -1;
   if (photoOnly) setPhotoOnly(false);
   reveal = null;  // a tap ends the reveal
   update();
   startRouteDraw();
+  if (hereAnim) animate();
   remember();
   explain("tap");
-  showNowInView();
+  // The plan stays under the finger at a new tap: only a card that comes new
+  // brings itself into view (ux review).
+  if (!cardWas) showNowInView();
 }
 
 // A tap off the floor drawing gives no route, and the old route stays. A tap
 // on a wall or on ink next to open floor starts on that floor (route.js
 // Field.tapStart). The keyboard marker follows the same rules.
-const OFF_PLAN = () => t("off_plan");
 const tapText = () => t("tap_hint");
 let tapSaid = tapText;  // the text under the plan, as a function (sayPlan)
+// A tap reaches floor a fingertip away on the screen (ux review, 2026-11-02:
+// a tap 19 CSS px from a corridor gave no route).
+const TAP_FINGER_CSS = 24;
+function fingerReach() {
+  const fr = shownFrame();
+  return canvas.clientWidth ? TAP_FINGER_CSS * (fr[2] - fr[0]) / canvas.clientWidth : 0;
+}
 function startFromTap(x, y) {
-  const t = view.field.tapStart([x, y]);
-  if (t.at === "outside") { refuseTap(OFF_PLAN); return; }
-  if (t.at === "wall") { refuseTap(ROUTE_ERRORS["start is inside a wall"]); return; }
-  if (t.at === "moved") [x, y] = view.field.toPx(t.cell);
+  const t = view.field.tapStart([x, y], fingerReach());
+  // Off the plan and on a wall give the same words (ux review): the edge
+  // between the two does not show on the plan.
+  if (t.at === "outside" || t.at === "wall") { refuseTap(ROUTE_ERRORS["start is inside a wall"], [x, y]); return; }
+  // A large floor with no exit is another floor of the sheet: the start
+  // stays there, and the plan asks for the exit of that floor (explain,
+  // NO_EXIT_HERE). A small closed area gives no start (ux review).
+  if (t.at === "noway" && view.field.areaShare(view.field.toPx(t.cell)) < FLOOR_SHARE) { refuseTap(ROUTE_ERRORS["no open way to an exit"], [x, y]); return; }
+  if (t.at === "moved" || t.at === "noway") [x, y] = view.field.toPx(t.cell);
   setStart(x, y);
 }
 
 // The message goes under the plan, where the eyes are after a tap, and to
 // the live status line (in the answer card) for a screen reader. The card
 // line stays hidden then, so the message shows once.
-function refuseTap(text) {
+// The plan also shows the words for a while in the pill on the plan, and a
+// ring fades out at the tap: on a phone the line under the plan can be below
+// the screen (ux review, 2026-11-02).
+const NOTE_MS = 3500, RING_MS = 600;
+let pillNote = null;  // { text, until } while the pill shows a refusal
+let tapRing = null;   // { at, t0 } while the ring at a refused tap fades
+function refuseTap(text, at = null) {
+  pillNote = { text, until: performance.now() + NOTE_MS };
+  tapRing = at && !stillMotion() ? { at, t0: performance.now() } : null;
+  clearTimeout(refuseTap.timer);
+  refuseTap.timer = setTimeout(() => { if (state) showStages(); }, NOTE_MS + 50);
+  showStages();
+  if (tapRing) animate();
   tapSaid = text;
   $("tap-text").textContent = text();
   $("tap-text").hidden = false;
@@ -1910,6 +2066,7 @@ function refuseTap(text) {
 }
 
 function clearRefusal() {
+  pillNote = tapRing = null;
   if (!$("tap-hint").classList.contains("refused")) return;
   $("tap-hint").classList.remove("refused");
   tapSaid = tapText;
@@ -2286,6 +2443,10 @@ async function readPhoto(file, job) {
 // The last tap or key in the plan: a user who works in the plan does not wait for the photo.
 let touched = 0;
 for (const type of ["pointerdown", "keydown"]) $("result").addEventListener(type, () => { touched = Date.now(); });
+// The focus frame of the plan shows after Tab, Enter or Space (a11y review:
+// also Enter alone), not after an arrow key that scrolls (ux review).
+addEventListener("keydown", (ev) => { if (ev.key === "Tab" || ev.key === "Enter" || ev.key === " ") document.documentElement.classList.add("kbd"); }, true);
+addEventListener("pointerdown", () => document.documentElement.classList.remove("kbd"), true);
 
 $("ready").addEventListener("click", () => {
   if (!readyPlan) return;
@@ -2508,6 +2669,7 @@ canvas.addEventListener("keydown", (ev) => {
   } else if (ev.key === "Enter" || ev.key === " ") {
     keyboard = true;
     place(cursor[0], cursor[1]);
+    if (state.start && !marking) cursor = [...state.start];  // a snapped start: the cross goes with it (ux review)
   } else if (ev.key === "Escape" && marking) {
     stopMarking();
     explain();
@@ -2544,9 +2706,14 @@ function sayMarker() {
     let near = -1, best = Infinity;
     state.exits.forEach((e, i) => { const d = Math.hypot(e.x - x, e.y - y); if (d < best) { best = d; near = i; } });
     // Enter there gives no route: say so before the user presses it.
-    const off = !marking && !state.photo_map && view && view.field.tapStart([x, y]).at === "outside";
-    const key = (off ? "marker_off" : "marker") + (near >= 0 ? "_near" : "");
-    $("marker-status").textContent = t(key, { at, exit: near >= 0 ? exitName(near) : "" });
+    // A wall or a closed room: the words of the refusal that Enter gives (a11y review).
+    const got = !marking && !state.photo_map && view ? view.field.tapStart([x, y], fingerReach()) : { at: "open" };
+    const tap = got.at;
+    const key = "marker" + (near >= 0 ? "_near" : "");
+    const small = tap === "noway" && view.field.areaShare(view.field.toPx(got.cell)) < FLOOR_SHARE;
+    const why = tap === "wall" || tap === "outside" ? ROUTE_ERRORS["start is inside a wall"] : small ? ROUTE_ERRORS["no open way to an exit"] : null;
+    const said = t(key, { at, exit: near >= 0 ? exitName(near) : "" });
+    $("marker-status").textContent = why ? I.join([said, why()]) : said;
   }, 400);
 }
 canvas.addEventListener("blur", () => { $("kbd-hint").hidden = true; stickNow(); draw(); });

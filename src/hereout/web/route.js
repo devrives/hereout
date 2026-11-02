@@ -432,23 +432,32 @@ const HereOutRoute = (() => {
 
     // Where a tap starts a route (browser only):
     // { at: "open", cell } for a tap on open floor;
-    // { at: "moved", cell } for a tap on a wall or ink with open floor at
-    //   most TAP_REACH_SHARE of the grid away, or on an island of ink (a
-    //   symbol or a label on the floor, at most TAP_ISLAND_SHARE of the
-    //   cells): the nearest cell with a way out first, else the nearest
-    //   open cell;
+    // { at: "moved", cell } for a tap on a wall, on ink or on floor with
+    //   no way out, with floor with a way out at most TAP_REACH_SHARE of
+    //   the grid away, or on an island of ink (a symbol or a label on the
+    //   floor, at most TAP_ISLAND_SHARE of the cells): the nearest cell
+    //   with a way out;
     // { at: "outside" } for a tap off the floor box (openBox), with
     //   TAP_EDGE_SHARE of the grid to spare for its outer walls;
-    // { at: "wall" } for a tap in the box with no open floor that near.
-    tapStart(xy) {
+    // { at: "wall" } for a tap in the box with no open floor that near;
+    // { at: "noway", cell } for a tap with open floor near, but none with a
+    //   way to an exit (a room whose door HereOut did not find, or a floor
+    //   with no exit found): the tapped or the nearest open cell.
+    // finger: a reach in pixels for a tap of a finger on a small screen (the
+    // browser gives it); the reach is the larger of the two.
+    tapStart(xy, finger = 0) {
       const box = this.openBox();
       const [x, y] = xy;
       const edge = TAP_EDGE_SHARE * Math.max(this.gw, this.gh) / this.scale;
       if (!box || x < box[0] - edge || y < box[1] - edge || x > box[2] + edge || y > box[3] + edge) return { at: "outside" };
       const [r0, c0] = this.toCell(xy);
       const { gw, gh, blocked, owner } = this;
-      if (!blocked[r0 * gw + c0]) return { at: "open", cell: r0 * gw + c0 };
-      const reach = Math.max(TAP_REACH_SHARE * Math.max(gw, gh), this.islandReach(r0 * gw + c0));
+      // Open floor with a way to an exit: the start is here. Open floor with
+      // no way out (a room whose door HereOut did not find) moves to floor
+      // with a way out close by, as a tap on a wall does; else there is no
+      // start (ux review, 2026-11-02: a dot with no route).
+      if (!blocked[r0 * gw + c0] && owner[r0 * gw + c0] >= 0) return { at: "open", cell: r0 * gw + c0 };
+      const reach = Math.max(TAP_REACH_SHARE * Math.max(gw, gh), finger * this.scale, blocked[r0 * gw + c0] ? this.islandReach(r0 * gw + c0) : 0);
       const span = Math.trunc(reach);
       let open = -1, openD = Infinity, way = -1, wayD = Infinity;
       for (let r = Math.max(0, r0 - span); r < Math.min(gh, r0 + span + 1); r++) {
@@ -462,7 +471,8 @@ const HereOutRoute = (() => {
         }
       }
       if (way >= 0) return { at: "moved", cell: way };
-      if (open >= 0) return { at: "moved", cell: open };
+      if (!blocked[r0 * gw + c0]) return { at: "noway", cell: r0 * gw + c0 };
+      if (open >= 0) return { at: "noway", cell: open };
       return { at: "wall" };
     }
 

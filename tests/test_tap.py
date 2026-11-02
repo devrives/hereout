@@ -1,6 +1,7 @@
 """Where a tap starts a route (web/route.js Field.tapStart): a tap off the
 floor drawing gives no route, a tap on a wall or on ink next to open floor
-starts on that floor, and a tap in a closed area keeps its "no way"."""
+starts on that floor, a tap in a closed area next to floor with a way out
+starts there, and a tap deep in a closed area gives no start."""
 
 import json
 import subprocess
@@ -42,6 +43,7 @@ TAPS = {
     "outside": px(40, 10),           # the margin of the sheet, off the floor drawing
     "far outside": px(5, 5),
     "closed room": px(40, 65),
+    "closed room by the wall": px(40, 51),  # two cells from floor with a way out
 }
 
 
@@ -60,4 +62,8 @@ def test_tap_rules():
     assert got["filled block"] == {"at": "wall"}
     assert got["outside"] == {"at": "outside"}
     assert got["far outside"] == {"at": "outside"}
-    assert got["closed room"] == {"at": "open", "cell": [40, 65], "way": False, "route": "no open way to an exit"}
+    # A closed area gives "noway" with its cell (the page asks for the exit of
+    # a large one, and gives no start in a small one), unless floor with a way
+    # out is in tap reach (ux review, 2026-11-02).
+    assert got["closed room"] == {"at": "noway", "cell": [40, 65], "way": False, "route": "no open way to an exit"}
+    assert got["closed room by the wall"] == {"at": "moved", "cell": [40, 49], "way": True, "route": "route"}

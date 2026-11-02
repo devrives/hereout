@@ -432,3 +432,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `decisions/example-de023-main-lines.md`: every way line shown joins an exit (only short spurs go), and the start is a location dot with no text.
 - Updated `DESIGN.md`: the ways out and the start mark.
 - Source: the owner verdict of 2026-11-02 on the first preview.
+
+## [2026-11-02] ingest | One route colour and a smooth start pick
+
+- Added `decisions/start-pick-flow.md`: one route colour, the tap reach of a fingertip, no dot with no route, the dot motion, the focus frame after a key.
+- Updated `DESIGN.md`: the route colour, the turn icons, the plan marks and the start pick.
+- Source: the owner request of 2026-11-02 and a frame record of the flow at 390 px and 1280 px.
+- Updated `decisions/start-pick-flow.md` and `DESIGN.md` after the ux and a11y reviews: refusal on the plan, mark prompt, motion timing, dashed way.
