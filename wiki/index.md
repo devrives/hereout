@@ -22,6 +22,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [The current step under the plan](decisions/current-step-card.md): accepted; a step card in view with the plan, turn icons, step dots, a tappable second way.
 - [Fixes of the plan page and the start page after three reviews](decisions/plan-page-fixes.md): accepted; steps are walks, round dots, one view.
 - [No vote of several reads for the exits](decisions/exit-vote.md): rejected; a vote of three reads gained 1 to 3 points at 5 %.
+- [A German hotel plan as the example, main way lines and a short motion](decisions/example-de023-main-lines.md): proposed; DE-commons_000023, main lines only, no step dots, short reveal.
 - [One run of the sample photos through the page, on /review](decisions/sample-run.md): accepted; 203 photos once through the page, results on `/review/`.
 - [Show the ways out as straight lines from door to door](decisions/way-network.md): door-to-door network, routes along it.
 - [Draw the ways out as one tree of level and upright lines](decisions/orthogonal-way-tree.md): proposed; lines along the two wall directions, joined at right angles.

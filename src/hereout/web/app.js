@@ -55,7 +55,7 @@ const LIT = "#ff9a3d";
 const DONE = "#aebdcc";  // the legs before the lit step: walked, so grey, but light on the dimmed photo
 const DARK = "#07100c";  // the ground of the page: the edge of every mark
 const VEIL = "rgba(7, 16, 12, 0.6)";  // over the photo in the escape map, so the marks stand out
-const ARROW_GAP = 12;   // plan units between two arrows on a way out
+const ARROW_GAP = 24;   // plan units between two arrows on a way out
 const ARROW_SIZE = 1.1; // plan units: half the width of an arrow head
 const OTHER_TRIES = 3;  // exits tried for the second way out
 const FLOOR_SHARE = 0.05; // an open area with this share of the open cells is a floor, not a pocket of paper
@@ -67,6 +67,36 @@ const WALL = "#7d9188";  // darker than the ways out, so a way and a wall differ
 const BLOCK = "#18251f";  // a filled area of the plan, in Routes only
 const WAY = "#3dffa0";  // the ways out
 const WAY_GLOW = "rgba(61, 255, 160, 0.22)";
+// The ways out show as a few main lines (owner, 2026-11-02: lines too busy).
+// A line that drains one door or one room is a leaf. A short group of leaves
+// (a line into a room) does not show; a long one (a far wing) does (ux review).
+// A short piece with a free end is a tick: it does not show.
+const WAY_MIN_FLOW = 2;
+const WAY_LEAF_KEEP = 30;  // plan units: a group of leaves this long shows
+const WAY_TICK = 4;        // plan units: a shorter piece with a free end is a tick
+const WAY_UNDER_ROUTE = 0.3;  // the ways out fade to this share when a route shows
+function shownLegs(net) {
+  const unit = frameUnit();
+  if (net._shown && net._shownUnit === unit) return net._shown;
+  const key = (p) => `${Math.round(p[0])},${Math.round(p[1])}`;
+  const len = (l) => Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]);
+  const legs = net.legs.filter((l) => !l.bridge);
+  // The groups of joined leaves, with their length (union-find on the ends).
+  const up = new Map();
+  const root = (k) => { while (up.get(k) !== k) k = up.get(k); return k; };
+  const leaves = legs.filter((l) => !l.exit && l.flow < WAY_MIN_FLOW);
+  for (const l of leaves) for (const p of [l.a, l.b]) if (!up.has(key(p))) up.set(key(p), key(p));
+  for (const l of leaves) up.set(root(key(l.a)), root(key(l.b)));
+  const size = new Map();
+  for (const l of leaves) size.set(root(key(l.a)), (size.get(root(key(l.a))) || 0) + len(l));
+  let shown = legs.filter((l) => l.exit || l.flow >= WAY_MIN_FLOW || size.get(root(key(l.a))) >= unit * WAY_LEAF_KEEP);
+  const ends = new Map();
+  for (const l of shown) for (const p of [l.a, l.b]) ends.set(key(p), (ends.get(key(p)) || 0) + 1);
+  shown = shown.filter((l) => l.exit || len(l) >= unit * WAY_TICK || (ends.get(key(l.a)) > 1 && ends.get(key(l.b)) > 1));
+  net._shown = shown;
+  net._shownUnit = unit;
+  return shown;
+}
 
 // The language of the plan card (i18n.js), from the address (lang=) or the
 // browser. The start page stays English. Muse Spark translated the catalogue
@@ -589,26 +619,23 @@ function drawWays(l, share = 1) {
   const net = network();
   if (!net) return;
   const unit = frameUnit();
-  const widths = [[], [], [], [], [], []];
-  for (const leg of net.legs) widths[Math.min(5, Math.floor(Math.log2(leg.flow)))].push(leg);
+  const legs = shownLegs(net);
   const front = share < 1 ? share * wayDepth(net).max : Infinity;
   l.lineCap = l.lineJoin = "round";
-  for (const [color, grow] of [[WAY_GLOW, 2.6], [WAY, 1]]) {
+  for (const [color, width] of [[WAY_GLOW, 1.6], [WAY, 0.55]]) {
     l.strokeStyle = color;
-    widths.forEach((group, b) => {
-      l.lineWidth = unit * (0.45 + 0.12 * b) * grow;
-      l.beginPath();
-      for (const leg of group) {
-        const { a, b: z } = leg;
-        if (front === Infinity) { l.moveTo(a[0], a[1]); l.lineTo(z[0], z[1]); continue; }
-        const d = wayDepth(net).of.get(leg);
-        if (front <= d.near) continue;
-        const k = Math.min(1, (front - d.near) / Math.max(1e-6, d.far - d.near));
-        l.moveTo(z[0], z[1]);
-        l.lineTo(z[0] + (a[0] - z[0]) * k, z[1] + (a[1] - z[1]) * k);
-      }
-      l.stroke();
-    });
+    l.lineWidth = unit * width;
+    l.beginPath();
+    for (const leg of legs) {
+      const { a, b: z } = leg;
+      if (front === Infinity) { l.moveTo(a[0], a[1]); l.lineTo(z[0], z[1]); continue; }
+      const d = wayDepth(net).of.get(leg);
+      if (front <= d.near) continue;
+      const k = Math.min(1, (front - d.near) / Math.max(1e-6, d.far - d.near));
+      l.moveTo(z[0], z[1]);
+      l.lineTo(z[0] + (a[0] - z[0]) * k, z[1] + (a[1] - z[1]) * k);
+    }
+    l.stroke();
   }
 }
 
@@ -735,10 +762,15 @@ function frameScale(fr) {
 }
 
 // The size unit of the marks and lines: a share of the frame, so they look
-// the same on a zoomed plan as on all of the photo.
+// the same on a zoomed plan as on all of the photo. On a small screen the
+// unit has a floor in CSS pixels, so the exits stay big enough to read
+// (owner, 2026-11-02: the marks were too small on a phone).
+const UNIT_MIN_CSS = 4;
 function frameUnit() {
   const fr = shownFrame();
-  return Math.max(fr[2] - fr[0], fr[3] - fr[1]) / 160;
+  const long = Math.max(fr[2] - fr[0], fr[3] - fr[1]);
+  const css = canvas.clientWidth ? (fr[2] - fr[0]) / canvas.clientWidth : 0;
+  return Math.max(long / 160, UNIT_MIN_CSS * css);
 }
 
 // Size the canvas to the frame and map photo pixels onto it.
@@ -784,6 +816,9 @@ function draw() {
   if (!state) return;
   setFrame();
   if (typeof readingOn === "function" && readingOn()) return drawReading();  // reading.js
+  const unit = frameUnit();
+  // The layers are drawn at one unit: a new size of the plan on the screen makes them again.
+  if (view.unit !== unit) { view.unit = unit; view.layer = view.walls = null; }
   if (routesOnly) {
     ctx.fillStyle = DARK;
     ctx.fillRect(0, 0, state.width, state.height);
@@ -795,7 +830,6 @@ function draw() {
       ctx.fillRect(0, 0, state.width, state.height);
     }
   }
-  const unit = frameUnit();
   if (!photoOnly) {
     const rv = revealNow();
     if (showMap && view.reachable) {
@@ -807,8 +841,12 @@ function draw() {
         ctx.restore();
         if (rv.ways > 0) drawWays(ctx, rv.ways);
       } else {
+        // With a route, the ways out step back: the route is the answer.
+        ctx.save();
+        if (view.route && state.start) ctx.globalAlpha = WAY_UNDER_ROUTE;
         drawLayer(mapLayer());
         drawArrows(unit);
+        ctx.restore();
       }
     }
     drawMarks(unit, rv);
@@ -840,11 +878,11 @@ function drawArrows(unit) {
   ctx.lineWidth = unit * 0.3;
   ctx.lineJoin = "miter";
   ctx.beginPath();
-  for (const leg of net.legs) {
-    if (leg.bridge || leg.join) continue;
+  for (const leg of shownLegs(net)) {
+    if (leg.join) continue;
     const dx = leg.b[0] - leg.a[0], dy = leg.b[1] - leg.a[1];
     const len = Math.hypot(dx, dy);
-    if (len < gap * 0.6) continue;
+    if (len < unit * ARROW_KEEP) continue;
     const ux = dx / len, uy = dy / len;
     const head = (x, y) => {
       heads.push([x, y]);
@@ -891,11 +929,11 @@ function segmentGap(p, a, b) {
 // which grows out from the exits; then the plan asks for the tap. After a
 // tap the route draws in from YOU, and the second way out follows it. A tap
 // during the reveal ends it. With reduced motion, everything shows at once.
-const REVEAL_EXIT = 280;  // ms between two exits
-const REVEAL_GROW = 360;  // ms: one exit grows in
-const REVEAL_WAYS = 1800; // ms: the ways out grow from the exits to the far rooms
+const REVEAL_EXIT = 160;  // ms between two exits
+const REVEAL_GROW = 280;  // ms: one exit grows in
+const REVEAL_WAYS = 1000; // ms: the ways out grow from the exits to the far rooms
 const ROUTE_SPEED = 0.45; // shares of the frame for each second: the route draws in
-const ROUTE_MIN = 900, ROUTE_MAX = 1800;  // ms
+const ROUTE_MIN = 700, ROUTE_MAX = 1200;  // ms
 let reveal = null;     // { t0, waysAt } while the plan opens
 let routeAnim = null;  // { t0, ms, start, exit } while the route draws in
 let frameAsked = false;
@@ -1116,7 +1154,6 @@ function drawMarks(unit, rv = null) {
   const r = unit * 2.4;
   const tip = here && view.route ? firstMove(here, r) : null;
   const at = here ? youLabelAt(here, r, unit * 2.2, tip && tip.at) : null;
-  if (draw === 1 && view.steps.length) stepDots(unit, here, used, at && at.box);
   if (here) {
     hereMark(here[0], here[1], r);
     if (tip) moveArrow(here, tip, r);
@@ -1150,60 +1187,6 @@ function routeSplit() {
   const walks = steps.map((s, j) => [s, j]).filter(([s]) => s.kind === "walk");
   return { done: join(walks.filter(([, j]) => j < k).map(([s]) => s.path)),
            rest: join(walks.filter(([, j]) => j >= k).map(([s]) => s.path)) };
-}
-
-// A small numbered dot where each step starts, the same number as in the
-// step list. Step 1 starts at YOU: it has none. The dots are round, smaller
-// than the exit marks and in the colours of the route (judge review: square
-// exits with numbers beside numbered dots read as more exits). A dot keeps
-// clear of every exit mark, of YOU, of its label and of the other dots: it
-// moves along its walk to a free place, or it does not show.
-const DOT_R = 1.75;  // plan units: the radius of a step dot (an exit mark is 2.2 from its middle to its side)
-function stepDots(unit, here, used, youBox) {
-  const r = unit * DOT_R;
-  const split = routeSplit();  // dots of walked legs are grey, as the legs are
-  const ids = view.steps.map((s, j) => j).filter((j) => j > 0 && view.steps[j].kind === "walk");
-  ids.sort((a, b) => (b === selected) - (a === selected));  // the lit dot takes its place first
-  const shown = [];
-  const exitGap = unit * 2.2 * 1.3 + r + unit * 0.6;  // an exit in use has a wide frame
-  const free = ([x, y]) => state.exits.every((e) => Math.max(Math.abs(e.x - x), Math.abs(e.y - y)) >= exitGap) &&
-    !(here && Math.hypot(x - here[0], y - here[1]) < unit * 6) &&
-    !(youBox && x + r > youBox[0] && x - r < youBox[2] && y + r > youBox[1] && y - r < youBox[3]) &&
-    shown.every((p) => Math.hypot(x - p[0], y - p[1]) >= r * 2.4);
-  for (const j of ids) {
-    const path = view.steps[j].path;
-    const len = path.slice(1).reduce((a, q, k) => a + Math.hypot(q[0] - path[k][0], q[1] - path[k][1]), 0);
-    let at = null;
-    for (let d = 0; d <= len / 2 && !at; d += unit) {
-      const p = pointOnPath(path, d);
-      if (free(p)) at = p;
-    }
-    if (!at) continue;
-    shown.push(at);
-    const lit = j === selected, done = !!split && j < selected;
-    ctx.beginPath();
-    ctx.arc(at[0], at[1], r, 0, Math.PI * 2);
-    ctx.fillStyle = lit ? LIT : done ? DONE : ROUTE;
-    ctx.fill();
-    ctx.lineWidth = unit * 0.35;
-    ctx.strokeStyle = DARK;
-    ctx.stroke();
-    ctx.font = `700 ${Math.round(r * 1.35)}px "Geist Mono", ui-monospace, monospace`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = DARK;
-    ctx.fillText(String(j + 1), at[0], at[1] + r * 0.08);
-  }
-}
-
-// The point at distance d along a path of points.
-function pointOnPath(path, d) {
-  for (let k = 1; k < path.length; k++) {
-    const a = path[k - 1], b = path[k], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (d <= l && l > 0) return [a[0] + (b[0] - a[0]) * d / l, a[1] + (b[1] - a[1]) * d / l];
-    d -= l;
-  }
-  return path[path.length - 1];
 }
 
 // The direction of the first move from YOU: the heading of step 1, or its
@@ -1716,7 +1699,9 @@ function showLegend() {
   // In Photo only the legend keeps its space, so the text under the plan does not move.
   $("legend").hidden = false;
   $("legend").style.visibility = photoOnly ? "hidden" : "";
-  $("legend-field").hidden = $("legend-way").hidden = !map;
+  // With a route the ways out fade to a background (WAY_UNDER_ROUTE): the
+  // legend no longer names them (a11y review, 2026-11-02).
+  $("legend-field").hidden = $("legend-way").hidden = !map || !!(view.route && state.start);
   // The ways out show once the worker has made them. The item keeps its
   // space, so the text under the plan does not move when they come.
   $("legend-way").style.visibility = view.field.waitForNetwork && !view.field._network ? "hidden" : "";

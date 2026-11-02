@@ -218,10 +218,15 @@ def test_review_is_off_by_default(tmp_path, monkeypatch):
     assert client.post("/api/gallery/XX-test_1").json()["id"] == "g-XX-test_1"
 
 
-def test_production_compose_keeps_review_off():
+def test_production_compose_sets_review_on_purpose():
+    # /review/ is on only for the owner's sample run (wiki/decisions/sample-run.md):
+    # the line names that decision, and it wins over an entry in .env.
     from pathlib import Path
     compose = (Path(__file__).parent.parent / "docker-compose.yml").read_text()
-    assert 'HEREOUT_REVIEW: "0"' in compose
+    line = next(l for l in compose.splitlines() if "HEREOUT_REVIEW:" in l)
+    assert line.strip() in ('HEREOUT_REVIEW: "0"', 'HEREOUT_REVIEW: "1"')
+    if line.strip().endswith('"1"'):
+        assert "wiki/decisions/sample-run.md" in compose
 
 
 def test_gallery_unknown_and_absent(tmp_path):

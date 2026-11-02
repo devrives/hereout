@@ -255,7 +255,11 @@ The page has two modes. The start page shows the heading, the photo button, thre
 
 The photo credits of the samples are on their own page, `/credits` (`web/credits.html`), one entry for each sample with the sample id as its anchor. The start page has no footer (owner, 2026-11-01).
 
-A plan opens in the order of the work (owner, 2026-11-01): the exits one by one, then every way out, then the tap, then the route. The strip "Exits, Ways out, You, Route" above the plan lights the part that shows now.
+A plan opens in the order of the work (owner, 2026-11-01): the exits one by one, then the ways out, then the tap, then the route. The motion is short: about 2 s to the tap prompt, and about 1 s for the route (owner, 2026-11-02).
+
+The ways out are a few main lines of one width. A short line that drains only one room or one door does not show. Arrows are far apart. With a route, the ways out fade to 30 %, so the route is the one strong line, and the legend drops the ways out (owner, 2026-11-02: the lines were too busy).
+
+On a phone the marks have a floor size, so an exit mark is at least about 18 CSS px. The strip "Exits, Ways out, You, Route" above the plan lights the part that shows now.
 
 ## Colors
 
@@ -264,7 +268,7 @@ A plan opens in the order of the work (owner, 2026-11-01): the exits one by one,
 - `exit` is the same glow green: the exit marks on the plan, the exit badge and the exit buttons, with dark numbers.
 - `route` is the light blue of the route on the plan, the step numbers and the ring round the chosen exit.
 - `lit` (amber) is the current step: its number, its turn icon and its part of the route on the plan. On the last step it is a ring round the exit.
-- `done` (light grey blue) is the part of the route before the current step, and the dots of those steps on the plan. It is light, so a walked leg stays clear on the dimmed photo (judge review, 2026-11-01).
+- `done` (light grey blue) is the part of the route before the current step. It is light, so a walked leg stays clear on the dimmed photo (judge review, 2026-11-01).
 - `reading` is the purple of the reading view (what Muse Spark read). That view shows the whole photo, not dimmed, with its own fixed colours in `reading.js`.
 - `logo-wall`, `logo-route` and `logo-dot` colour the three parts of the logo SVG.
 - The page has one scheme (`color-scheme: dark`). The photo is the only light area, and in the escape map it is under a veil (`VEIL`, the ground at 60 %).
@@ -322,7 +326,7 @@ All in `style.css` and `index.html`.
 - The steps are the walks of the route. "Then you reach the exit." is no step: the list shows it after the walks with the exit door and no number, and the card adds it to the words of the last walk.
 - The current step (`now-card`, `badge-now`, `button-now-step`): under the plan after a tap, under 960 px only. A small exit badge, "Exit 4 · Step 2 of 4", a speaker button that reads this step only, then the turn icon and the words of the step between a previous and a next button (56 × 64 px, the thumb zone). The plan lights the same step. At the first step the previous button keeps its place but does not show. At the last walk the exit door (`exit`) takes the place of the next button. So the card does not move. When a button reaches either end, the focus goes to the words of the step (`tabindex="-1"`), so a held Enter stops there. Each step change goes once to the live line of the plan. The full list stays in the answer card. After an exit button on a narrow screen, the plan and the card come into view and the next button takes the focus.
 - Turn icons: one outline glyph for each step, left of its words in the step list and in the card: straight, left, right, slight left, slight right, back, a side step (the line jogs to the left or the right, then goes on), and an exit door for the end. A turn with a side step keeps its turn glyph. Step 1 names a side of the plan, so its arrow points to that side. 24 viewBox, stroke 2, `currentColor`: muted in the list, `lit` for the current step, `exit` for the door.
-- On the plan: a small round dot where each step starts, the same number as in the list (step 1 starts at YOU and has none). The dots are smaller than the exit marks and in the colours of the route: `route`, `lit` for the current step, `done` before it, with dark numbers. A dot keeps clear of every exit mark, YOU and the other dots: it moves along its walk, or it does not show. The current step is `lit`, the legs before it are `done`, the rest is `route`. At the last walk an amber ring goes round the exit. A short white arrow at YOU points the first move.
+- On the plan: no step numbers (owner, 2026-11-02: fewer marks). The current step is `lit`, the legs before it are `done`, the rest is `route`. At the last walk an amber ring goes round the exit. A short white arrow at YOU points the first move.
 - The samples: a grid of photos with the country under each one in Geist Mono. Under the first rows, one faded row and a round chevron button open the rest. A "Photo credits" link beside the heading opens `/credits`.
 - Disclosures: the start page has one, the text of the video, right under the video. The credit of the photo in the video is in the caption line under the video.
 - Icons: inline outline SVG, 24 viewBox, stroke 1.8, 20 px, `currentColor`.

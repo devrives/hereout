@@ -420,3 +420,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Added `decisions/sample-run.md`: the 203 sample photos once through the page of a local server. The results are on `/review/`, and the live server has `HEREOUT_REVIEW` set to 1.
 - Source: `scripts/site_run.mjs`, the run output and the owner request of 2026-11-01.
+
+## [2026-11-02] ingest | New example plan, main way lines, short motion
+
+- Added `decisions/example-de023-main-lines.md`: the proposed example DE-commons_000023, the ways out as main lines, no step dots, a short reveal.
+- Updated `DESIGN.md`: the ways out, the motion, the floor size of the marks, no step dots.
+- Source: the owner request of 2026-11-02, the exit scores of `scripts/score_exits.py` and checks by eye.
