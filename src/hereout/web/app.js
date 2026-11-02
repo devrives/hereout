@@ -48,6 +48,8 @@ const MAP_ALPHA = 54;
 const ROUTE = "#5aa2ff";
 const ROUTE_GLOW = "rgba(90, 162, 255, 0.32)";
 const ROUTE_CORE = "#d6e7ff";  // a thin light line in the middle of the route
+const HERE = "#2f7dff";  // the start dot: the route blue, a little deeper on its white rim
+const HERE_HALO = "rgba(90, 162, 255, 0.22)";
 const EXIT = "#3dffa0";
 const EXIT_INK = "#03140b";
 const EXIT_GLOW = "rgba(61, 255, 160, 0.75)";
@@ -67,32 +69,73 @@ const WALL = "#7d9188";  // darker than the ways out, so a way and a wall differ
 const BLOCK = "#18251f";  // a filled area of the plan, in Routes only
 const WAY = "#3dffa0";  // the ways out
 const WAY_GLOW = "rgba(61, 255, 160, 0.22)";
-// The ways out show as a few main lines (owner, 2026-11-02: lines too busy).
-// A line that drains one door or one room is a leaf. A short group of leaves
-// (a line into a room) does not show; a long one (a far wing) does (ux review).
-// A short piece with a free end is a tick: it does not show.
-const WAY_MIN_FLOW = 2;
-const WAY_LEAF_KEEP = 30;  // plan units: a group of leaves this long shows
-const WAY_TICK = 4;        // plan units: a shorter piece with a free end is a tick
+// The ways out show as a few main lines (owner, 2026-11-02: lines too busy),
+// and every line shown joins an exit (owner, 2026-11-02: no gaps). So no
+// line of the network is cut out of its middle: only spurs go. A spur is a
+// piece with a free end (not at an exit), up to the next fork. A short spur
+// (a line into a room, a tick) does not show; a long one (a far wing) does.
+// The pass repeats, because a fork can go with its spurs. A piece that
+// joins no exit does not show.
+const WAY_SPUR = 16;  // plan units: a shorter spur does not show
 const WAY_UNDER_ROUTE = 0.3;  // the ways out fade to this share when a route shows
 function shownLegs(net) {
-  const unit = frameUnit();
+  const fr = shownFrame();
+  const unit = Math.max(fr[2] - fr[0], fr[3] - fr[1]) / 160;
   if (net._shown && net._shownUnit === unit) return net._shown;
+  const { lines = [] } = state.walls || {};
+  const onBuilding = lines.length ? R.buildingOutline(view.field, lines, state.width, state.height) : () => true;
   const key = (p) => `${Math.round(p[0])},${Math.round(p[1])}`;
   const len = (l) => Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]);
-  const legs = net.legs.filter((l) => !l.bridge);
-  // The groups of joined leaves, with their length (union-find on the ends).
-  const up = new Map();
-  const root = (k) => { while (up.get(k) !== k) k = up.get(k); return k; };
-  const leaves = legs.filter((l) => !l.exit && l.flow < WAY_MIN_FLOW);
-  for (const l of leaves) for (const p of [l.a, l.b]) if (!up.has(key(p))) up.set(key(p), key(p));
-  for (const l of leaves) up.set(root(key(l.a)), root(key(l.b)));
-  const size = new Map();
-  for (const l of leaves) size.set(root(key(l.a)), (size.get(root(key(l.a))) || 0) + len(l));
-  let shown = legs.filter((l) => l.exit || l.flow >= WAY_MIN_FLOW || size.get(root(key(l.a))) >= unit * WAY_LEAF_KEEP);
-  const ends = new Map();
-  for (const l of shown) for (const p of [l.a, l.b]) ends.set(key(p), (ends.get(key(p)) || 0) + 1);
-  shown = shown.filter((l) => l.exit || len(l) >= unit * WAY_TICK || (ends.get(key(l.a)) > 1 && ends.get(key(l.b)) > 1));
+  const exits = exitPoints();
+  const atExit = (p) => exits.some(([x, y]) => Math.hypot(p[0] - x, p[1] - y) < unit);
+  const anchor = new Set();
+  const at = new Map();  // the legs at each end
+  const point = new Map();
+  const live = new Set(net.legs.filter((l) => len(l) > 0));
+  for (const l of live) {
+    for (const p of [l.a, l.b]) {
+      const k = key(p);
+      point.set(k, p);
+      if (!at.has(k)) at.set(k, new Set());
+      at.get(k).add(l);
+      if (atExit(p)) anchor.add(k);
+    }
+  }
+  const other = (l, k) => (key(l.a) === k ? key(l.b) : key(l.a));
+  for (let cut = true; cut;) {
+    cut = false;
+    for (const [k0, ls] of at) {
+      if (ls.size !== 1 || anchor.has(k0)) continue;
+      // Walk from the free end to a fork, an exit or the other free end.
+      const spur = [];
+      let k = k0, l = [...ls][0], d = 0;
+      for (;;) {
+        spur.push(l);
+        d += len(l);
+        k = other(l, k);
+        const next = [...at.get(k)].filter((m) => m !== l);
+        if (next.length !== 1 || anchor.has(k)) break;
+        l = next[0];
+      }
+      if (d >= unit * WAY_SPUR && onBuilding(point.get(k0), unit)) continue;
+      for (const m of spur) {
+        live.delete(m);
+        at.get(key(m.a)).delete(m);
+        at.get(key(m.b)).delete(m);
+      }
+      cut = true;
+    }
+  }
+  // Only the pieces that reach an exit.
+  const reach = new Set([...anchor]);
+  for (let grow = true; grow;) {
+    grow = false;
+    for (const l of live) {
+      const ka = key(l.a), kb = key(l.b);
+      if (reach.has(ka) !== reach.has(kb)) { reach.add(ka); reach.add(kb); grow = true; }
+    }
+  }
+  const shown = [...live].filter((l) => reach.has(key(l.a)));
   net._shown = shown;
   net._shownUnit = unit;
   return shown;
@@ -879,7 +922,7 @@ function drawArrows(unit) {
   ctx.lineJoin = "miter";
   ctx.beginPath();
   for (const leg of shownLegs(net)) {
-    if (leg.join) continue;
+    if (leg.join || leg.bridge) continue;
     const dx = leg.b[0] - leg.a[0], dy = leg.b[1] - leg.a[1];
     const len = Math.hypot(dx, dy);
     if (len < unit * ARROW_KEEP) continue;
@@ -1078,7 +1121,7 @@ function placePrompt() {
 }
 
 function drawMarks(unit, rv = null) {
-  // Exit and the start (YOU) differ in shape and label, not only in colour.
+  // Exit and the start differ in shape (a numbered square, a dot), not only in colour.
   const here = state.start;
   const used = view.route ? view.route.exitIndex : -1;
   // In the reveal each exit grows in after the one before.
@@ -1150,14 +1193,15 @@ function drawMarks(unit, rv = null) {
       ctx.stroke();
     }
   }
-  // A short arrow at YOU points the first move (research brief 2, pattern 8).
-  const r = unit * 2.4;
-  const tip = here && view.route ? firstMove(here, r) : null;
-  const at = here ? youLabelAt(here, r, unit * 2.2, tip && tip.at) : null;
+  // The start is a location dot, as on a map app, with no text (owner,
+  // 2026-11-02: the mark must look natural). The route line and step 1 give
+  // the first move: a beam muddied the route (ux review). An exit near the
+  // start goes over the dot again, so its number shows.
   if (here) {
-    hereMark(here[0], here[1], r);
-    if (tip) moveArrow(here, tip, r);
-    label(t("you"), at.x, at.y, r, at.baseline, at.align);
+    hereMark(here[0], here[1], unit * 2.4);
+    state.exits.forEach((e, i) => {
+      if (Math.hypot(e.x - here[0], e.y - here[1]) < unit * 9) exitMark(e.x, e.y, unit * 2.2, i + 1, i === used);
+    });
   }
 }
 
@@ -1189,49 +1233,24 @@ function routeSplit() {
            rest: join(walks.filter(([, j]) => j >= k).map(([s]) => s.path)) };
 }
 
-// The direction of the first move from YOU: the heading of step 1, or its
-// side step when it starts with one (route.js directions). Returns the
-// angle of the arrow and its tip.
-function firstMove(here, r) {
-  const s = view.steps[0];
-  if (!s || s.kind !== "walk" || typeof s.head !== "number") return null;
-  const deg = s.head + (s.say && s.say.key === "start_aside" ? (s.aside === "right" ? 90 : -90) : 0);
-  const a = (deg - 90) * Math.PI / 180;
-  return { a, at: [here[0] + Math.cos(a) * r * 3.3, here[1] + Math.sin(a) * r * 3.3] };
-}
-
-function moveArrow(here, tip, r) {
-  const c = Math.cos(tip.a), s = Math.sin(tip.a);
-  const bx = here[0] + c * r * 2.05, by = here[1] + s * r * 2.05, w = r * 0.95;
-  ctx.beginPath();
-  ctx.moveTo(tip.at[0], tip.at[1]);
-  ctx.lineTo(bx - s * w, by + c * w);
-  ctx.lineTo(bx + s * w, by - c * w);
-  ctx.closePath();
-  ctx.lineJoin = "round";
-  ctx.lineWidth = r / 3;
-  ctx.strokeStyle = DARK;
-  ctx.stroke();
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-}
-
-// YOU: a white dot with a dark edge and a soft ring round it.
+// The start: a blue dot with a white rim in a soft halo, as on a map app.
 function hereMark(x, y, r) {
+  ctx.save();
   ctx.beginPath();
-  ctx.arc(x, y, r * 1.9, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
+  ctx.arc(x, y, r * 2.4, 0, Math.PI * 2);
+  ctx.fillStyle = HERE_HALO;
   ctx.fill();
-  ctx.lineWidth = r / 5;
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-  ctx.stroke();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+  ctx.shadowBlur = r * ctx.getTransform().a * 0.6;
   ctx.beginPath();
-  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.arc(x, y, r * 1.15, 0, Math.PI * 2);
   ctx.fillStyle = "#ffffff";
   ctx.fill();
-  ctx.lineWidth = r / 2.5;
-  ctx.strokeStyle = DARK;
-  ctx.stroke();
+  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
+  ctx.fillStyle = HERE;
+  ctx.fill();
 }
 
 // The number matches the exit buttons below the plan. The exit the route
@@ -1258,29 +1277,6 @@ function exitMark(x, y, r, n, used, k = 1) {
   ctx.textBaseline = "middle";
   ctx.fillStyle = EXIT_INK;
   ctx.fillText(String(n), x, y + r * 0.08);
-}
-
-// The place of the YOU label: above the mark, else below, right or left,
-// whichever first stays on the plan and covers no exit mark (its number).
-function youLabelAt(here, r, exitR, tip = null) {
-  ctx.font = `600 ${Math.round(r * 1.6)}px Geist, system-ui, sans-serif`;
-  const w = ctx.measureText(t("you")).width, h = r * 1.6, gap = r * 1.8;
-  const [x, y] = here;
-  const places = [
-    { x, y: y - gap, baseline: "bottom", align: "center", box: [x - w / 2, y - gap - h, x + w / 2, y - gap] },
-    { x, y: y + gap, baseline: "top", align: "center", box: [x - w / 2, y + gap, x + w / 2, y + gap + h] },
-    { x: x + gap, y, baseline: "middle", align: "left", box: [x + gap, y - h / 2, x + gap + w, y + h / 2] },
-    { x: x - gap, y, baseline: "middle", align: "right", box: [x - gap - w, y - h / 2, x - gap, y + h / 2] },
-  ];
-  // The white halo of the text and the frame of an exit take some room too.
-  const pad = r / 3 + exitR * 4 / 3;
-  const fr = shownFrame();
-  const onPlan = ([x0, y0, x1, y1]) => x0 >= fr[0] && y0 >= fr[1] && x1 <= fr[2] && y1 <= fr[3];
-  // The arrow of the first move (tip) keeps clear of the label too.
-  const free = ([x0, y0, x1, y1]) => state.exits.every((e) =>
-    e.x + pad < x0 || e.x - pad > x1 || e.y + pad < y0 || e.y - pad > y1) &&
-    !(tip && tip[0] > x0 - r && tip[0] < x1 + r && tip[1] > y0 - r && tip[1] < y1 + r);
-  return places.find((p) => onPlan(p.box) && free(p.box)) || places.find((p) => onPlan(p.box)) || places[0];
 }
 
 function label(text, x, y, r, baseline, align = "center") {
@@ -1706,6 +1702,8 @@ function showLegend() {
   // space, so the text under the plan does not move when they come.
   $("legend-way").style.visibility = view.field.waitForNetwork && !view.field._network ? "hidden" : "";
   $("legend-wall").hidden = !routesOnly;
+  // The start dot has no text on the plan: the legend names it (a11y review).
+  $("legend-you").hidden = !state.start;
   // The item keeps its space while two exits can give a second way, so the
   // text under the plan does not move after a tap.
   $("legend-other").hidden = state.exits.length < 2;
@@ -2585,7 +2583,7 @@ function bigZoom() {
   const e = state.exits[r.exitIndex];
   const pts = [...r.points, state.start, [e.x, e.y]];
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const pad = frameUnit() * 8;  // room for the exit mark, YOU and its label
+  const pad = frameUnit() * 8;  // room for the exit mark and the start dot
   const box = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
   const [x0, y0, x1, y1] = shownFrame();
   const w = st.clientWidth, h = Math.min(window.innerHeight * 0.8, window.innerHeight - 60);

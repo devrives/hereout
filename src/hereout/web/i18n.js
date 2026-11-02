@@ -53,7 +53,6 @@ const HereOutI18n = (() => {
     kind_nearest: "Nearest exit",
     kind_chosen: "The exit you chose",
     kind_marked: "The exit you marked",
-    you: "YOU",
     exit_word: "EXIT",
     // Plan view
     result_head: "Plan and route",
@@ -189,7 +188,6 @@ const HereOutI18n = (() => {
     step_turn_aside: "{turn}: a direction with no verb, such as \"slightly left\"; {aside}: a direction with no verb, such as \"right\".",
     exit_n: "Name of an exit by its number on the plan.",
     exit_n_label: "Name of an exit: its number, then the short description that the model wrote.",
-    you: "Short label drawn on the plan at the spot where the user stands. Translate it as the short \"you are here\" label of posted plans in the language, never as a bare pronoun. In capitals where the script has them.",
     exit_word: "Short label drawn on the plan beside the one exit mark. One short word in capitals where the script has them.",
     view_map: "Toggle button: shows the coloured escape map on the plan.",
     view_photo: "Toggle button: shows the photo without the escape map.",

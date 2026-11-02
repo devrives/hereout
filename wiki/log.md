@@ -426,3 +426,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/example-de023-main-lines.md`: the proposed example DE-commons_000023, the ways out as main lines, no step dots, a short reveal.
 - Updated `DESIGN.md`: the ways out, the motion, the floor size of the marks, no step dots.
 - Source: the owner request of 2026-11-02, the exit scores of `scripts/score_exits.py` and checks by eye.
+
+## [2026-11-02] ingest | Connected way lines and a location dot
+
+- Updated `decisions/example-de023-main-lines.md`: every way line shown joins an exit (only short spurs go), and the start is a location dot with no text.
+- Updated `DESIGN.md`: the ways out and the start mark.
+- Source: the owner verdict of 2026-11-02 on the first preview.

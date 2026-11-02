@@ -3,7 +3,7 @@ type: decision
 title: A German hotel plan as the example, main way lines and a short motion
 status: proposed
 updated: 2026-11-02
-checked: 19d0a13
+checked: b099fd0
 sources:
   - owner:2026-11-02
   - src/hereout/web/app.js
@@ -29,8 +29,10 @@ Example plan:
 
 Drawing and motion:
 
-- The ways out show only the main lines. A short group of lines that drain one room or one door (flow below 2) does not show. A long group (a far wing) shows. A short piece with a free end does not show. All lines have one width. The arrows are two times farther apart (ux review: a line keeps at least one arrow).
+- The ways out show only the main lines, and every line shown joins an exit. The first preview cut low-flow lines, links and bridges out of the network, so the lines had gaps. The owner rejected that preview (2026-11-02).
+- Now only spurs go. A spur is a piece with a free end (not at an exit), up to the next fork. A spur shorter than 16 units does not show, and the pass repeats. A long spur with its free end off the building outline does not show (ux review). Spur lengths use the plan unit with no phone floor, so all widths show the same lines (ux review). A piece that joins no exit does not show. All lines have one width. Bridges get no arrows. The arrows are two times farther apart (ux review: a line keeps at least one arrow).
 - With a route on the plan, the ways out fade to 30 %. The legend then does not name them, because faded lines do not have the contrast of a mark (a11y review).
+- The start is a location dot as on a map app: a blue dot with a white rim in a soft halo. The dot has no text and no arrow, and the legend names it. A beam toward the first move was tried and removed, because it muddied the route (ux review). The owner said that the old mark did not look natural (2026-11-02).
 - The plan shows no step numbers. This replaces the step dots of [The current step under the plan](current-step-card.md) and [Fixes of the plan page and the start page after three reviews](plan-page-fixes.md). The lit step still shows on the plan, and the step card and the step list keep the numbers.
 - The reveal is shorter: 160 ms between two exits, 1 s for the ways out, 0.7 to 1.2 s for the route.
 - On a narrow screen, the size unit of the marks is at least 4 CSS px, so an exit mark is about 18 CSS px.

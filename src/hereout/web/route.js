@@ -2293,6 +2293,15 @@ const HereOutRoute = (() => {
     return group.map((k, i) => kept[k] || inside(lines[i]));
   }
 
+  // The outline of the building: the convex hull of the wall lines that
+  // buildingLines keeps. Returns a test: true when a point is in it, or at
+  // most tol from it.
+  function buildingOutline(field, lines, planW, planH) {
+    const kept = buildingLines(field, lines, planW, planH);
+    const hull = convexHull(lines.filter((_, i) => kept[i]).flatMap(([x0, y0, x1, y1]) => [[x0, y0], [x1, y1]]));
+    return (p, tol = 0) => hull.length < 3 || inHull(hull, p, tol);
+  }
+
   // The convex hull of points, counterclockwise in screen axes (monotone chain).
   function convexHull(points) {
     const p = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -2336,7 +2345,7 @@ const HereOutRoute = (() => {
     return Math.min(toSeg(a0, b), toSeg(a1, b), toSeg(b0, a), toSeg(b1, a));
   }
 
-  return { decodeGrid, Field, NoRoute, directions, buildingLines };
+  return { decodeGrid, Field, NoRoute, directions, buildingLines, buildingOutline };
 })();
 
 if (typeof module !== "undefined") module.exports = HereOutRoute;

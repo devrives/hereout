@@ -257,7 +257,7 @@ The photo credits of the samples are on their own page, `/credits` (`web/credits
 
 A plan opens in the order of the work (owner, 2026-11-01): the exits one by one, then the ways out, then the tap, then the route. The motion is short: about 2 s to the tap prompt, and about 1 s for the route (owner, 2026-11-02).
 
-The ways out are a few main lines of one width. A short line that drains only one room or one door does not show. Arrows are far apart. With a route, the ways out fade to 30 %, so the route is the one strong line, and the legend drops the ways out (owner, 2026-11-02: the lines were too busy).
+The ways out are a few main lines of one width, and every line shown joins an exit (owner, 2026-11-02: no gaps). Only a short spur (a line into a room, a tick) does not show; a long spur (a far wing) shows, unless its free end is off the building. Spur lengths are in plan units, so a phone and a desktop show the same lines. Arrows are far apart. With a route, the ways out fade to 30 %, so the route is the one strong line, and the legend drops the ways out (owner, 2026-11-02: the lines were too busy).
 
 On a phone the marks have a floor size, so an exit mark is at least about 18 CSS px. The strip "Exits, Ways out, You, Route" above the plan lights the part that shows now.
 
@@ -303,7 +303,7 @@ Flat, with light in place of shadow. Cards, controls and the plan frame have a 1
 
 ## Shapes
 
-Round ends for every button, the view control and the language select (`pill`). Cards, the plan frame, the hero and the video use `card` (22 px). The exit badge and the samples use `sample` (14 px), the exit buttons `exit` (12 px), the stage strip `stage-chip` (10 px). The step numbers and YOU are circles. Under 600 px the plan frame has no radius.
+Round ends for every button, the view control and the language select (`pill`). Cards, the plan frame, the hero and the video use `card` (22 px). The exit badge and the samples use `sample` (14 px), the exit buttons `exit` (12 px), the stage strip `stage-chip` (10 px). The start dot is a circle. Under 600 px the plan frame has no radius.
 
 ## Components
 
@@ -317,7 +317,7 @@ All in `style.css` and `index.html`.
 - `button-secondary` is every other button: `card` ground, a `line` border.
 - The stage strip (`stage-chip`): four labels above the plan. Done parts have a green dot, the part that shows now is green with a green border (`stage-chip-now`).
 - The view control (`seg`, `seg-item`): "Escape map", "Photo only", "Routes only". It is one choice of three: exactly one button has `aria-pressed="true"`. "Routes only" shows the walls with the ways out, with no photo. In the reading view no button is pressed. A photo map has no "Routes only". Beside it, the larger-plan button.
-- The larger plan is 1.4 to 2.2 times as wide as the frame: as large as keeps the route, YOU and its exit in view, and centred on them.
+- The larger plan is 1.4 to 2.2 times as wide as the frame: as large as keeps the route, the start dot and its exit in view, and centred on them.
 - The tap prompt ("Tap where you stand") goes to the edge of the plan where it covers the fewest ways out and no exit: the foot first, then the top.
 - The plan frame (`.stage`) holds the canvas. The focus ring goes around the frame, not over the photo.
 - The legend: one line for each mark, with a swatch on the dark ground of the plan.
@@ -326,7 +326,7 @@ All in `style.css` and `index.html`.
 - The steps are the walks of the route. "Then you reach the exit." is no step: the list shows it after the walks with the exit door and no number, and the card adds it to the words of the last walk.
 - The current step (`now-card`, `badge-now`, `button-now-step`): under the plan after a tap, under 960 px only. A small exit badge, "Exit 4 · Step 2 of 4", a speaker button that reads this step only, then the turn icon and the words of the step between a previous and a next button (56 × 64 px, the thumb zone). The plan lights the same step. At the first step the previous button keeps its place but does not show. At the last walk the exit door (`exit`) takes the place of the next button. So the card does not move. When a button reaches either end, the focus goes to the words of the step (`tabindex="-1"`), so a held Enter stops there. Each step change goes once to the live line of the plan. The full list stays in the answer card. After an exit button on a narrow screen, the plan and the card come into view and the next button takes the focus.
 - Turn icons: one outline glyph for each step, left of its words in the step list and in the card: straight, left, right, slight left, slight right, back, a side step (the line jogs to the left or the right, then goes on), and an exit door for the end. A turn with a side step keeps its turn glyph. Step 1 names a side of the plan, so its arrow points to that side. 24 viewBox, stroke 2, `currentColor`: muted in the list, `lit` for the current step, `exit` for the door.
-- On the plan: no step numbers (owner, 2026-11-02: fewer marks). The current step is `lit`, the legs before it are `done`, the rest is `route`. At the last walk an amber ring goes round the exit. A short white arrow at YOU points the first move.
+- On the plan: no step numbers (owner, 2026-11-02: fewer marks). The current step is `lit`, the legs before it are `done`, the rest is `route`. At the last walk an amber ring goes round the exit. The start is a location dot as on a map app: a blue dot with a white rim in a soft blue halo, with no text and no arrow. The route line and step 1 give the first move. An exit near the dot goes over it. The legend names the dot "You" while a start shows (owner, 2026-11-02: the mark must look natural).
 - The samples: a grid of photos with the country under each one in Geist Mono. Under the first rows, one faded row and a round chevron button open the rest. A "Photo credits" link beside the heading opens `/credits`.
 - Disclosures: the start page has one, the text of the video, right under the video. The credit of the photo in the video is in the caption line under the video.
 - Icons: inline outline SVG, 24 viewBox, stroke 1.8, 20 px, `currentColor`.
