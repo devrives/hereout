@@ -439,3 +439,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `DESIGN.md`: the route colour, the turn icons, the plan marks and the start pick.
 - Source: the owner request of 2026-11-02 and a frame record of the flow at 390 px and 1280 px.
 - Updated `decisions/start-pick-flow.md` and `DESIGN.md` after the ux and a11y reviews: refusal on the plan, mark prompt, motion timing, dashed way.
+
+## [2026-11-02] ingest | The Dresden example accepted
+
+- Updated `decisions/example-de023-main-lines.md`: status accepted; the start page, the hero loop and the demo video use the new example.
+- Source: the owner verdict of 2026-11-02 on preview 3.

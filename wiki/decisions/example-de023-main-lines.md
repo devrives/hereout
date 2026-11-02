@@ -1,7 +1,7 @@
 ---
 type: decision
 title: A German hotel plan as the example, main way lines and a short motion
-status: proposed
+status: accepted
 updated: 2026-11-02
 checked: b099fd0
 sources:
@@ -41,4 +41,6 @@ Drawing and motion:
 
 - The drawing change applies to every plan on the live site.
 - The hub script `hero_loop.mjs` takes `--sample` and `--tap`. Its loop is 9 s and does not scroll, because the step card is under the plan.
-- `/review/motion/` shows the old loop and the new loop side by side. The start page and the demo video keep RU-commons_000164 until the owner accepts the new example.
+- `/review/motion/` showed the old loop and the new loops side by side. The owner accepted preview 3 on 2026-11-02.
+- The start page example, its marks image, the hero loop and the demo video now use DE-commons_000023 with the tap 800, 620.
+- The new example has no second look: every exit is on a green mark. The demo video shows the words of the plan that Muse Spark read in place of the crops.
