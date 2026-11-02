@@ -112,6 +112,16 @@ EXAMPLE_PIC = re.compile(r'<span class="example-pic".*?</span>\n', re.S)
 LOOP = "hero-loop.mp4"  # with hero-loop.webm (optional) and hero-loop.webp (the poster)
 
 
+# The status bar of the phone: the time, the island of the camera, signal,
+# Wi-Fi and battery. Drawing only: a screen reader skips it.
+STATUS_BAR = ('<span class="phone-bar" aria-hidden="true"><span class="phone-time"></span><span class="phone-island"></span>'
+              '<svg class="phone-icons" viewBox="0 0 66 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="6" width="3" height="6" rx="1"/>'
+              '<rect x="10" y="3.5" width="3" height="8.5" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/>'
+              '<path d="M31 11.5l-2.4-2.6a3.4 3.4 0 0 1 4.8 0zM26.4 6.7a6.5 6.5 0 0 1 9.2 0l-1.5 1.6a4.4 4.4 0 0 0-6.2 0zM24.2 4.4a9.6 9.6 0 0 1 13.6 0l-1.5 1.6a7.5 7.5 0 0 0-10.6 0z"/>'
+              '<rect x="42" y="1" width="20" height="10" rx="3" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>'
+              '<rect x="43.6" y="2.6" width="14.5" height="6.8" rx="1.6"/><path d="M63.4 4.2v3.6a1.9 1.9 0 0 0 0-3.6z" opacity=".45"/></svg></span>')
+
+
 def loop_html(folder: Path) -> str:
     """The phone of the hero: a short silent loop of the page in use, recorded
     from the real page by the hub script docs/.../hero_loop.mjs. app.js starts
@@ -122,9 +132,12 @@ def loop_html(folder: Path) -> str:
     # Without JS the page shows the poster only: no video and no controls of the browser (style.css).
     still = (f'<noscript><img class="loop-still" src="{video_url(folder, "hero-loop.webp")}" alt="" width="600" height="1200"></noscript>'
              if has_poster else "")
-    return (f'<span class="loop-phone"><video id="hero-loop" class="loop" muted loop playsinline preload="metadata" '
+    # The phone: an iPhone 14 Pro frame after devices.css (MIT, style.css) with
+    # a status bar over the screen, so the loop looks like the page on a phone.
+    return (f'<span class="loop-phone"><span class="phone-btns" aria-hidden="true"></span><span class="phone-power" aria-hidden="true"></span>'
+            f'<span class="phone-screen">{STATUS_BAR}<video id="hero-loop" class="loop" muted loop playsinline preload="metadata" '
             f'width="600" height="1200"{poster} aria-hidden="true">{webm}'
-            f'<source src="{video_url(folder, LOOP)}" type="video/mp4"></video>{still}</span>\n')
+            f'<source src="{video_url(folder, LOOP)}" type="video/mp4"></video>{still}</span></span>\n')
 
 
 def example_page(page: str, gallery: Gallery | None, folder: Path | None = None) -> str:

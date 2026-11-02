@@ -444,3 +444,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/example-de023-main-lines.md`: status accepted; the start page, the hero loop and the demo video use the new example.
 - Source: the owner verdict of 2026-11-02 on preview 3.
+
+## [2026-11-02] ingest | One route line, an iPhone frame and an About part
+
+- Added `decisions/one-route-line.md`: one route width, no way lines under a route, a quiet second way, a phone frame.
+- Updated `DESIGN.md`.
+- Source: the owner verdict of 2026-11-02 on the demo video.

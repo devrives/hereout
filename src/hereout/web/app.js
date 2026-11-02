@@ -76,7 +76,7 @@ const WAY_GLOW = "rgba(61, 255, 160, 0.22)";
 // The pass repeats, because a fork can go with its spurs. A piece that
 // joins no exit does not show.
 const WAY_SPUR = 16;  // plan units: a shorter spur does not show
-const WAY_UNDER_ROUTE = 0.3;  // the ways out fade to this share when a route shows
+const FIELD_UNDER_ROUTE = 0.5;  // with a route: the soft field near the exits at this share, and no way lines
 function shownLegs(net) {
   const fr = shownFrame();
   const unit = Math.max(fr[2] - fr[0], fr[3] - fr[1]) / 160;
@@ -883,12 +883,22 @@ function draw() {
         ctx.restore();
         if (rv.ways > 0) drawWays(ctx, rv.ways);
       } else {
-        // With a route, the ways out step back: the route is the answer.
+        // With a route, the route is the one line on the plan (owner,
+        // 2026-11-02: a way line beside the route looked like a second line
+        // stuck to it). The ways out fade out while the dot comes in, and the
+        // soft field near the exits stays.
+        // At a new tap the ways stay out: they do not flash back (ux review).
+        const k = view.route && state.start ? (hereAnim && hereAnim.from ? 1 : hereShare()) : 0;
         ctx.save();
-        // They fade while the dot comes in, not in one frame (ux review).
-        if (view.route && state.start) ctx.globalAlpha = 1 - (1 - WAY_UNDER_ROUTE) * hereShare();
-        drawLayer(mapLayer());
-        drawArrows(unit);
+        if (k > 0) {
+          ctx.globalAlpha = FIELD_UNDER_ROUTE;
+          drawLayer(tintLayer());
+          ctx.globalAlpha = 1 - k;
+        }
+        if (k < 1) {
+          drawLayer(mapLayer());
+          drawArrows(unit);
+        }
         ctx.restore();
       }
     }
@@ -1178,63 +1188,34 @@ function drawMarks(unit, rv = null) {
     label(t("exit_word"), e.x, near ? e.y + unit * 2.2 * 1.8 : e.y - unit * 2.2 * 1.8, unit * 2.2, near ? "top" : "bottom");
   }
 
-  // The second way out: dashed, under the route, so the route stays on top
-  // where the two share a corridor.
-  // In the reveal the route and YOU wait (the example has a start).
+  // In the reveal the route and the start wait (the example has a start).
   const draw = rv ? 0 : routeDrawn();
-  const fade = draw === 1 ? afterShare() : 0;
-  // Only where it leaves the route: under the route it does not show, and
-  // the words "the dashed line" name a line that shows (ux review).
-  const b0 = draw === 1 && view.backup && view.backup.points && view.route ? view.backup : null;
-  if (b0 && (b0._apartUnit !== unit || b0._apartOf !== view.route)) {
-    b0._apart = apartFrom(b0.points, view.route.points, unit * 1.5);
-    b0._apartUnit = unit;
-    b0._apartOf = view.route;
-  }
-  const alt = b0 && b0._apart;
-  if (alt && alt.length > 1) {
-    ctx.save();
-    ctx.globalAlpha = fade;
-    ctx.lineJoin = ctx.lineCap = "round";
-    for (const [color, width, dash] of [[DARK, unit * 1.5, []], [ROUTE, unit * 0.8, [unit * 1.6, unit * 1.2]]]) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.setLineDash(dash);
-      ctx.beginPath();
-      ctx.moveTo(alt[0][0], alt[0][1]);
-      for (const p of alt.slice(1)) ctx.lineTo(p[0], p[1]);
-      ctx.stroke();
-    }
-    ctx.setLineDash([]);
-    ctx.restore();
-    // Its exit goes over the dashed line again, so its number shows.
-    const b = state.exits[view.backup.exitIndex];
-    exitMark(b.x, b.y, unit * 2.2, view.backup.exitIndex + 1, false);
-  }
+  // The second way out has no line on the plan: the route is the one line
+  // (owner, 2026-11-02: "one line moves and reaches the exit"; a dashed
+  // line that came out by itself looked like a second line). The card names
+  // it, and its button draws it in as the route.
 
   // The route and the start go over the exits, so a short route stays
   // visible. The route draws in from the start after a tap (routeDrawn).
-  // The route has one colour (owner, 2026-11-02: one consistent flow): the
-  // current step is the full route line, the steps after it are a thin line
-  // of the same blue, and the legs before it are walked, so grey (Mappedin,
-  // research brief 2). The route draws in with these widths, so nothing
-  // changes when it is in.
+  // The route is one line of one width and one colour (owner, 2026-11-02:
+  // one line moves from the dot and reaches the exit). It draws in from the
+  // start with one moving end. From step 2 on, the legs before the current
+  // step are walked, so grey (Mappedin, research brief 2); the rest is the
+  // same blue line as before.
   const pts = !rv && view.route && view.route.points && partOfLine(view.route.points, draw);
   if (pts && pts.length > 1) {
-    const parts = routeParts();
-    if (draw < 1 || !parts) {
-      strokeLine(pts, ROUTE_REST(unit));
-      if (parts) strokeLine(partOfLine(parts.now, Math.min(1, lineLength(pts) / Math.max(1e-6, lineLength(parts.now)))), ROUTE_LINE(unit));
-      else strokeLine(pts, ROUTE_LINE(unit));
-    } else {
+    const parts = draw === 1 && selected > 0 ? routeParts() : null;
+    if (parts && parts.done.length > 1) {
       strokeLine(parts.done, [[DARK, unit * 1.9], [DONE, unit * 1.15]]);
-      strokeLine(parts.after, ROUTE_REST(unit));
-      strokeLine(parts.now, ROUTE_LINE(unit));
+      strokeLine(parts.now.concat(parts.after.slice(1)), ROUTE_LINE(unit));
+    } else {
+      strokeLine(pts, ROUTE_LINE(unit));
     }
   }
 
   // The exit in use goes over the route again, so its number shows.
-  if (used >= 0 && draw === 1) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
+  // Also while the route draws in, so the line never goes over its box (ux review).
+  if (used >= 0) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
 
   if (rv) return;
   const step = draw === 1 ? view.steps[selected] : null;
@@ -1275,33 +1256,8 @@ function drawMarks(unit, rv = null) {
   tapRingMark(unit);
 }
 
-// The layers of the route line: glow, dark edge, blue, light core. The
-// steps after the current one: a thin line of the same blue.
+// The layers of the route line: glow, dark edge, blue, light core.
 const ROUTE_LINE = (unit) => [[ROUTE_GLOW, unit * 3.4], [DARK, unit * 1.9], [ROUTE, unit * 1.25], [ROUTE_CORE, unit * 0.3]];
-const ROUTE_REST = (unit) => [[DARK, unit * 1.3], [ROUTE, unit * 0.65]];
-
-// The part of a line from where it leaves another line (more than tol away)
-// to its end. null when it never leaves it.
-function apartFrom(pts, other, tol) {
-  const gap = (p) => Math.min(...other.slice(1).map((q, i) => segmentGap(p, other[i], q)));
-  const total = lineLength(pts);
-  const step = Math.max(tol / 2, total / 400);
-  for (let d = 0; d <= total; d += step) {
-    const p = partOfLine(pts, d / total).at(-1);
-    if (gap(p) > tol) return d <= step ? pts : reversePart(pts, Math.max(0, d - step) / total);
-  }
-  return null;
-}
-
-// The line from a share of its length to its end.
-function reversePart(pts, share) {
-  const rev = [...pts].reverse();
-  return partOfLine(rev, 1 - share).reverse();
-}
-
-function lineLength(pts) {
-  return pts.slice(1).reduce((a, q, i) => a + Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]), 0);
-}
 
 function strokeLine(pts, layers) {
   if (!pts || pts.length < 2) return;
@@ -1698,7 +1654,7 @@ function nameExitButton(b, i) {
 }
 
 // The route to exit i, from its exit button ("button") or from a tap on its
-// mark or on the dashed second way ("plan").
+// mark ("plan").
 function chooseExit(i, from) {
   // The nearest exit is no choice: the answer keeps "Nearest exit" (ux review).
   state.exitChoice = view.near && view.near.main === i ? -1 : i;
@@ -1729,9 +1685,8 @@ function chooseExit(i, from) {
   $("steps").focus({ preventScroll: narrow() });
 }
 
-// A tap on an exit mark, or on the dashed line of the second way, while a
-// route shows: the route goes to that exit, as its exit button does. A tap
-// where the dashed line runs beside the route is a start, as before.
+// A tap on an exit mark while a route shows: the route goes to that exit, as
+// its exit button does. A tap anywhere else is a start, as before.
 // perCss: photo pixels for each CSS pixel of the canvas.
 function pickedExit(x, y, perCss) {
   if (!state || !state.start || !view || !view.route || view.pending || marking || state.photo_map || photoOnly) return -1;
@@ -1743,12 +1698,7 @@ function pickedExit(x, y, perCss) {
     const d = Math.hypot(e.x - x, e.y - y);
     if (i !== used && d < bestD) { best = i; bestD = d; }
   });
-  if (best >= 0) return best;
-  const b = view.backup;
-  if (!b || b.points.length < 2) return -1;
-  const gap = (pts) => Math.min(...pts.slice(1).map((q, i) => segmentGap([x, y], pts[i], q)));
-  const db = gap(b.points);
-  return db < Math.max(unit * 1.5, 14 * perCss) && db + unit < gap(view.route.points) ? b.exitIndex : -1;
+  return best;
 }
 
 function showCredit() {
@@ -1811,9 +1761,10 @@ function showLegend() {
   // In Photo only the legend keeps its space, so the text under the plan does not move.
   $("legend").hidden = false;
   $("legend").style.visibility = photoOnly ? "hidden" : "";
-  // With a route the ways out fade to a background (WAY_UNDER_ROUTE): the
-  // legend no longer names them (a11y review, 2026-11-02).
-  $("legend-field").hidden = $("legend-way").hidden = !map || !!(view.route && state.start);
+  // With a route the way lines go (the legend no longer names them, a11y
+  // review, 2026-11-02) and the field is faint (FIELD_UNDER_ROUTE).
+  $("legend-way").hidden = !map || !!(view.route && state.start);
+  $("legend-field").hidden = !map;  // the soft field stays under a route (a11y review)
   // The ways out show once the worker has made them. The item keeps its
   // space, so the text under the plan does not move when they come.
   $("legend-way").style.visibility = view.field.waitForNetwork && !view.field._network ? "hidden" : "";
@@ -1822,12 +1773,6 @@ function showLegend() {
   $("legend-you").hidden = !state.start;
   // The item keeps its space while two exits can give a second way, so the
   // text under the plan does not move after a tap.
-  $("legend-other").hidden = state.exits.length < 2;
-  $("legend-other").style.visibility = view.backup ? "" : "hidden";
-  // The dashed way to the nearest exit after a chosen exit: the legend says
-  // so, as its exit button does (ux review).
-  const toNearest = view.backup && state.exitChoice >= 0 && view.near && view.near.main === view.backup.exitIndex;
-  $("legend-other").lastElementChild.textContent = t(toNearest ? "kind_nearest" : "legend_other");
 }
 
 // The walls come from the photo, so the messages say what HereOut read,
@@ -1899,13 +1844,14 @@ function otherWay() {
   return backupText();
 }
 
-// The words of the dashed second way. After the user chose an exit, the
-// dashed way can lead to the nearest exit: then it says so, as its exit
-// button does ("Nearest"), and not "if it is blocked" (judge review).
+// The words of the second way out (it has no line on the plan). After the
+// user chose an exit, the second way can lead to the nearest exit: then it
+// says so, as its exit button does ("Nearest"), and not "if it is blocked"
+// (judge review).
 function backupText() {
   const i = view.backup.exitIndex;
   const nearest = state.exitChoice >= 0 && view.near && view.near.main === i;
-  const key = (nearest ? "backup_nearest" : "backup") + (photoOnly ? "_plain" : "");
+  const key = nearest ? "backup_nearest_plain" : "backup_plain";
   return t(key, { exit: exitName(i) });
 }
 

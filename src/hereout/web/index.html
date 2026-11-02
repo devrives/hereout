@@ -60,7 +60,7 @@
     <a id="example-open" class="example-open" href="/?sample=DE-commons_000023">
       <span class="example-pic" style="--aspect: 820 / 805; --w: 195.122%; --x: -36.585%; --y: -11.801%">
         <img class="example-photo" src="/gallery/example-photo" alt="" fetchpriority="high">
-        <img class="example-marks" src="/static/example-marks.webp" alt="A plan of a hotel floor in Dresden, dimmed, with three numbered exits, the ways out glowing green, a blue route from the start dot to Exit 2 and a dashed second route to Exit 3.">
+        <img class="example-marks" src="/static/example-marks.webp" alt="A plan of a hotel floor in Dresden, dimmed, with three numbered exits and a blue route from the start dot to Exit 2.">
       </span>
       <span class="example-bar"><span>Example: a plan from a hotel in Dresden</span><span class="example-go">Open<svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg></span></span>
       <span class="sr loop-says">A phone shows HereOut on this plan: three exits, the ways out, a tap, and the route to Exit 2.</span>
@@ -128,7 +128,6 @@
         <span id="legend-way"><i class="sw-way" aria-hidden="true"></i><span data-t="legend_way">Ways out, arrows to the exits</span></span>
         <span id="legend-route"><i class="sw-route" aria-hidden="true"></i><span data-t="legend_route">Your route</span></span>
         <span id="legend-you" hidden><i class="sw-you" aria-hidden="true"></i><span data-t="stage_you">You</span></span>
-        <span id="legend-other" hidden><i class="sw-other" aria-hidden="true"></i><span data-t="legend_other">Route if your exit is blocked</span></span>
         <span><i class="sw-exit" aria-hidden="true"></i><span data-t="legend_exit">Exit, by number</span></span>
       </div>
       <div id="read-legend" class="legend read-legend" lang="en" dir="ltr">
@@ -156,7 +155,7 @@
         <h3 id="steps-head" data-t="steps_head">Steps</h3>
         <p id="steps-hint" class="muted" data-t="steps_hint">Tap a step to see it on the plan.</p>
         <ol id="steps" role="list" tabindex="-1" aria-labelledby="steps-head"></ol>
-        <p id="backup" class="backup" hidden><i class="sw-other" aria-hidden="true"></i><span id="backup-text"></span> <button id="backup-go" type="button"></button></p>
+        <p id="backup" class="backup" hidden><span id="backup-text"></span> <button id="backup-go" type="button"></button></p>
         <div class="actions">
           <button id="speak" type="button"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg><span id="speak-text">Read the steps aloud</span></button>
           <button id="fix" type="button"><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg><span id="fix-text">Mark the exit</span></button>
@@ -226,13 +225,22 @@
         <li>Code draws the ways out. It finds the walls in the ink and links the rooms to the exits. <em>On screen: glowing green lines grow out from the exits along the corridors. The strip lights “Ways out”.</em></li>
         <li>You tap where you stand. The start always comes from you, not from the model. <em>On screen: “Tap where you stand” on the plan, then a white ring where the tap is, in the long corridor.</em></li>
         <li>The route to the nearest exit. Your browser finds it in a moment, on the phone. <em>On screen: a blue dot marks the tap, and a blue line draws from it to Exit 2. A card under the plan shows “Exit 2 · Step 1 of 2” and the first step.</em></li>
-        <li>One step at a time. Each step lights its part of the route. The speaker reads it aloud. <em>On screen: the next button moves to step 2. The walked part of the route turns grey, and a ring marks Exit 2.</em></li>
-        <li>Exit blocked? Tap the dashed line. The route switches to the next exit. <em>On screen: a tap on the dashed line; the dot stays in the corridor, and the route goes to Exit 3.</em></li>
+        <li>One step at a time. Walked steps turn grey. The speaker reads each one aloud. <em>On screen: the next button moves to step 2. The walked part of the route turns grey, and a ring marks Exit 2.</em></li>
+        <li>Exit blocked? Tap “If blocked”. The route switches to the next exit. <em>On screen: a tap on the “If blocked” exit button under the plan; the plan comes back with the dot still in the corridor, and the route draws in to Exit 3.</em></li>
         <li>Muse Spark reads the words on the plan too. The plan's instructions in English, with the German original under each one. <em>On screen: “What the plan says” under the plan: the title, the instructions and the start of the legend in English, each with its German text under it.</em></li>
         <li>The card comes in 13 languages. Here: Korean. The steps and the labels change too. <em>On screen: the step card, the strip above the plan and the legend in Korean.</em></li>
         <li>HereOut. hereout.devrives.com. Exits and plan words: Muse Spark, through Baseten. Walls: HereOut's own code. Routes: in your browser. Built solo for the Meta hackathon. Check every route against the plan. <em>On screen: the end card with the HereOut logo.</em></li>
       </ol>
     </details>
+  </section>
+  <section id="about" class="about" aria-labelledby="about-head">
+    <h2 id="about-head">About HereOut</h2>
+    <ul class="about-list" role="list">
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17h.01"/></svg><h3>A plan you can't read</h3><p>Abroad, the evacuation plan by the door may be in a language you can't read. HereOut turns it into a route with steps in your language.</p></li>
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m12 8 1.2 2.8L16 12l-2.8 1.2L12 16l-1.2-2.8L8 12l2.8-1.2z"/></svg><h3>Muse Spark: exits and plan words</h3><p>Meta's model looks for every exit, looks again at doubtful ones on zoomed crops, and reads the plan's words. It can translate them into your language: 12 besides English.</p></li>
+      <li><svg class="ico" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg><h3>Accuracy</h3><p>On 28 test photos that no exit rule was tuned on, HereOut found about half of the exits, and about half of the exits it marked were wrong. So check every route against the plan, and mark the exit yourself when it is wrong. <a href="https://gitlab.com/devrives/hereout#evaluation" rel="noopener">How it was measured</a></p></li>
+    </ul>
+    <p class="about-foot">Built solo by devrives for the Meta Global AI Developer Hackathon, with Muse Spark through Baseten, Python, OpenCV and plain JavaScript. <a href="https://gitlab.com/devrives/hereout" rel="noopener">Code on GitLab</a> · <a href="/credits">Photo credits</a></p>
   </section>
 </main>
 <link id="network-worker" rel="prefetch" href="/static/network-worker.js">

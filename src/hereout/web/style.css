@@ -81,7 +81,7 @@ html:not(.has-plan) .new-photo { display: none; }
 .new-photo { flex: none; }
 /* With a plan open, the start page text goes. Its h1 stays for a screen reader. */
 html.has-plan .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how, html.has-plan .proof { display: none; }
+html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how, html.has-plan .proof, html.has-plan .about { display: none; }
 /* While a plan from the address loads, the samples wait under it, so they do not jump down. */
 html.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
 .new-photo input, .shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -146,19 +146,39 @@ button:disabled, .shoot input[aria-disabled="true"] + span, .new-photo input[ari
   background: radial-gradient(closest-side, rgb(61 255 160 / 0.13), rgb(61 255 160 / 0)); }
 .has-loop .example-open { display: flex; flex-direction: column; align-items: center; width: 100%; overflow: visible; border: 0; border-radius: 0; background: none; }
 .has-loop .example-open:focus-visible { border-radius: 22px; outline-offset: 8px; }
-.loop-phone { display: block; width: min(280px, 72vw); padding: 7px; border-radius: 42px; background: #020604; border: 1px solid #2f4339;
-  box-shadow: 0 0 0 1px #000, 0 28px 70px -24px rgb(61 255 160 / 0.28); }
+/* The phone is an iPhone 14 Pro frame after devices.css by Yan Zhu (MIT, https://github.com/picturepan2/devices.css),
+   in graphite: the dark frame with a light inner rim, the side buttons, a status bar with the camera island.
+   All sizes are shares of --pw. Apple's own bezels are licensed only for apps that run on Apple systems only. */
+.loop-phone { position: relative; display: block; width: min(280px, 72vw); padding: calc(var(--pw) * 0.044); border-radius: calc(var(--pw) * 0.159);
+  background: #010101; border: 1px solid #45484c; box-shadow: inset 0 0 4px 2px #b9bcbf, inset 0 0 0 calc(var(--pw) * 0.014) #3a3d40, 0 28px 70px -24px rgb(61 255 160 / 0.28); }
+.phone-screen { position: relative; display: block; overflow: hidden; border-radius: calc(var(--pw) * 0.115); background: var(--bg); }
+/* The home bar at the foot of the screen, over the loop. */
+.phone-screen::after { content: ""; position: absolute; left: 50%; bottom: calc(var(--pw) * 0.022); width: calc(var(--pw) * 0.34); height: calc(var(--pw) * 0.013);
+  margin-left: calc(var(--pw) * -0.17); border-radius: 999px; background: rgb(255 255 255 / 0.85); }
+.phone-bar { position: relative; display: flex; align-items: center; justify-content: space-between; height: calc(var(--pw) * 0.11);
+  padding: 0 calc(var(--pw) * 0.07) 0 calc(var(--pw) * 0.09); color: var(--fg); font: 600 calc(var(--pw) * 0.04)/1 Geist, system-ui, sans-serif; letter-spacing: -0.01em; }
+/* The time is drawn by the style sheet: no text of the page, so a search or a copy does not find it (a11y review). */
+.phone-time::before { content: "9:41"; }
+.phone-island { position: absolute; left: 50%; top: calc(var(--pw) * 0.024); width: calc(var(--pw) * 0.28); height: calc(var(--pw) * 0.082); margin-left: calc(var(--pw) * -0.14);
+  border-radius: 999px; background: #000; }
+.phone-icons { width: calc(var(--pw) * 0.165); height: auto; fill: currentColor; }
+.phone-btns, .phone-btns::before, .phone-btns::after, .phone-power { position: absolute; width: 3px; border-radius: 2px; background: #45484c; }
+.phone-btns { left: -2px; top: 13%; height: 3.7%; }
+.phone-btns::before, .phone-btns::after { content: ""; left: 0; height: 190%; }
+.phone-btns::before { top: 260%; }
+.phone-btns::after { top: 520%; }
+.phone-power { right: -2px; top: 23%; height: 11.5%; }
 /* The pause and play button sits on the foot of the phone screen. --pw is the phone width. */
-.hero.has-loop { --pw: min(280px, 72vw); }
+.hero.has-loop { --pw: min(280px, 72vw, calc(100vw - 152px)); }  /* room for the button beside the phone (ux review) */
 .loop-phone { width: var(--pw) !important; }
 /* Beside the phone, at its foot, so it covers nothing in the loop. */
-.loop-toggle { position: absolute; top: calc(2 * var(--pw) - 64px); left: min(calc(50% + var(--pw) / 2 + 16px), calc(100% - 44px)); width: 44px; height: 44px; min-height: 0; padding: 0;
+.loop-toggle { position: absolute; top: calc(2.02 * var(--pw) - 64px); left: min(calc(50% + var(--pw) / 2 + 16px), calc(100% - 44px)); width: 44px; height: 44px; min-height: 0; padding: 0;
   border-radius: 50%; background: rgb(7 16 12 / 0.82); border-color: #2f4339; color: var(--fg); }
 .loop-toggle:hover { background: var(--raise); }
 .loop-toggle[data-playing="true"] .i-play, .loop-toggle[data-playing="false"] .i-pause { display: none; }
 .loop-toggle .ico { fill: currentColor; stroke-width: 2.4; }
 .loop-toggle .i-pause { fill: none; }
-.loop-phone video, .loop-still { display: block; width: 100%; height: auto; aspect-ratio: 1 / 2; border-radius: 35px; background: var(--bg); }
+.loop-phone video, .loop-still { display: block; width: 100%; height: auto; aspect-ratio: 1 / 2; background: var(--bg); }
 /* Without the script the loop does not play: the poster shows, with no controls of the browser. */
 html:not(.js) .loop-phone video, html:not(.js) .loop-toggle { display: none; }
 /* The words for a screen reader of what the loop shows (index.html) belong to the loop only. */
@@ -185,6 +205,15 @@ html:not(.js) .loop-phone video, html:not(.js) .loop-toggle { display: none; }
 .how .i-route { color: var(--route); }
 .how h3 { margin: 14px 0 6px; font-size: 1.2rem; }
 .how p { margin: 0; color: var(--muted); }
+/* About HereOut: why, the model, the honest numbers, and who built it (the usual parts of a hackathon entry). */
+.about { margin: 56px 0 0; }
+.about h2 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
+.about-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 0 28px; border-top: 1px solid var(--line); }
+.about-list li { padding: 22px 0 24px; border-bottom: 1px solid var(--line); }
+.about .ico { width: 26px; height: 26px; color: var(--accent); }
+.about h3 { margin: 12px 0 6px; font-size: 1.15rem; }
+.about-list p { margin: 0; color: var(--muted); }
+.about-foot { margin: 18px 0 0; color: var(--muted); font-size: 0.9rem; }
 
 .demo { margin: 56px 0 8px; }
 .demo h2 { margin-bottom: 16px; }
@@ -331,7 +360,6 @@ canvas:focus-visible { outline: none; }
 .sw-exit { width: 14px !important; height: 14px !important; background-image: linear-gradient(#3dffa0, #3dffa0); }
 .sw-route { height: 6px !important; background-image: linear-gradient(#5aa2ff, #5aa2ff); }
 .sw-you { width: 10px !important; height: 10px !important; margin: 0 2px; border-radius: 50% !important; background-color: #2f7dff !important; box-shadow: 0 0 0 2.5px #ffffff !important; }
-.sw-other { height: 4px !important; background-image: repeating-linear-gradient(90deg, #5aa2ff 0 8px, transparent 8px 14px); }
 .hint { margin: 10px 0 0; font-size: 0.95rem; }
 /* A tap off the floor drawing: the message stands where the eyes are. */
 .hint.refused #tap-text { font-weight: 700; color: var(--fg); }
@@ -438,7 +466,8 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
   .top-in, .layout { padding-left: 48px; padding-right: 48px; }
   .top-in { min-height: 72px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); column-gap: 64px; align-items: center;
-            grid-template-areas: "intro hero" "status status" "proof proof" "how how" "gallery gallery" "demo demo" "result result"; }
+            grid-template-areas: "intro hero" "status status" "proof proof" "how how" "gallery gallery" "demo demo" "about about" "result result"; }
+  .about { grid-area: about; }
   .proof { grid-area: proof; }
   .intro { grid-area: intro; }
   .hero { grid-area: hero; margin-top: 24px; }

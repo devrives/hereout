@@ -27,6 +27,8 @@ const HereOutRoute = (() => {
   const N_DC = Int8Array.from(NEIGHBOURS, (q) => q[1]);
   const N_STEP = Float64Array.from(NEIGHBOURS, (q) => q[2]);
   const SIMPLIFY_SHARE = 0.015;
+  const UNLOOP_SHARE = 0.04;
+  const TIDY_SHARE = 0.0125;  // share of the long side: a shorter side step or end hook is tidied (route tidy)  // share of the long side: a route piece this near an earlier point is a detour back beside itself
   const MIN_LEG_SHARE = 0.03;
   const MAIN_LEG_SHARE = 0.6;   // legs of one way this share of a walk or more give the walk its heading
   const SAME_WAY = 10;          // degrees: legs within this of each other go the same way
@@ -1971,7 +1973,11 @@ const HereOutRoute = (() => {
       // into a slanted walk: the choice of route stays as it was (judge
       // review 3).
       const f = this.field, slight = (pts) => directions(pts, f.gw / f.scale, f.gh / f.scale, false).slice(1).filter((st) => st.turn && st.turn.startsWith("slight")).length;
-      const points = slight(onLines) > slight(plain) ? plain : onLines;
+      // No piece that goes out and comes back beside itself (owner,
+      // 2026-11-02: a route up a corridor and back down beside itself looked
+      // like a line stuck on a line).
+      const long = Math.max(f.gw, f.gh) / f.scale;
+      const points = tidy(unloop(slight(onLines) > slight(plain) ? plain : onLines, f, UNLOOP_SHARE * long), f, TIDY_SHARE * long);
       // length: of the way before the move onto the lines, so the move does
       // not change which of two exits is nearer (ux review).
       return { points, exitIndex: k, onNetwork: true, length: polyLength(plain) };
@@ -1985,6 +1991,106 @@ const HereOutRoute = (() => {
   }
 
   const polyLength = (pts) => pts.slice(1).reduce((a, q, i) => a + dist(q, pts[i]), 0);
+
+  // Small faults of a route line that read as two lines stuck together (ux
+  // review, owner 2026-11-02): a short side step between two pieces that go
+  // the same way, and a last piece that turns back to an exit behind it.
+  // Each change needs clear ways; else the line stays as it was.
+  function tidy(pts, field, jog) {
+    const out = pts.map((p) => [...p]);
+    const dir = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy); return n ? [dx / n, dy / n] : [0, 0]; };
+    for (let i = 1; i + 2 < out.length; i++) {
+      const a = out[i - 1], b = out[i], c = out[i + 1], d = out[i + 2];
+      if (dist(b, c) >= jog) continue;
+      const u = dir(a, b), v = dir(c, d);
+      if (u[0] * v[0] + u[1] * v[1] < 0.98) continue;
+      const off = [c[0] - b[0], c[1] - b[1]];
+      // One outer piece moves onto the line of the other, the shorter one
+      // first. The tap and the exit never move.
+      const later = () => {
+        if (i + 3 >= out.length) return false;
+        const d2 = [d[0] - off[0], d[1] - off[1]];
+        if (!field.clearPx(b, d2) || !field.clearPx(d2, out[i + 3])) return false;
+        out.splice(i + 1, 2, d2);
+        return true;
+      };
+      const earlier = () => {
+        if (i < 2) return false;
+        const a2 = [a[0] + off[0], a[1] + off[1]];
+        if (!field.clearPx(out[i - 2], a2) || !field.clearPx(a2, c)) return false;
+        out.splice(i - 1, 2, a2);
+        return true;
+      };
+      // Else a short slant in place of the step, as a lane change: it reads
+      // as one line, where a step reads as two.
+      const slant = () => {
+        const k = 2 * Math.hypot(off[0], off[1]);
+        if (dist(a, b) <= k || dist(c, d) <= k) return false;
+        const b2 = [b[0] - u[0] * k, b[1] - u[1] * k], c2 = [c[0] + v[0] * k, c[1] + v[1] * k];
+        if (!field.clearPx(b2, c2)) return false;
+        out.splice(i, 2, b2, c2);
+        return true;
+      };
+      if (dist(a, b) >= dist(c, d) ? later() || earlier() : earlier() || later()) i = Math.max(0, i - 3);
+      else slant();
+    }
+    // A short last piece back to an exit behind the piece before it.
+    const n = out.length;
+    if (n >= 3) {
+      const a = out[n - 3], b = out[n - 2], e = out[n - 1], u = dir(a, b);
+      if (dist(b, e) < jog && (e[0] - b[0]) * u[0] + (e[1] - b[1]) * u[1] < 0) {
+        const dx = b[0] - a[0], dy = b[1] - a[1], m = dx * dx + dy * dy;
+        const t = m ? Math.max(0, Math.min(1, ((e[0] - a[0]) * dx + (e[1] - a[1]) * dy) / m)) : 0;
+        const q = [a[0] + t * dx, a[1] + t * dy];
+        if (field.clearPx(q, e)) out.splice(n - 2, 1, q);
+      }
+    }
+    const kept = out.filter((q, j) => j === 0 || dist(q, out[j - 1]) > 1e-6);
+    return kept.filter((q, j, a) => j === 0 || j === a.length - 1 ||
+      Math.abs((q[0] - a[j - 1][0]) * (a[j + 1][1] - q[1]) - (q[1] - a[j - 1][1]) * (a[j + 1][0] - q[0])) > 1e-6);
+  }
+
+  // A route with no detour that comes back beside itself: where a later
+  // piece of the line passes within tol of an earlier piece, with a clear way
+  // between them and a way round more than 2.5 times as long, the line goes
+  // straight across (ux review: a U-turn 20 px wide stayed with a longer test).
+  function unloop(pts, field, tol) {
+    const onSeg = (p, a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], n = dx * dx + dy * dy;
+      const t = n ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / n)) : 0;
+      return [a[0] + t * dx, a[1] + t * dy];
+    };
+    let out = pts.map((p) => [...p]);
+    for (let cut = true; cut;) {
+      cut = false;
+      // The length of the line up to each point.
+      const at = [0];
+      for (let k = 1; k < out.length; k++) at.push(at[k - 1] + dist(out[k], out[k - 1]));
+      let best = null;
+      for (let i = 0; i + 1 < out.length; i++) {
+        for (let j = i + 2; j + 1 < out.length; j++) {
+          // Pairs of a point on piece i and a point on piece j.
+          const pairs = [[out[i], onSeg(out[i], out[j], out[j + 1])], [out[i + 1], onSeg(out[i + 1], out[j], out[j + 1])],
+                         [onSeg(out[j], out[i], out[i + 1]), out[j]], [onSeg(out[j + 1], out[i], out[i + 1]), out[j + 1]]];
+          for (const [p, q] of pairs) {
+            const gap = dist(p, q);
+            if (gap > tol) continue;
+            const round = at[j] + dist(out[j], q) - at[i] - dist(out[i], p);
+            if (round < 2.5 * gap + 1e-6 || (best && round <= best.round) || !field.clearPx(p, q)) continue;
+            best = { i, j, p, q, round };
+          }
+        }
+      }
+      if (best) {
+        out = [...out.slice(0, best.i + 1), best.p, best.q, ...out.slice(best.j + 1)];
+        cut = true;
+      }
+    }
+    // No double points, and no point on a straight line between its neighbours.
+    out = out.filter((q, j) => j === 0 || dist(q, out[j - 1]) > 1e-6);
+    return out.filter((q, j, a) => j === 0 || j === a.length - 1 ||
+      Math.abs((q[0] - a[j - 1][0]) * (a[j + 1][1] - q[1]) - (q[1] - a[j - 1][1]) * (a[j + 1][0] - q[0])) > 1e-6);
+  }
 
   // Steps, as in steps.py.
   function lineGap(p, a, b) {
