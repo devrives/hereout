@@ -37,7 +37,7 @@ sources:
 - A refused tap removes the old start, the route and the step card. The tap says "I am here", so a route from the old spot is wrong. The pill on the plan gives the reason, and then asks for a new tap.
 - The live line adds "The route from your last spot is cleared." (a11y review). After 3.5 s, the card and the line ask for a tap again.
 - While the reading shows on the plan, the tap pill does not show.
-- The view buttons and the larger-plan button stay on one row. On a phone a long label takes two lines in its button. A button goes to a second row in the group only when its longest word does not fit (Russian at 320 px, larger text).
+- The view buttons and the larger-plan button stay on one row. A long label takes two lines in its button. On a narrow phone, or with a larger text setting, the buttons share the width. A button goes to a second row only when its longest word does not fit (Russian at 320 px).
 - The start page has Open Graph tags. The share card is `og.png` in the video folder, outside the repository, because it shows a plan photo. It carries the CC BY-SA attribution of that photo.
 - The hero line names "Muse Spark by Meta".
 - The reading card stays in English in every language. The judge asked for a translated legend, but the whole card is English and marked so.
