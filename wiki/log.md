@@ -472,3 +472,10 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Updated `components/plan-reader.md`: an upload over 1 MB passes through a temporary file, deleted with the request.
 - The README now opens with the diagram `docs/how-it-works.png` and three tables. The detail is in folded parts.
 - Source: the owner request of 2026-11-03 and the fact check of the new text.
+
+## [2026-11-03] ingest | Hover, press and the demo player
+
+- Added `decisions/ui-detail-pass.md`: a hand cursor on the plan, press states and one play button.
+- The same page: the credits in the disclosure, a 4:5 film for phones, and the taps in the film.
+- Updated `decisions/demo-video.md`: the credits moved into the disclosure.
+- Source: the owner request and go-ahead of 2026-11-03, and the mockup canvas.

@@ -220,25 +220,33 @@
   </section>
   <section id="demo" class="demo" hidden aria-labelledby="demo-head" data-samples="DE-commons_000023,RU-commons_000164,JP-commons_000268,DE-commons_000022">
     <h2 id="demo-head">Demo video</h2>
-    <video controls playsinline preload="none" width="1920" height="1080" src="/video/demo.mp4" aria-labelledby="demo-head" aria-describedby="demo-caption"></video>
-    <p id="demo-caption" class="credit demo-caption">56 s, no sound, with captions: a recording of this page at phone size with two sample plans. <span id="demo-credits"></span></p>
-    <details class="transcript">
-      <summary>Text of the video, with what it shows</summary>
+    <div class="demo-player">
+      <video id="demo-video" controls playsinline preload="none" width="1920" height="1080" aria-labelledby="demo-head" aria-describedby="demo-caption">
+        <source src="/video/demo-vertical.mp4" type="video/mp4" media="(max-width: 599px)">
+        <source src="/video/demo.mp4" type="video/mp4">
+      </video>
+      <button id="demo-play" class="demo-play" type="button" hidden aria-label="Play the demo video, 0:56"><span class="demo-play-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 4 20 12 7 20z"/></svg></span><span class="demo-play-time" aria-hidden="true">0:56</span></button>
+    </div>
+    <p class="demo-meta"><span id="demo-caption">0:56, no sound, with captions</span> <a href="#demo-credits-head">Photo credits</a></p>
+    <details id="demo-text" class="transcript">
+      <summary>Video text and photo credits</summary>
       <ol>
         <li>In a hotel abroad, the evacuation plan on the wall is in German. Where is your way out? <em>On screen: the photo of the plan, dimmed.</em></li>
-        <li>Photograph the plan when you arrive. Or open one of 203 real plans from 24 countries and regions. <em>On screen: the HereOut start page at phone size, in a phone frame, with its photo button and three sample plans.</em></li>
+        <li>Photograph the plan when you arrive. Or open one of 203 real plans from 24 countries and regions. <em>On screen: the HereOut start page at phone size, in a phone frame, with its photo button and three sample plans. A hand pointer taps the small phone below them.</em></li>
         <li>Muse Spark finds the exits. Meta's model reads the photo and points to each exit. <em>On screen: the evacuation plan of a hotel floor in Dresden opens, dimmed. Green exit marks 1 to 3 grow in one by one, and the strip above the plan lights “Exits”.</em></li>
         <li>Code draws the ways out. It finds the walls in the ink and links the rooms to the exits. <em>On screen: glowing green lines grow out from the exits along the corridors. The strip lights “Ways out”.</em></li>
-        <li>You tap where you stand. The start always comes from you, not from the model. <em>On screen: “Tap where you stand” on the plan, then a white ring where the tap is, in the long corridor.</em></li>
-        <li>The route to the nearest exit. Your browser finds it in a moment, on the phone. <em>On screen: a blue dot marks the tap, and a blue line draws from it to Exit 2. A card under the plan shows “Exit 2 · Step 1 of 2” and the first step.</em></li>
-        <li>One step at a time. Walked steps turn grey. The speaker reads each one aloud. <em>On screen: the next button moves to step 2. The walked part of the route turns grey, and a ring marks Exit 2.</em></li>
-        <li>Exit blocked? Tap “If blocked”. The route switches to the next exit. <em>On screen: a tap on the “If blocked” exit button under the plan; the plan comes back with the dot still in the corridor, and the route draws in to Exit 3.</em></li>
+        <li>You tap where you stand. The start always comes from you, not from the model. <em>On screen: “Tap where you stand” on the plan, then a hand taps the long corridor. A ring shows the tap, and a blue line draws to Exit 2.</em></li>
+        <li>The route to the nearest exit. Your browser finds it in a moment, on the phone. <em>On screen: a blue dot at the tap, and a blue line from it to Exit 2. A card under the plan shows “Exit 2 · Step 1 of 2” and the first step.</em></li>
+        <li>One step at a time. Walked steps turn grey. The speaker reads each one aloud. <em>On screen: a hand taps the next button, and the card moves to step 2. The walked part of the route turns grey, and a ring marks Exit 2.</em></li>
+        <li>Exit blocked? Tap “If blocked”. The route switches to the next exit. <em>On screen: a hand taps the “If blocked” exit button under the plan; the plan comes back with the dot still in the corridor, and the route draws in to Exit 3.</em></li>
         <li>Muse Spark reads the words on the plan too. The plan's instructions in English, with the German original under each one. <em>On screen: “What the plan says” under the plan: the title, the instructions and the start of the legend in English, each with its German text under it.</em></li>
-        <li>The card comes in 13 languages. Here: Korean. The steps and the labels change too. <em>On screen: the step card, the strip above the plan and the legend in Korean.</em></li>
-        <li>Muse Spark checks its own exits. Doubtful exits get a second look on numbered, zoomed crops. Here: 2 moved, 1 dropped. <em>On screen: a plan from Moscow with what Muse Spark read drawn over it: the floor box and its exit points. Then the sheet of three numbered crops opens larger, with “Moved”, “Dropped” and “Moved” beside the crops.</em></li>
-        <li>In a test, HereOut found about half the exits. About half of the exits it marked were wrong, so check every route against the plan. <em>On screen: a tap in the middle hall of the Moscow plan, the route to Exit 3, and under the plan the line “Check the route and the exits against the plan.”</em></li>
+        <li>The card comes in 13 languages. Here: Korean. The steps and the labels change too. <em>On screen: a hand taps the language menu. Then the step card, the strip above the plan and the legend are in Korean.</em></li>
+        <li>Muse Spark checks its own exits. Doubtful exits get a second look on numbered, zoomed crops. Here: 2 moved, 1 dropped. <em>On screen: a plan from Moscow with what Muse Spark read drawn over it: the floor box and its exit points. Then the sheet of three numbered crops opens larger, with “Moved”, “Dropped” and “Moved” under the crops.</em></li>
+        <li>In a test, HereOut found about half the exits. About half of the exits it marked were wrong, so check every route against the plan. <em>On screen: a hand taps the middle hall of the Moscow plan. Then the route to Exit 3 shows, and under the plan the line “Check the route and the exits against the plan.”</em></li>
         <li>HereOut. hereout.devrives.com. Exits and plan words: Muse Spark, through Baseten. Walls: HereOut's own code. Routes: in your browser. Built solo for the Meta hackathon. <em>On screen: the end card with the HereOut logo.</em></li>
       </ol>
+      <h3 id="demo-credits-head" tabindex="-1">Photo credits</h3>
+      <p class="credit"><span id="demo-credits"></span></p>
     </details>
   </section>
   <section id="about" class="about" aria-labelledby="about-head">

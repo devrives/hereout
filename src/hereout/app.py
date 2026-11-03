@@ -196,11 +196,14 @@ DEMO_TAG = '<section id="demo" class="demo" hidden'
 DEMO_LINK = '<p id="demo-link"'
 DEMO_CREDITS = '<span id="demo-credits"></span>'
 NAV_DEMO = '<a id="nav-demo"'
+DEMO_VIDEO = '<video id="demo-video"'
+DEMO_PLAYER = '<div class="demo-player">'
 
 
 def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
     """The start page with the demo video, from a folder outside the repository
-    (HEREOUT_VIDEO: demo.mp4, demo-poster.webp). The video goes while the folder
+    (HEREOUT_VIDEO: demo.mp4, demo-poster.webp, and for phone widths
+    demo-vertical.mp4, demo-vertical-poster.webp). The video goes while the folder
     has no demo.mp4, or the gallery has no credit for a plan photo in it."""
     m = re.search(DEMO_TAG + r'[^>]* data-samples="([\w,-]+)"', page)
     ids = m[1].split(",") if m else []
@@ -211,12 +214,21 @@ def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
         return re.sub(DEMO_TAG + r".*?</section>\n?", "", page, count=1, flags=re.S)
 
     poster = f' poster="{video_url(folder, "demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
+    # A phone width gets the 4:5 cut of the film and its poster (app.js setUpDemo), when the folder has them.
+    if (folder / "demo-vertical.mp4").is_file():
+        page = (page.replace('src="/video/demo-vertical.mp4"', f'src="{video_url(folder, "demo-vertical.mp4")}"', 1)
+                    .replace(DEMO_PLAYER, DEMO_PLAYER.replace('"demo-player"', '"demo-player vertical"'), 1))
+        if (folder / "demo-vertical-poster.webp").is_file():
+            poster += f' data-poster-narrow="{video_url(folder, "demo-vertical-poster.webp")}"'
+    else:
+        page = re.sub(r'\s*<source src="/video/demo-vertical\.mp4"[^>]*>', "", page, count=1)
     # The first plan is the one the film opens, the second the one of the second
     # look (with a route too); the others show only as start-page previews.
     changes = [RECORDED, RECORDED]
     credits = " ".join(credit_html(gallery.items[i]["credit"], changes[k] if k < len(changes) else PREVIEW_RECORDED)
                        for k, i in enumerate(ids))
-    return (page.replace('src="/video/demo.mp4"', f'src="{video_url(folder, "demo.mp4")}"{poster}', 1)
+    return (page.replace('src="/video/demo.mp4"', f'src="{video_url(folder, "demo.mp4")}"', 1)
+                .replace(DEMO_VIDEO, DEMO_VIDEO + poster, 1)
                 .replace(DEMO_TAG, DEMO_TAG.removesuffix(" hidden"), 1)
                 .replace(DEMO_CREDITS, DEMO_CREDITS.replace("></", f">{credits}</"), 1))
 

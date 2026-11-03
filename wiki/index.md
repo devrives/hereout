@@ -41,6 +41,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Judge review 3](decisions/judge-round-3.md): accepted; far zoom points on route marks, wall lines off the building hidden, staircase walks.
 - [Judge review 2](decisions/judge-round-2.md): accepted; test pages off, text-block exits, X-marked voids, step fixes, exit scores on labelled photos.
 - [Demo video on the start page](decisions/demo-video.md): accepted; an MP4 file outside the repository, with the caption text and the photo credits.
+- [Hover and press feedback, and a calmer demo player](decisions/ui-detail-pass.md): accepted; a hand cursor on the plan, press states, one play button.
 - [Fast first tap and smaller sample plans](decisions/page-speed.md): accepted; the worker makes the trees to single exits, faster loops, sample images as WebP files.
 - [One network of way lines: links between exits, lines along corridors](decisions/connected-way-lines.md): accepted; links join the exits, and corridors get lines.
 - [Clean way lines: no jogs, closed gaps, routes on the lines](decisions/clean-way-lines.md): accepted; side steps, ticks and gaps go, and routes keep to the lines.

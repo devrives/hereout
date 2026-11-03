@@ -15,6 +15,7 @@ let opening = null;   // the answer whose image loads, before it becomes state
 let openingImg = null;  // its image
 let marking = false;  // true while the user marks the exit
 let cursor = null;    // [x, y] keyboard marker on the plan
+let hover = null;     // [x, y] the start a click of the mouse would give (hoverAt)
 let keyboard = false; // show the marker only after an arrow key
 let planSeq = 0;      // only the newest upload may change the page
 let selected = -1;    // the step shown on the plan, or -1
@@ -915,6 +916,7 @@ function draw() {
     }
     drawMarks(unit, rv);
   }
+  if (hover && !(state.start && Math.hypot(hover[0] - state.start[0], hover[1] - state.start[1]) < unit * 3)) hoverMark(hover[0], hover[1], unit * 2.4);
   if (cursor && keyboard && document.activeElement === canvas) cross(cursor[0], cursor[1], unit * 4);
   showStages();
 }
@@ -1335,6 +1337,26 @@ function hereMark(x, y, r) {
   ctx.arc(x, y, r * 0.8, 0, Math.PI * 2);
   ctx.fillStyle = HERE;
   ctx.fill();
+}
+
+// Where a click of the mouse would put the start (hover): a faint dot in a
+// dashed ring, the size of the start dot.
+function hoverMark(x, y, r) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, y, r * 2.2, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(90, 162, 255, 0.18)";
+  ctx.fill();
+  ctx.setLineDash([r * 0.7, r * 0.55]);
+  ctx.lineWidth = r * 0.32;
+  ctx.strokeStyle = "rgba(234, 243, 238, 0.85)";
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.7, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(90, 162, 255, 0.6)";
+  ctx.fill();
+  ctx.restore();
 }
 
 // The number matches the exit buttons below the plan. The exit the route
@@ -2541,6 +2563,26 @@ function setUpExample() {
 }
 setUpExample();
 
+// The demo video (ux, 2026-11-03): one play button over the title frame;
+// the controls of the browser come with the first play. A phone width gets
+// the 4:5 cut of the film (index.html <source media>) and its own poster.
+function setUpDemo() {
+  const v = $("demo-video"), btn = $("demo-play");
+  if (!v || !btn) return;
+  if (v.dataset.posterNarrow && matchMedia("(max-width: 599px)").matches) v.poster = v.dataset.posterNarrow;
+  v.controls = false;
+  btn.hidden = false;
+  btn.addEventListener("click", () => {
+    btn.hidden = true;
+    v.controls = true;
+    v.focus();
+    v.play().catch(() => {});
+  });
+  // The credits are in the text of the video: their link opens it.
+  document.querySelector(".demo-meta a").addEventListener("click", () => { $("demo-text").open = true; });
+}
+setUpDemo();
+
 // The phone of the hero plays only while it is on the screen. With reduced
 // motion it shows its first frame (the poster) until the user plays it. The
 // button beside it pauses and plays it (WCAG 2.2.2: motion of more than 5 s).
@@ -2656,20 +2698,52 @@ async function showGallery() {
 }
 showGallery();
 
-canvas.addEventListener("click", (ev) => {
-  if (!state) return;
+function planPoint(ev) {
   const box = canvas.getBoundingClientRect();
   const [x0, y0, x1, y1] = shownFrame();
-  const x = x0 + (ev.clientX - box.left) * ((x1 - x0) / box.width);
-  const y = y0 + (ev.clientY - box.top) * ((y1 - y0) / box.height);
-  const k = pickedExit(x, y, (x1 - x0) / box.width);
+  return [x0 + (ev.clientX - box.left) * ((x1 - x0) / box.width), y0 + (ev.clientY - box.top) * ((y1 - y0) / box.height), (x1 - x0) / box.width];
+}
+canvas.addEventListener("click", (ev) => {
+  if (!state) return;
+  const [x, y, perCss] = planPoint(ev);
+  const k = pickedExit(x, y, perCss);
   if (k >= 0) { clearRefusal(); chooseExit(k, "plan"); return; }
   place(x, y);
+});
+
+// A mouse over the plan (ux, 2026-11-03): a hand where a click gives a
+// route, with a faint dot where the start would go; "not-allowed" on a
+// wall or off the plan, by the rules of a tap (startFromTap). Marking an
+// exit keeps the cross. A click on the reading goes back to the plan
+// (reading.js endReading): a hand, with no dot. A plan that gives no start
+// on a click (a photo map, no exits) shows no dot either (place).
+function hoverAt(ev) {
+  if (ev.pointerType !== "mouse" || !state || !view?.field || marking) return [null, ""];
+  if (typeof readingOn === "function" && readingOn()) return [null, "pointer"];
+  if (state.photo_map || !state.exits.length) return [null, ""];
+  const [x, y, perCss] = planPoint(ev);
+  if (pickedExit(x, y, perCss) >= 0) return [null, "pointer"];
+  const t = view.field.tapStart([x, y], fingerReach());
+  if (t.at === "outside" || t.at === "wall") return [null, "not-allowed"];
+  if (t.at === "noway" && view.field.areaShare(view.field.toPx(t.cell)) < FLOOR_SHARE) return [null, "not-allowed"];
+  return [t.at === "open" ? [x, y] : view.field.toPx(t.cell), "pointer"];
+}
+canvas.addEventListener("pointermove", (ev) => {
+  const [at, look] = hoverAt(ev);
+  canvas.style.cursor = look;
+  if (String(at) === String(hover)) return;
+  hover = at;
+  draw();
+});
+canvas.addEventListener("pointerleave", () => {
+  canvas.style.cursor = "";
+  if (hover) { hover = null; draw(); }
 });
 
 // Keyboard: arrow keys move a cross, Enter or Space places the start or the exit.
 canvas.addEventListener("keydown", (ev) => {
   if (!state) return;
+  hover = null;  // the cross of the keyboard is the one mark of the next start (ux review)
   const fr = shownFrame();
   const step = Math.max(fr[2] - fr[0], fr[3] - fr[1]) * (ev.shiftKey ? 0.05 : 0.01);
   const move = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[ev.key];

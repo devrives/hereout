@@ -100,6 +100,17 @@ html.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
   cursor: pointer;
 }
 button:hover { background: var(--raise); }
+/* A press shows (ux, 2026-11-03): the control dips while the finger is on it,
+   in place of the grey flash of a phone browser. */
+html { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled):active, .shoot:active span, .new-photo:active span { transform: scale(0.96); border-color: var(--accent); }
+#ready:not(:disabled):active, .shoot:active span, .new-photo:active span, .exits button:not(:disabled):active { filter: brightness(1.12); }
+button.step:active, button.sample:active { transform: none; }
+button.step:active { background: var(--raise); }
+button.sample:active img { transform: scale(0.97); }
+@media (prefers-reduced-motion: no-preference) {
+  button, .shoot span, .new-photo span, button.sample img { transition: transform 0.08s, background-color 0.12s, filter 0.12s; }
+}
 .shoot span, .new-photo span, #ready { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 650; }
 .shoot span { box-shadow: 0 0 32px rgb(61 255 160 / 0.32); }
 .new-photo span { min-height: 44px; padding: 8px 16px; font-size: 0.95rem; }
@@ -217,10 +228,31 @@ html:not(.js) .loop-phone video, html:not(.js) .loop-toggle { display: none; }
 
 .demo { margin: 56px 0 8px; }
 .demo h2 { margin-bottom: 16px; }
-.demo-caption { margin: 10px 0 0; }
-.demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 22px; background: #000; }
-.demo video:focus, .demo video:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
-.transcript { margin-top: 16px; }
+/* The player: the title frame of the film with one play button on it (app.js
+   setUpDemo); a phone width has the 4:5 cut, with the title under the phone. */
+.demo-player { position: relative; }
+.demo video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 22px; background: var(--bg); }
+.demo video:focus-visible { outline: 3px solid var(--fg); outline-offset: 3px; }
+.demo-play { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 0; padding: 0; border: 0; border-radius: 22px; background: transparent; }
+.demo-play:hover { background: rgb(234 243 238 / 0.03); }
+.demo-play:not(:disabled):active { transform: none; }
+.demo-play-ico { position: absolute; left: 52.6%; top: 62%; display: flex; align-items: center; justify-content: center; width: clamp(56px, 7.6vw, 84px); aspect-ratio: 1;
+  border-radius: 50%; background: var(--accent); box-shadow: 0 0 40px rgb(61 255 160 / 0.45); }
+.demo-play-ico svg { width: 42%; height: 42%; margin-left: 8%; fill: var(--accent-fg); }
+.demo-play-time { position: absolute; left: calc(52.6% + clamp(56px, 7.6vw, 84px) + 16px); top: 62%; display: flex; align-items: center; height: clamp(56px, 7.6vw, 84px);
+  font: 700 1.1rem "Geist Mono", ui-monospace, monospace; color: var(--fg); }
+.demo-play:hover .demo-play-ico { filter: brightness(1.12); }
+.demo-play:active .demo-play-ico { transform: scale(0.95); }
+/* The 4:5 cut is there (app.py demo_page adds "vertical"): its title is under the phone. */
+@media (max-width: 599px) {
+  .vertical video { aspect-ratio: 4 / 5; }
+  .vertical .demo-play-ico { left: 8.3%; top: 84%; width: 52px; }
+  .vertical .demo-play-time { left: calc(8.3% + 64px); top: 84%; height: 52px; font-size: 1rem; }
+}
+.demo-meta { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 12px 0 0; color: var(--muted); font-size: 0.95rem; }
+.demo-meta a { font-weight: 550; }
+.transcript { margin-top: 12px; }
+.transcript h3 { margin: 20px 0 6px; font-size: 1rem; }
 .transcript summary { cursor: pointer; min-height: 24px; }
 .transcript ol { padding-left: 1.4em; }
 .transcript li { margin: 10px 0; }
@@ -431,7 +463,7 @@ button.step[aria-pressed="true"] { color: #ffffff; font-weight: 600; background:
 .gallery li > button { width: 100%; }
 button.sample { padding: 0; min-height: 0; overflow: visible; display: flex; flex-direction: column; align-items: stretch; text-align: left; border: 0; border-radius: 14px; background: transparent; }
 button.sample:hover { background: transparent; }
-button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); border-radius: 14px; filter: brightness(0.85); transition: filter 0.15s; }
+button.sample img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--soft); border-radius: 14px; filter: brightness(0.85); }
 button.sample:hover img { filter: none; }
 button.sample span { padding: 10px 2px 0; font: 500 0.85rem "Geist Mono", ui-monospace, monospace; color: var(--muted); }
 button.sample[aria-current="true"] img { box-shadow: 0 0 0 3px var(--accent); filter: none; }
@@ -549,6 +581,7 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
 /* The language of the plan card (i18n.js). */
 .lang-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .lang-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
+.lang-row label, .lang-row select { cursor: pointer; }
 .lang-row select { min-height: 44px; min-width: 10em; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--fg); font: inherit; }
 .lang-row select:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
 

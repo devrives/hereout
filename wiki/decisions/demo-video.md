@@ -2,7 +2,7 @@
 type: decision
 title: Demo video on the start page
 status: accepted
-updated: 2026-11-01
+updated: 2026-11-03
 checked: 39e19c7
 sources:
   - owner:2026-11-01
@@ -29,7 +29,7 @@ sources:
 - On a phone, the samples stay near the top.
 - The video shows the page at phone size (390 px, scale 2) in a phone outline in a 1920 px frame. Large captions stand beside it. The hub script `compose.mjs` makes the video from a page video with no captions.
 - The block has the text of the captions and a short text of what each part shows. The video has no sound, and a screen reader cannot read the picture.
-- The block gives the credit of each plan photo in the video. The gallery previews in the video have their credits in the gallery.
+- The block gives the credit of each plan photo in the video. The gallery previews in the video have their credits in the gallery. Since 2026-11-03 the credits are in the disclosure, after the text of the video ([ui-detail-pass](ui-detail-pass.md)).
 - The block goes away when a plan opens, and the page stops the video.
 
 ## Consequences
