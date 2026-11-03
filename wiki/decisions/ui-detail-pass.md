@@ -3,7 +3,7 @@ type: decision
 title: Hover and press feedback, and a calmer demo player
 status: accepted
 updated: 2026-11-03
-checked: 9531c14
+checked: b5be710
 sources:
   - owner:2026-11-03
   - src/hereout/web/app.js
@@ -41,6 +41,8 @@ sources:
   - no focus ring shows
   - the tag over a caption names who does the work, where one actor is true
   - the poster is the frame at 22 s, with the page title in place of the caption
+  - no caption is on a photo. In the 16:9 story frame, the plan photo is at the right, and the words are at the left. The owner found the caption on the photo hard to read (2026-11-03).
+  - at the end of the story, its words fade out first, and the next caption comes in after the photo fades out
 
 ## Consequences
 

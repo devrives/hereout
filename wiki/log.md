@@ -479,3 +479,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - The same page: the credits in the disclosure, a 4:5 film for phones, and the taps in the film.
 - Updated `decisions/demo-video.md`: the credits moved into the disclosure.
 - Source: the owner request and go-ahead of 2026-11-03, and the mockup canvas.
+
+## [2026-11-03] ingest | Story caption clear of the photo
+
+- Updated `decisions/ui-detail-pass.md`: in the 16:9 film, the story photo is at the right, apart from the words.
+- Source: the owner feedback of 2026-11-03 on the caption over the plan photo.
