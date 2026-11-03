@@ -259,3 +259,56 @@ process.stdin.on("end", () => {
             if min(gap(a, c, d), gap(b, c, d), gap(c, a, b), gap(d, a, b)) < 1:
                 piece[top(i)] = top(j)
     assert len({top(k) for k in range(len(legs))}) == 1, legs
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_no_line_past_an_exit():
+    """Three rooms drain along a corridor to an exit in its outer wall. The
+    exit also reaches the open paper outside the wall, which gets a line of
+    its own at the exit (judge review 7, DE-commons_000022). The map draws no
+    line past the exit; a tap outside still gets its route."""
+    import numpy as np
+    from hereout.route import grid_payload
+    walls = np.ones((800, 1600), bool)
+    walls[100:700, 900:1100] = False                    # the corridor
+    for y0 in (100, 310, 520):                          # three rooms on its left, each with a door
+        walls[y0:y0 + 180, 300:880] = False
+        walls[y0 + 70:y0 + 110, 880:900] = False
+    walls[100:700, 1120:1400] = False                   # open paper outside the outer wall
+    case = {"grid": grid_payload(walls), "exits": [[1110, 400]]}
+    js = r"""
+const R = require(process.argv[1]);
+let input = ""; process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const c = JSON.parse(input), g = c.grid;
+  const f = new R.Field(R.decodeGrid(g), g.w, g.h, g.scale, c.exits, [], null, g.axes);
+  process.stdout.write(JSON.stringify({ legs: f.network().legs.map((l) => [l.a, l.b]), route: f.wayRoute([1300, 600]).points }));
+});"""
+    out = json.loads(subprocess.run([NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                    input=json.dumps(case), capture_output=True, text=True, check=True).stdout)
+    assert out["legs"] and not [l for l in out["legs"] if max(l[0][0], l[1][0]) > 1125]
+    assert out["route"][0] == [1300, 600] and out["route"][-1] == [1110, 400]
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_slanted_line_crosses_no_more_soft_lines_than_its_steps():
+    """A staircase of short legs becomes one straight line (unstair) only
+    where the line crosses no more soft lines than the steps: a thin wall
+    that the wall reading leaves soft is still a wall (judge review 7,
+    GR-commons_000104)."""
+    js = r"""
+const R = require(process.argv[1]);
+const gw = 100, gh = 100, blocked = new Uint8Array(gw * gh), soft = new Uint8Array(gw * gh);
+for (let i = 0; i < gw; i++) { blocked[i] = blocked[(gh - 1) * gw + i] = blocked[i * gw] = blocked[i * gw + gw - 1] = 1; }
+const stair = [[20.5, 80.5]];
+for (let k = 0; k < 4; k++) { const [x, y] = stair[stair.length - 1]; stair.push([x + 5, y], [x + 5, y - 5]); }
+const fixed = stair.map((_, k) => k === 0 || k === stair.length - 1);
+const corners = () => new R.Field(blocked, gw, gh, 0.25, [[200, 40]], [], soft, [0, 0]).network().unstair(stair, fixed).length;
+const open = corners();
+// Soft marks on the straight line, between the inner corners of the steps.
+for (const [c, r] of [[27, 72], [28, 72], [27, 73], [28, 73], [37, 62], [38, 62], [37, 63], [38, 63]]) soft[r * gw + c] = 1;
+process.stdout.write(JSON.stringify({ open, soft: corners() }));"""
+    out = json.loads(subprocess.run([NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                    capture_output=True, text=True, check=True).stdout)
+    assert out["open"] == 2      # one straight line
+    assert out["soft"] > 2       # the steps stay where the line would cross the marks

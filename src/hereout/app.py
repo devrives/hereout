@@ -31,7 +31,7 @@ from .gallery import Gallery
 from .ink_walls import warm_text_models
 from .pipeline import BadPhoto, answer, decode_photo, prepare, read_marks, start_words
 from .reader import ModelClient, ModelError, SpendCapReached
-from .translate import FOREIGN, LANGS, DiskCache, apply, cache_key, items_of, labels_of
+from .translate import LANGS, DiskCache, apply, cache_key, items_of, labels_of, needs_english
 
 WEB = Path(__file__).parent / "web"
 MAX_UPLOAD = 12 * 1024 * 1024
@@ -511,8 +511,9 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
             plan_text, labels = entry["plan_text"], entry["labels"]
         items = items_of(plan_text, labels)
         if lang == "en":
-            # The plan words have their English text; only labels in another script need a call.
-            items = [i for i in items if i["id"].startswith("x") and FOREIGN.search(i["text"])]
+            # The plan words have their English text; only labels that are not in English need a call.
+            language = (plan_text or {}).get("language")
+            items = [i for i in items if i["id"].startswith("x") and needs_english(i["text"], language)]
         if not items:
             return JSONResponse(apply(plan_text, labels, lang, {}), headers=NO_STORE)
         key = cache_key(items, lang, client.model if client else "")

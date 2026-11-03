@@ -2,7 +2,8 @@
 
 The plan text read (reader.TEXT_PROMPT) gives the title, the legend and the
 instructions of a plan, each with its original text and an English text. The
-model labels of the exits are short English texts. One text-only Muse Spark
+model labels of the exits are mostly short English texts; a label that is not
+in English also gets an English name (needs_english). One text-only Muse Spark
 call translates all of them into one language. The answers of gallery plans
 stay in a disk cache, keyed by a hash of the texts and the language. The
 answers for photos stay in memory only, with the other data of the photo.
@@ -31,6 +32,36 @@ PLAIN_LABEL = re.compile(r"^\s*(exit|[\d.]*)\s*$", re.I)
 
 # A label in another script ("ВЫХОД") needs an English name too.
 FOREIGN = re.compile(r"[^\u0000-\u024f]")
+# The model writes most exit labels in English ("Staircase north"), but on a
+# plan in another language it can copy the sign ("Notausgang NE"). A Latin
+# label on such a plan needs an English name when none of its words is one
+# of these English words of exit labels (from the labels of the 203 gallery
+# plans). app.js has the same list (ENGLISH_WORDS); tests/test_plan_words.py
+# checks that the two lists are the same.
+ENGLISH_WORDS = frozenset("""
+    exit exits staircase staircases stair stairs stairway stairwell final emergency fire escape evacuation
+    door doors gate entrance way out outside exterior north south east west northeast northwest southeast
+    southwest top bottom left right upper lower middle mid central center centre inner outer front back
+    rear side far near end corner level floor ground street road avenue pedestrian main primary block
+    shelter annex pier area bridge tower wall assembly passage balcony unit vertical diagonal park parking
+    courtyard connector room hall kitchen roof plaza tunnel public protected platform concourse rescue ramp
+    ladder lift elevator escalator crosswalk perimeter place hill intersection corridor up down to at of
+    the from by and into""".split())
+WORD = re.compile(r"[^\W\d_]+")
+
+
+def needs_english(label: str, language: str | None) -> bool:
+    """True when an exit label needs an English name: a label in another
+    script, or on a plan that is not in English (plan_text "language"), a
+    label with a word of three letters or more and no English word. A plan
+    in English, or in a language not known, makes no call for a Latin label."""
+    if FOREIGN.search(label):
+        return True
+    tag = (language or "").strip().lower()
+    if not tag or tag == "und" or re.match(r"en\b", tag):
+        return False
+    words = WORD.findall(label.lower())
+    return any(len(w) >= 3 for w in words) and not any(w in ENGLISH_WORDS for w in words)
 
 
 def labels_of(exits: list[dict]) -> list[str]:

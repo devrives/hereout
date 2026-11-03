@@ -67,3 +67,20 @@ def test_tap_rules():
     # out is in tap reach (ux review, 2026-11-02).
     assert got["closed room"] == {"at": "noway", "cell": [40, 65], "way": False, "route": "no open way to an exit"}
     assert got["closed room by the wall"] == {"at": "moved", "cell": [40, 49], "way": True, "route": "route"}
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_exit_mark_on_wall_is_refused():
+    """A marked exit with no open floor in exit reach is refused (app.js
+    setExit): the exits stay as they were (judge review, 2026-11-03: a mark
+    on blank paper removed every exit). A mark in a doorway or next to the
+    floor is kept."""
+    marks = {"blank paper": px(40, 5), "far corner": px(5, 95), "in the filled block": px(47, 35),
+             "on the outer wall": px(40, 19), "in the corridor": px(25, 45)}
+    case = {**plan(), "taps": [], "marks": list(marks.values())}
+    out = json.loads(subprocess.run([NODE, str(RUNNER)], input=json.dumps(case), capture_output=True,
+                                    text=True, check=True).stdout)
+    got = dict(zip(marks, out["marks"]))
+    # A mark on ink a few cells from the floor snaps to it (route.js exitCells).
+    assert got == {"blank paper": False, "far corner": False, "in the filled block": True,
+                   "on the outer wall": True, "in the corridor": True}

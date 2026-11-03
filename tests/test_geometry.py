@@ -119,14 +119,40 @@ def test_directions_side_step_in_its_place():
     assert walks[1:] == ["Turn left, step left, then walk a medium way."]
 
 
-def test_directions_detour_out_and_back_gets_two_side_steps():
-    """A straight walk that steps aside round a wall and back ends on its start
-    line: it splits where it is farthest out, so the words name both side steps
-    (a11y review)."""
+def test_directions_small_dip_out_and_back_is_no_step():
+    """A straight walk that steps aside round a column and back ends on its
+    start line: a dip of at most DIP_SHARE of the plan is no step (judge
+    review 7). Before, the a11y review named each side step of the dip."""
     pts = [(1500, 300), (1244, 300), (1244, 355), (1009, 355), (1009, 305), (769, 305), (769, 600)]
     walks = [s["text"] for s in directions(pts, 1600, 1200) if s["kind"] == "walk"]
-    assert walks[1:3] == ["Step left, then keep going straight for a medium way.",
-                          "Step right, then keep going straight for a medium way."]
+    assert walks == ["Start toward the left of the plan and walk a long way.", "Turn left and walk a medium way."]
+    # A deeper dip (6 % of the plan) keeps its turns.
+    pts = [(1500, 300), (1244, 300), (1244, 420), (1009, 420), (1009, 305), (769, 305), (769, 600)]
+    walks = [s["text"] for s in directions(pts, 1600, 1200) if s["kind"] == "walk"]
+    assert walks[1:3] == ["Turn left and walk a short way.", "Turn right and walk a short way."]
+
+
+# The route of a tap at the middle of RU-commons_000164 (1200 x 1600) to Exit
+# 3: up, then right with a dip round a column (judge review 7: six steps,
+# five turns around one jog).
+RU_JOG = [(578, 803), (572.5, 802.5), (572.5, 712.5), (752.5, 712.5), (752.5, 797.5), (907.5, 797.5),
+          (907.5, 707.5), (1044, 707.5), (1044, 703)]
+
+
+def test_directions_jog_round_a_column_is_one_walk():
+    """The legs of a small dip are each longer than MIN_LEG_SHARE, but the
+    dip is no walk of its own: up, then one walk right."""
+    walks = [s["text"] for s in directions(RU_JOG, 1200, 1600) if s["kind"] == "walk"]
+    assert walks == ["Start toward the top of the plan and walk a short way.", "Turn right and walk a medium way."]
+    # A jog to a line beside its own is a side step in the walk, not two turns.
+    pts = [(578, 803), (572.5, 712.5), (752.5, 712.5), (752.5, 797.5), (1044, 797.5)]
+    walks = [s["text"] for s in directions(pts, 1200, 1600) if s["kind"] == "walk"]
+    assert walks == ["Start toward the top of the plan and walk a short way.", "Turn right and walk a short way.",
+                     "Step right, then keep going straight for a medium way."]
+    # A real turn after a walk stays (DE-commons_000023, tap (800, 620) to Exit 2).
+    pts = [(800, 620), (809.48, 610.58), (614.77, 414.68), (579.65, 449.59), (589, 459)]
+    walks = [s["text"] for s in directions(pts, 1600, 972) if s["kind"] == "walk"]
+    assert walks == ["Start toward the top left of the plan and walk a medium way.", "Turn left and walk a short way."]
 
 
 def test_directions_side_step_before_a_turn_back():

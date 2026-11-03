@@ -115,3 +115,35 @@ def test_js_steps_match_python():
     js = json.loads(subprocess.run([NODE, "-e", script, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
                                    input=json.dumps(cs), capture_output=True, text=True, check=True).stdout)
     assert js == [[x["text"] for x in directions(c, 1600, 900, stairs=False)] for c in cs]
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_js_steps_match_python_on_jogs():
+    """Routes of level and upright legs with jogs and dips of many sizes
+    (undip, detour, sideMove) give the same steps in both."""
+    rng = np.random.default_rng(11)
+    routes = []
+    for _ in range(300):
+        x, y = 600.0, 600.0
+        pts = [(x, y)]
+        across = bool(rng.integers(0, 2))
+        for _ in range(int(rng.integers(2, 9))):
+            d = float(rng.choice([1, -1])) * float(rng.uniform(10, 300))
+            if across:
+                x += d
+            else:
+                y += d
+            across = not across if rng.random() < 0.8 else across
+            pts.append((round(x, 1), round(y, 1)))
+        routes.append({"points": pts, "width": 1200, "height": 1600})
+    js = r"""
+const R = require(process.argv[1]);
+let input = ""; process.stdin.on("data", (c) => { input += c; });
+process.stdin.on("end", () => {
+  const out = JSON.parse(input).map((c) => R.directions(c.points, c.width, c.height).map((s) => s.text));
+  process.stdout.write(JSON.stringify(out));
+});"""
+    out = json.loads(subprocess.run([NODE, "-e", js, str(Path(__file__).parent.parent / "src/hereout/web/route.js")],
+                                    input=json.dumps(routes), capture_output=True, text=True, check=True).stdout)
+    for c, a in zip(routes, out):
+        assert a == [s["text"] for s in directions(c["points"], c["width"], c["height"])], c["points"]

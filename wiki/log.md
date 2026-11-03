@@ -456,3 +456,13 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/judge-round-7.md`: closed and lift exits dropped by label, and one number in exit names.
 - The same page: a refused tap clears the route, a share card, and the view buttons on one row.
 - Source: the judge 7 report of 2026-11-02 and the owner go-ahead of 2026-11-03.
+
+## [2026-11-03] ingest | Exit accuracy tests
+
+- Added `decisions/exit-snap-and-checks.md`: three accuracy ideas, none shipped.
+- Source: the owner request of 2026-11-03 and the agent run on the dev set and the holdout photos.
+
+## [2026-11-03] ingest | Judge review 8
+
+- Added `decisions/judge-round-8.md`: step dips, lines past exits, refused marks, touch hints, English names for Latin labels, the code licence.
+- Source: the judge 8 report and the owner request of 2026-11-03.

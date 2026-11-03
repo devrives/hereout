@@ -84,6 +84,8 @@ On the 203 gallery plans, the second look was run on the saved readings (`script
 
 The run of 2026-11-01 came before three later changes (far points of the second look on route marks, wall lines off the building, staircase steps). Each code version was run once. Two reads of the same photo can differ, so a change of a few hundredths is within noise.
 
+**Upload path.** All 203 gallery photos went once through the photo button of the page, on a local server with the code of 2026-11-01 (commit 8636f92): 203 plans opened, 0 failed, and the median time from the upload to the open plan was 23.3 s. Each plan with its result: https://hereout.devrives.com/review/
+
 **Dev set.** The code was tuned on a separate dev set: 30 gallery plans picked at random by country (seed 20261101), labelled the same way, by agents that had not seen the readings. On it, Muse Spark's exits in the lower half of the image were consistently a little too low, so `exit_fix.py` moves them up by 10 % of their distance below the middle (dev set, 5 %: precision 0.357 to 0.391, recall 0.348 to 0.383, four reads; better on both random halves of the dev set, and no read got worse). A new prompt scored within the noise between two reads and did not ship. A vote of three reads of each plan (an exit where two reads agree) gained 1 to 3 points at 5 % for three times the calls, so it did not ship either (`scripts/vote_reads.py`, `wiki/decisions/exit-vote.md`). No exit rule was chosen on the holdout photos. Only the time limits of the model calls, and the skip of the second look after a slow first call, came from their slow calls on 2026-10-29.
 
 On the overlays of the 2026-10-29 run, the misses and false exits were points on the sign or the name plate beside a stair instead of its door, points on the paper or the street outside the building, the same exit given twice (stair and sign), direction signs along a corridor taken as exits, and staircases on a ground floor where every printed route goes past them to the main door. Some points are on the right door but just outside R, which is why the scores at 10 % are higher.
@@ -158,6 +160,7 @@ wiki/             decisions, components and history (why and when)
 
 - Gallery: 203 photos of posted plans, 164 from Wikimedia Commons and 39 from Flickr, all under open licences (CC0, public domain mark, CC BY, CC BY-SA). The app shows the credit of each photo: title, author, licence, source link and what was changed.
 - The photos, the gallery readings and the evaluation labels are not in this repository. The photos belong to their authors.
+- Code: MIT licence (`LICENSE`).
 - Fonts: Geist and Geist Mono (SIL Open Font License, `src/hereout/web/fonts/OFL.txt`).
 
 ## Built during the hackathon

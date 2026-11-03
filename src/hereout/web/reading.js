@@ -26,11 +26,23 @@ function setReading(on) {
   $("result").classList.toggle("reading", readShown);
   pressView();  // app.js: no view button is pressed while the reading shows
   showStages();  // app.js: the tap pill goes while the reading shows
-  tapSaid = readShown ? () => t("read_tap") : tapText;
+  tapSaid = readShown ? readTapText : tapText;
   $("tap-text").textContent = tapSaid();
   $("tap-text").hidden = !readShown && (!state || !state.start || marking);
-  if (readShown !== was) sayPlan(readShown ? () => t("read_showing") : () => t("read_back"));
+  if (readShown !== was) sayPlan(readShown ? () => t("read_showing") : () => t(readRoute() ? "read_back" : "read_back_plan"));
   draw();
+}
+
+// True when the plan view after the reading has a route.
+const readRoute = () => !!(state && state.start && !state.photo_map && typeof view !== "undefined" && view && view.route);
+
+// The hint under the plan while the reading shows. A touch screen gets no
+// Enter key, and with no route the tap goes back to the plan, not to a
+// route (judge review, 2026-11-03). After Tab or Enter (the "kbd" class of
+// app.js) the hint names the key also on a touch screen.
+function readTapText() {
+  const touch = matchMedia("(pointer: coarse)").matches && !document.documentElement.classList.contains("kbd");
+  return t((readRoute() ? "read_tap" : "read_tap_plan") + (touch ? "_touch" : ""));
 }
 
 // A label in another script is in the language of the plan, so a screen reader

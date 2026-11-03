@@ -236,7 +236,7 @@ function needsLabels() {
   const have = (wordsIn(lang) || {}).labels || {};
   return state.exits.some((e) => {
     const l = (e.label || "").trim();
-    return l && !PLAIN_LABEL.test(l) && (lang !== "en" || FOREIGN.test(l)) && !have[l];
+    return l && !PLAIN_LABEL.test(l) && (lang !== "en" || needsEnglish(l)) && !have[l];
   });
 }
 function sayPlanSoon() {
@@ -272,6 +272,17 @@ function wordsIn(tag) {
 const PLAIN_LABEL = /^\s*(exit|[\d.]*)\s*$/i;
 // A label in another script ("ВЫХОД") gets an English name too (translate.py FOREIGN).
 const FOREIGN = /[^\u0000-\u024f]/;
+// So does a label that is not in English on a plan in another language
+// ("Notausgang NE" on a German plan; judge review, 2026-11-03). The same
+// rule and words as translate.py needs_english (tests/test_plan_words.py).
+const ENGLISH_WORDS = new Set(("exit exits staircase staircases stair stairs stairway stairwell final emergency fire escape evacuation door doors gate entrance way out outside exterior north south east west northeast northwest southeast southwest top bottom left right upper lower middle mid central center centre inner outer front back rear side far near end corner level floor ground street road avenue pedestrian main primary block shelter annex pier area bridge tower wall assembly passage balcony unit vertical diagonal park parking courtyard connector room hall kitchen roof plaza tunnel public protected platform concourse rescue ramp ladder lift elevator escalator crosswalk perimeter place hill intersection corridor up down to at of the from by and into").split(" "));
+function needsEnglish(label) {
+  if (FOREIGN.test(label)) return true;
+  const tag = ((state && state.plan_text && state.plan_text.language) || "").trim().toLowerCase();
+  if (!tag || tag === "und" || /^en\b/.test(tag)) return false;
+  const words = label.toLowerCase().match(/\p{L}+/gu) || [];
+  return words.some((w) => w.length >= 3) && !words.some((w) => ENGLISH_WORDS.has(w));
+}
 const WORDS_TRIES = 30;  // asks every ASK_EVERY ms while the server still reads the words of a photo
 let wordsSeq = 0;
 let wordsState = "";     // "wait" while a translation comes, "failed" when none came
@@ -291,7 +302,7 @@ async function loadWords() {
   const tag = lang;
   wordsState = "";
   const english = (!s || !s.text_id || s.plan_text || !s.text_pending) &&
-    !(s && s.exits.some((e) => FOREIGN.test(e.label || "")) && !(s.tr && s.tr.en));
+    !(s && s.exits.some((e) => needsEnglish(e.label || "")) && !(s.tr && s.tr.en));
   const nothing = s && !s.plan_text && !s.text_pending && !s.exits.some((e) => !PLAIN_LABEL.test(e.label || ""));
   if (!s || !s.text_id || (tag === "en" ? english : wordsIn(tag) || nothing)) { showWords(); return; }
   if (tag !== "en") wordsState = "wait";
@@ -1204,6 +1215,24 @@ function drawMarks(unit, rv = null) {
   // step are walked, so grey (Mappedin, research brief 2); the rest is the
   // same blue line as before.
   const pts = !rv && view.route && view.route.points && partOfLine(view.route.points, draw);
+  // The last walk ends at the exit: a ring in the route colour round it.
+  // The ring goes under the route line: the last walk can be shorter than
+  // the ring, and a ring over it hid the turn into the exit (judge review,
+  // 2026-11-03: "Turn left" on DE-commons_000023 showed a straight route).
+  const step = draw === 1 && !rv ? view.steps[selected] : null;
+  if (step && step.kind === "walk" && selected === walkCount() - 1 && used >= 0) {
+    const e = state.exits[used], r = unit * 2.2 * 1.75;
+    ctx.save();
+    ctx.globalAlpha = afterShare();
+    for (const [color, width] of [[DARK, unit * 1.3], [ROUTE, unit * 0.7]]) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.roundRect(e.x - r, e.y - r, r * 2, r * 2, r * 0.35);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   if (pts && pts.length > 1) {
     const parts = draw === 1 && selected > 0 ? routeParts() : null;
     if (parts && parts.done.length > 1) {
@@ -1219,21 +1248,6 @@ function drawMarks(unit, rv = null) {
   if (used >= 0) exitMark(state.exits[used].x, state.exits[used].y, unit * 2.2, used + 1, true);
 
   if (rv) return;
-  const step = draw === 1 ? view.steps[selected] : null;
-  // The last walk ends at the exit: a ring in the route colour round it.
-  if (step && step.kind === "walk" && selected === walkCount() - 1 && used >= 0) {
-    const e = state.exits[used], r = unit * 2.2 * 1.75;
-    ctx.save();
-    ctx.globalAlpha = afterShare();
-    for (const [color, width] of [[DARK, unit * 1.3], [ROUTE, unit * 0.7]]) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      ctx.roundRect(e.x - r, e.y - r, r * 2, r * 2, r * 0.35);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
   // The start is a location dot, as on a map app, with no text (owner,
   // 2026-11-02: the mark must look natural). The route line and step 1 give
   // the first move: a beam muddied the route (ux review). An exit near the
@@ -1824,8 +1838,8 @@ function explain(how = "tap") {
   } else if (state.photo_map) {
     sayPlan(photoMapText);
   } else if (!state.start && how === "exit") {
-    const key = view.reachable ? "msg_exit_marked" : "msg_exit_wall";
-    sayPlan(() => t(key));
+    // A mark on a wall is refused before this (setExit).
+    sayPlan(() => t("msg_exit_marked"));
   } else if (!state.start) {
     // A sample is not where the user stands: its own mark is the natural start.
     const key = state.credit ? "msg_tap_sample" : "msg_tap";
@@ -1934,6 +1948,9 @@ function startMarking() {
 
 function stopMarking() {
   marking = false;
+  // A refused mark leaves its words under the plan: they go with the marking.
+  // The caller says what comes next.
+  clearRefusal(false);
   $("fix-text").textContent = t("fix");
   $("fix-hint").hidden = true;
   if (state) $("tap-text").hidden = !state.start;
@@ -1952,7 +1969,14 @@ $("fix").addEventListener("click", (ev) => {
 
 // The user's exit takes the place of the exits the model found. After a tap
 // on a floor with no exit (addExit), it is added: the exits of the other floors stay.
+// A mark with no open floor in the reach of an exit (route.js exitCells) is
+// refused: the exits stay as they were, and the marking goes on (judge
+// review, 2026-11-03: a mark on blank paper removed all three exits).
 function setExit(x, y) {
+  if (!view.field.exitCells([x, y]).length) {
+    refuseTap(() => t("msg_exit_wall"), [x, y]);
+    return;
+  }
   stopMarking();
   const mark = { x: Math.round(x), y: Math.round(y), label: "", marked: true };
   state.exits = addExit ? [...state.exits, mark] : [mark];
@@ -2042,6 +2066,11 @@ function refuseTap(text, at = null, dropped = false) {
   refuseTap.timer = setTimeout(() => {
     if (!state) return;
     if (!state.start && !marking) clearRefusal();
+    // While marking, the line under the plan asks for the exit again, as the pill does (ux review).
+    else if (marking && $("tap-hint").classList.contains("refused")) {
+      clearRefusal(false);
+      sayPlan(() => t(addExit ? "msg_mark_tap_add" : "msg_mark_tap"));
+    }
     showStages();
   }, NOTE_MS + 50);
   showStages();
@@ -2054,7 +2083,8 @@ function refuseTap(text, at = null, dropped = false) {
   sayPlan(dropped ? () => I.join([text(), t("route_cleared")]) : text);
 }
 
-function clearRefusal() {
+// again: with no start, say the tap instruction again.
+function clearRefusal(again = true) {
   pillNote = tapRing = null;
   if (!$("tap-hint").classList.contains("refused")) return;
   $("tap-hint").classList.remove("refused");
@@ -2063,7 +2093,7 @@ function clearRefusal() {
   $("tap-text").hidden = !state || !state.start || marking || !!state.photo_map;
   if (view) showAnswer();
   // The refusal leaves the live line; with no start it asks for a tap again (a11y review).
-  if (state && view && !state.start) explain();
+  if (again && state && view && !state.start) explain();
 }
 
 function place(x, y) {
@@ -2702,7 +2732,10 @@ function sayMarker() {
     const tap = got.at;
     const key = "marker" + (near >= 0 ? "_near" : "");
     const small = tap === "noway" && view.field.areaShare(view.field.toPx(got.cell)) < FLOOR_SHARE;
-    const why = tap === "wall" || tap === "outside" ? ROUTE_ERRORS["start is inside a wall"] : small ? ROUTE_ERRORS["no open way to an exit"] : null;
+    // While marking, a mark there is refused: say so before Enter too (ux review).
+    const wallMark = marking && view && !view.field.exitCells([x, y]).length;
+    const why = wallMark ? () => t("msg_exit_wall")
+      : tap === "wall" || tap === "outside" ? ROUTE_ERRORS["start is inside a wall"] : small ? ROUTE_ERRORS["no open way to an exit"] : null;
     const said = t(key, { at, exit: near >= 0 ? exitName(near) : "" });
     $("marker-status").textContent = why ? I.join([said, why()]) : said;
   }, 400);

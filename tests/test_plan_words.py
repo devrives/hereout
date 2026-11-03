@@ -17,7 +17,8 @@ from hereout.app import create_app
 from hereout.gallery import Gallery
 from hereout.reader import (ModelClient, ModelError, Prices, Reading, SpendLedger, TEXT_ITEMS,
                             parse_plan_text, parse_translation)
-from hereout.translate import LANGS, DiskCache, apply, cache_key, items_of, labels_of
+from hereout.translate import (ENGLISH_WORDS, LANGS, DiskCache, apply, cache_key, items_of, labels_of,
+                               needs_english)
 
 from conftest import draw_plan
 from test_app import make_gallery, read
@@ -193,6 +194,69 @@ def test_label_in_another_script_gets_an_english_name(tmp_path):
     assert model.translations == ["en"]
 
 
+LABEL_CASES = [
+    ("ВЫХОД", None, True), ("ВЫХОД", "en", True),
+    ("Notausgang NE", "de", True), ("Treppenraum NW", "de", True), ("VOIE POMPIERS", "fr", True),
+    ("Staircase north", "de", False), ("Sortie finale exit A", "fr", False), ("TR3", "de", False),
+    ("11-41", "ja", False), ("Notausgang NE", "en", False), ("Notausgang NE", "en-GB", False),
+    ("Notausgang NE", "und", False), ("Notausgang NE", "", False), ("Notausgang NE", None, False),
+]
+
+
+def test_needs_english():
+    """A label in another script, or one with no English word on a plan in
+    another language, gets an English name (judge review, 2026-11-03: "Exit 1:
+    Notausgang NE" in English). Model labels in English, codes, and plans in
+    English or in a language not known make no call."""
+    for label, language, want in LABEL_CASES:
+        assert needs_english(label, language) is want, (label, language)
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_page_needs_english_is_the_same_rule():
+    """app.js needsEnglish has the same words and the same answers as translate.py."""
+    src = (WEB / "app.js").read_text()
+    start = src.index("const FOREIGN =")
+    end = src.index("\n}\n", src.index("function needsEnglish")) + 3
+    words = src[start:end].split('const ENGLISH_WORDS = new Set(("', 1)[1].split('"', 1)[0].split(" ")
+    assert set(words) == ENGLISH_WORDS and len(words) == len(ENGLISH_WORDS)
+    script = (src[start:end] + "\nlet state = null;\nconst cases = JSON.parse(process.argv[1]);\n"
+              "console.log(JSON.stringify(cases.map(([l, g]) => { state = { plan_text: g === null ? null : { language: g } };"
+              " return needsEnglish(l); })));")
+    out = subprocess.run([NODE, "-e", script, json.dumps([[l, g] for l, g, _ in LABEL_CASES])],
+                         capture_output=True, text=True, check=True).stdout
+    assert json.loads(out) == [want for _, _, want in LABEL_CASES]
+
+
+def test_label_not_in_english_gets_an_english_name(tmp_path):
+    """On a German plan, a German label goes to the call in English; an
+    English label on the same plan does not. On an English plan nothing does."""
+    gallery = with_words(tmp_path)
+    path = gallery.folder / "items" / "XX-test_1.json"
+    item = json.loads(path.read_text())
+    item["plan_text"] = {**PLAN_TEXT, "language": "de"}
+    exit_ = item["reading"]["exits"][0]
+    item["reading"]["exits"] = [{**exit_, "label": "Notausgang NE"}, {**exit_, "label": "Staircase south"}]
+    path.write_text(json.dumps(item))
+    model = FakeModel()
+    client = TestClient(create_app(model, use_env=False, gallery=Gallery(gallery.folder),
+                                   text_cache=DiskCache(tmp_path / "cache")))
+    data = client.get("/api/text/g-XX-test_1?lang=en").json()
+    assert data["labels"] == {"Notausgang NE": "[en] Notausgang NE"}
+    assert model.translations == ["en"]
+    # The same plan in English: no call.
+    item["plan_text"] = {**PLAN_TEXT, "language": "en"}
+    path.write_text(json.dumps(item))
+    client = TestClient(create_app(model, use_env=False, gallery=Gallery(gallery.folder)))
+    assert client.get("/api/text/g-XX-test_1?lang=en").json()["labels"] == {}
+    assert model.translations == ["en"]
+    # With no model (the local server has no key) the page gets a 503 and keeps the label.
+    item["plan_text"] = {**PLAN_TEXT, "language": "de"}
+    path.write_text(json.dumps(item))
+    client = TestClient(create_app(None, use_env=False, gallery=Gallery(gallery.folder)))
+    assert client.get("/api/text/g-XX-test_1?lang=en").status_code == 503
+
+
 def test_gallery_words_translated_once_then_cached(tmp_path):
     model = FakeModel()
     cache = DiskCache(tmp_path / "cache")
@@ -305,3 +369,14 @@ def test_page_carries_the_catalogue_hash():
 def test_catalogues_and_step_texts():
     out = subprocess.run([NODE, str(Path(__file__).parent / "i18n_check.js")], capture_output=True, text=True)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+def test_touch_hints_name_no_key():
+    """The hints for a touch screen while the reading shows name no key
+    (judge review, 2026-11-03: "press Enter" on a phone)."""
+    keys = ("Enter", "Intro", "Invio", "回车")
+    for f in [*(WEB / "i18n").glob("*.json")]:
+        cat = json.loads(f.read_text())
+        for k in ("read_tap_touch", "read_tap_plan_touch"):
+            assert not any(word in cat[k] for word in keys), (f.name, k)
+        assert any(word in cat["read_tap_plan"] for word in keys), f.name

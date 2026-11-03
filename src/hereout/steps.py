@@ -22,6 +22,7 @@ SAME_WAY = 10.0          # degrees: legs within this of each other go the same w
 END_WAY_SHARE = 0.35     # with no main way, a walk starts and ends on legs of a way this share of it or more
 SPLIT_PASSES = 4         # passes that split walks with a turn between their two ways
 SIDE_STEP_SHARE = 0.02   # a straight walk that ends farther than this share of the plan to one side has a side step
+DIP_SHARE = 0.05         # a dip or jog aside by at most this share of the plan between two legs of one way is no walk of its own (_undip)
 SLANT_ANGLE = 50.0       # degrees: two ways this close that take turns are one slanted way drawn on the grid
 SLANT_SHARE = 0.85       # those two ways are this share of the walk or more
 SLANT_TURNS = 3          # and the walk changes between them this many times or more
@@ -68,7 +69,60 @@ def simplify(points: list[tuple[float, float]], plan_size: float) -> list[int]:
         if math.dist(kept[-1][:2], p[:2]) >= MIN_LEG_SHARE * plan_size - 1e-9:
             kept.append(p)
     kept.append(out[-1])
-    return [p[2] for p in kept]
+    return _undip(points, [p[2] for p in kept], plan_size)
+
+
+def _same_way(g: float, h: float) -> bool:
+    return abs((g - h + 180) % 360 - 180) <= SAME_WAY
+
+
+def _undip(points, idx: list[int], plan_size: float) -> list[int]:
+    """A route round a column or a door post steps aside and back, or to a
+    line beside its own: four turns, or two, around one small offset (judge
+    review 7, RU-commons_000164). The way of a walk is its longest leg. The
+    kept route points (idx) after the walk go up to a later kept point when
+    no route point up to that point is farther than DIP_SHARE of the plan
+    from the line of the way, the point is ahead on the line, it is back
+    within SIDE_STEP_SHARE of the line or its leg goes the same way (within
+    SAME_WAY), and the legs of the way are MAIN_LEG_SHARE of the new walk or
+    more. So the walk keeps its way: an offset that stays is a side step in
+    it (_side_move), a dip that comes back is no step (_detour)."""
+    lim, side = DIP_SHARE * plan_size, SIDE_STEP_SHARE * plan_size
+    i = 1
+    while i + 1 < len(idx):
+        a = points[idx[i - 1]]
+        h, longest = 0.0, -1.0
+        for k in range(idx[i - 1], idx[i]):
+            d = math.dist(points[k], points[k + 1])
+            if d > longest:
+                longest, h = d, _heading(points[k], points[k + 1])
+        t = math.radians(h)
+        off = lambda p: (p[0] - a[0]) * math.cos(t) + (p[1] - a[1]) * math.sin(t)
+        along = lambda p: (p[0] - a[0]) * math.sin(t) - (p[1] - a[1]) * math.cos(t)
+        merged = False
+        for m in range(i, len(idx) - 1):
+            if any(abs(off(p)) > lim for p in points[idx[m]:idx[m + 1] + 1]):
+                break
+            e = points[idx[m + 1]]
+            if along(e) <= along(points[idx[i]]):
+                continue
+            if abs(off(e)) > side and not _same_way(_heading(points[idx[m]], e), h):
+                continue
+            way = total = 0.0
+            for k in range(idx[i - 1], idx[m + 1]):
+                d = math.dist(points[k], points[k + 1])
+                total += d
+                if _same_way(_heading(points[k], points[k + 1]), h):
+                    way += d
+            if way < MAIN_LEG_SHARE * total:
+                continue
+            # The walk to that point is one walk now: look at it again.
+            del idx[i:m + 1]
+            merged = True
+            break
+        if not merged:
+            i += 1
+    return idx
 
 
 def _heading(a, b) -> float:
@@ -163,13 +217,16 @@ def _side_step(a, b, head: float, plan_size: float) -> str | None:
 
 def _detour(points, i: int, j: int, head: float, plan_size: float) -> int | None:
     """The route point where a walk from point i to point j must split, when
-    it goes more than SIDE_STEP_SHARE of the plan to one side of its start
-    line and comes back: the last point out on that side. Else None."""
+    it goes more than DIP_SHARE of the plan to one side of its start line and
+    comes back to within SIDE_STEP_SHARE of it: the last point out on that
+    side (farther than SIDE_STEP_SHARE). Else None. A smaller dip round a
+    column or a wall end is no step (judge review 7; before, the a11y review
+    named each dip of more than SIDE_STEP_SHARE)."""
     h, lim = math.radians(head), SIDE_STEP_SHARE * plan_size
     a = points[i]
     off = [(p[0] - a[0]) * math.cos(h) + (p[1] - a[1]) * math.sin(h) for p in points[i:j + 1]]
     far = max(off, key=abs)
-    if abs(off[-1]) > lim or abs(far) <= lim:
+    if abs(off[-1]) > lim or abs(far) <= DIP_SHARE * plan_size:
         return None
     return i + max(k for k, o in enumerate(off) if o * far > 0 and abs(o) > lim)
 

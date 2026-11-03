@@ -124,7 +124,7 @@ async function one(p, n) {
   fs.writeFileSync(jsonPath, JSON.stringify(out, null, 1));
   await ctx.close();
   const ex = out.answer ? out.answer.exits.length : "-";
-  return `${p.id}: ${out.failure ? "FAILED " + out.failure : `${ex} exits`} (${out.seconds} s)`;
+  return `${p.id}: ${out.failure ? "FAILED " + out.failure : `${ex} exit${ex === 1 ? "" : "s"}`} (${out.seconds} s)`;
 }
 
 let next = 0;
@@ -148,7 +148,7 @@ const secs = ok.map((r) => r.seconds).sort((a, b) => a - b);
 const median = secs.length ? secs[Math.floor(secs.length / 2)] : 0;
 const cards = all.map((r) => {
   const a = r.answer;
-  const head = `<h2>${esc(r.id)}</h2><p>${esc(r.country)} · ${r.seconds} s · ${a ? `${a.exits.length} exits` : "no plan"}${a && a.model_error ? " · model error" : ""}${a && a.photo_map ? " · photo map" : ""}</p>`;
+  const head = `<h2>${esc(r.id)}</h2><p>${esc(r.country)} · ${r.seconds} s · ${a ? `${a.exits.length} exit${a.exits.length === 1 ? "" : "s"}` : "no plan"}${a && a.model_error ? " · model error" : ""}${a && a.photo_map ? " · photo map" : ""}</p>`;
   const pics = a ? `<a href="${esc(r.id)}.page.png"><img loading="lazy" src="${esc(r.id)}.page.png" alt="${esc(r.id)} as the page shows it"></a>`
     + (fs.existsSync(path.join(outDir, `${r.id}.read.png`)) ? ` <a href="${esc(r.id)}.read.png">What Muse Spark read</a>` : "") : `<p>${esc(r.failure || r.status)}</p>`;
   const credit = `<p class="c">“${esc(r.title.replace(/^File:/, ""))}” by ${esc(r.author)}, ${esc(r.licence)}, <a href="${esc(r.url)}" rel="noopener">source</a></p>`;
@@ -161,7 +161,7 @@ a{color:#3dffa0}ul{list-style:none;padding:0;display:grid;grid-template-columns:
 li{background:#0f1a15;border:1px solid #22332b;border-radius:14px;padding:12px}h2{font-size:1rem;margin:0}p{margin:4px 0;color:#a7b8b0}
 img{width:100%;height:auto;border-radius:8px;display:block;margin:6px 0}.c{font-size:.8rem}</style></head><body><main>
 <h1>Sample run: ${all.length} photos through the page, once</h1>
-<p>Each original photo went through the photo button of the page on a local server with the current code, once, with no retry and no change after the answer. ${ok.length} plans opened; ${all.length - ok.length} did not. Median time from the upload to the open plan: ${median} s.</p>
+<p>Each original photo went through the photo button of the page on a local server with the code of the day of the run, once, with no retry and no change after the answer. ${ok.length} plans opened; ${all.length - ok.length} did not. Median time from the upload to the open plan: ${median} s.</p>
 <ul>
 ${cards}
 </ul></main></body></html>`);

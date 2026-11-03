@@ -35,6 +35,7 @@ const HereOutRoute = (() => {
   const END_WAY_SHARE = 0.35;   // with no main way, a walk starts and ends on legs of a way this share of it or more
   const SPLIT_PASSES = 4;       // passes that split walks with a turn between their two ways
   const SIDE_STEP_SHARE = 0.02;  // a straight walk that ends farther than this share of the plan to one side has a side step
+  const DIP_SHARE = 0.05;       // a dip or jog aside by at most this share of the plan between two legs of one way is no walk of its own (undip)
   const SLANT_ANGLE = 50;       // degrees: two ways this close that take turns are one slanted way drawn on the grid
   const SLANT_SHARE = 0.85;     // those two ways are this share of the walk or more
   const SLANT_TURNS = 3;        // and the walk changes between them this many times or more
@@ -678,6 +679,7 @@ const HereOutRoute = (() => {
   const SNAP_PASSES = 3;        // passes of the move of route runs onto the drawn lines
   const FIRST_SHIFT = 0.25;     // the first piece of a route moves onto a line by this share of its length at most
   const JOG_SOFT = 4;           // points on soft lines that a moved line may gain: one crossing, not a run along one
+  const PAST_FLOW = 0.5;        // a side of the wall of an exit with at most this share of the flow of its main side is past the exit
 
   // The move of the state of cell i with the least cost in a tree (the
   // first on a tie), or -1 when every state of the cell costs Infinity.
@@ -909,6 +911,52 @@ const HereOutRoute = (() => {
       return [...seeds];
     }
 
+    // The frame cells that the exits reach at once, past an exit: a way of
+    // the map does not go on there. An exit on a wall reaches the open cells
+    // on both sides of the wall (Field.exitCells), so lines also come to it
+    // through the wall: from the blank outside the building (judge review 7,
+    // DE-commons_000022: a line past Exit 2 into the blank below room 502),
+    // from a stair, or from a room behind the wall. Where walls cut the
+    // cells of an exit in two or more pieces, the piece where the most
+    // sources drain in (below, the flow of the tree) is the building side;
+    // a piece with at most PAST_FLOW of that flow is past the exit. An exit
+    // in open floor has its cells in one piece.
+    pastSeeds(below) {
+      const f = this.field, { gw, gh, blocked } = f, past = new Set();
+      f.seeds.forEach((cells) => {
+        const mine = new Set(cells.map(([g]) => g)), piece = new Map();
+        let pieces = 0;
+        for (const [g] of cells) {
+          if (piece.has(g)) continue;
+          const todo = [g];
+          piece.set(g, pieces);
+          while (todo.length) {
+            const i = todo.pop(), r = Math.floor(i / gw), c = i - r * gw;
+            for (let q = 0; q < 8; q++) {
+              const nr = r + N_DR[q], nc = c + N_DC[q], j = nr * gw + nc;
+              if (nr < 0 || nr >= gh || nc < 0 || nc >= gw || !mine.has(j) || piece.has(j)) continue;
+              if (q >= 4 && (blocked[r * gw + nc] || blocked[nr * gw + c])) continue;
+              piece.set(j, pieces);
+              todo.push(j);
+            }
+          }
+          pieces++;
+        }
+        if (pieces < 2) return;
+        // The frame seeds of each piece (as frameSeeds finds them) and their flow.
+        const side = new Map(), flow = new Array(pieces).fill(0);
+        for (const [g] of cells) {
+          const i = this.openNear(f.toPx(g), 1);
+          if (i < 0 || side.has(i)) continue;
+          side.set(i, piece.get(g));
+          flow[piece.get(g)] += below[i];
+        }
+        const main = Math.max(...flow);
+        for (const [i, p] of side) if (flow[p] <= PAST_FLOW * main) past.add(i);
+      });
+      return past;
+    }
+
     // The parts that take long to make, as plain data for postMessage.
     toData() {
       const t = this.tree(-1);
@@ -1111,7 +1159,12 @@ const HereOutRoute = (() => {
       const reach = REACH_SHARE * Math.max(this.fw, this.fh);
       const drawn = new Uint8Array(n);
       const lineOwner = new Int32Array(n).fill(-1);  // the exit of the line over each cell, or -1
+      const past = only < 0 ? this.pastSeeds(below) : new Set();
       for (let cells of branches) {
+        // A line that reaches its exit from past the exit is not drawn.
+        let to = cells[cells.length - 1];
+        while (tnext[to] >= 0) to = tnext[to];
+        if (past.has(to)) continue;
         // A short line that no other line joins is not drawn.
         if (cells.length < MIN_SPUR && below[cells[1]] === 1 && tnext[cells[cells.length - 1]] >= 0) continue;
         // A line of the cover is there to reach the far part of a hall or a
@@ -1806,6 +1859,9 @@ const HereOutRoute = (() => {
     // or more). One short step in a line, or a short staircase, stays: it is
     // not a slanted corridor. Steps of a cell or two (STAIR_FINE) are the
     // cells of a slanted way: they become a line at a quarter of STAIR_RUN.
+    // The line crosses no more soft lines than the steps did: a thin wall
+    // that the wall reading leaves soft is still a wall (judge review 7,
+    // GR-commons_000104).
     // Each point that stays gets the index of its corner as a third item.
     unstair(corners, fixed) {
       const pts = corners.map((q, k) => [q[0], q[1], k]);
@@ -1826,7 +1882,11 @@ const HereOutRoute = (() => {
           const dx = Math.abs(pts[j][0] - pts[i][0]), dy = Math.abs(pts[j][1] - pts[i][1]);
           if (Math.min(dx, dy) < STAIR_SLOPE * Math.max(dx, dy)) continue;
           if (Math.hypot(dx, dy) < (step <= STAIR_FINE ? run / 4 : j - i >= STAIR_MANY ? run / 2 : run)) continue;
-          if (this.clearLine(pts[i], pts[j])) best = j;
+          const soft = this.softRuns(pts[i], pts[j]);
+          if (soft < 0) continue;
+          let steps = 0;
+          for (let k = i; k < j; k++) steps += Math.max(0, this.softRuns(pts[k], pts[k + 1]));
+          if (soft <= steps) best = j;
         }
         out.push(pts[best]);
         i = best;
@@ -1844,6 +1904,23 @@ const HereOutRoute = (() => {
         if (x < 0 || x >= gw || y < 0 || y >= gh || blocked[y * gw + x]) return false;
       }
       return true;
+    }
+
+    // The soft lines that the straight line between two frame points
+    // crosses on the grid, or -1 when it is not clear of walls (clearLine).
+    softRuns(p, q) {
+      const { gw, gh, blocked, soft } = this.field;
+      const [x0, y0] = this.gridPoint(p[0], p[1]), [x1, y1] = this.gridPoint(q[0], q[1]);
+      const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 3) + 1;
+      let runs = 0, on = false;
+      for (let k = 0; k <= steps; k++) {
+        const x = Math.floor(x0 + (x1 - x0) * k / steps), y = Math.floor(y0 + (y1 - y0) * k / steps);
+        if (x < 0 || x >= gw || y < 0 || y >= gh || blocked[y * gw + x]) return -1;
+        const s = !!(soft && soft[y * gw + x]);
+        if (s && !on) runs++;
+        on = s;
+      }
+      return runs;
     }
 
     middle(i) {
@@ -2126,7 +2203,51 @@ const HereOutRoute = (() => {
     const kept = [out[0]];
     for (const p of out.slice(1, -1)) if (dist(kept[kept.length - 1], p) >= MIN_LEG_SHARE * planSize - 1e-9) kept.push(p);
     kept.push(out[out.length - 1]);
-    return kept.map((p) => p[2]);
+    return undip(points, kept.map((p) => p[2]), planSize);
+  }
+
+  // A route round a column or a door post steps aside and back, or to a
+  // line beside its own: four turns, or two, around one small offset (judge
+  // review 7, RU-commons_000164). The way of a walk is its longest leg. The
+  // kept route points (idx) after the walk go up to a later kept point when
+  // no route point up to that point is farther than DIP_SHARE of the plan
+  // from the line of the way, the point is ahead on the line, it is back
+  // within SIDE_STEP_SHARE of the line or its leg goes the same way (within
+  // SAME_WAY), and the legs of the way are MAIN_LEG_SHARE of the new walk
+  // or more. So the walk keeps its way: an offset that stays is a side step
+  // in it (sideMove), a dip that comes back is no step (detour).
+  function undip(points, idx, planSize) {
+    const lim = DIP_SHARE * planSize, side = SIDE_STEP_SHARE * planSize;
+    const same = (g, h) => Math.abs(mod(g - h + 180, 360) - 180) <= SAME_WAY;
+    for (let i = 1; i + 1 < idx.length; i++) {
+      const a = points[idx[i - 1]];
+      let h = 0, longest = -1;
+      for (let k = idx[i - 1]; k < idx[i]; k++) {
+        const d = dist(points[k], points[k + 1]);
+        if (d > longest) { longest = d; h = heading(points[k], points[k + 1]); }
+      }
+      const t = h * (Math.PI / 180);
+      const off = (p) => (p[0] - a[0]) * Math.cos(t) + (p[1] - a[1]) * Math.sin(t);
+      const along = (p) => (p[0] - a[0]) * Math.sin(t) - (p[1] - a[1]) * Math.cos(t);
+      for (let m = i; m + 1 < idx.length; m++) {
+        if (points.slice(idx[m], idx[m + 1] + 1).some((p) => Math.abs(off(p)) > lim)) break;
+        const e = points[idx[m + 1]];
+        if (along(e) <= along(points[idx[i]])) continue;
+        if (Math.abs(off(e)) > side && !same(heading(points[idx[m]], e), h)) continue;
+        let way = 0, total = 0;
+        for (let k = idx[i - 1]; k < idx[m + 1]; k++) {
+          const d = dist(points[k], points[k + 1]);
+          total += d;
+          if (same(heading(points[k], points[k + 1]), h)) way += d;
+        }
+        if (way < MAIN_LEG_SHARE * total) continue;
+        // The walk to that point is one walk now: look at it again.
+        idx.splice(i, m - i + 1);
+        i--;
+        break;
+      }
+    }
+    return idx;
   }
 
   // Angle in degrees, 0 = up on the plan, clockwise positive.
@@ -2247,13 +2368,16 @@ const HereOutRoute = (() => {
   }
 
   // The route point where a walk from point i to point j must split, when it
-  // goes more than SIDE_STEP_SHARE of the plan to one side of its start line
-  // and comes back: the last point out on that side. Else -1.
+  // goes more than DIP_SHARE of the plan to one side of its start line and
+  // comes back to within SIDE_STEP_SHARE of it: the last point out on that
+  // side (farther than SIDE_STEP_SHARE). Else -1. A smaller dip round a
+  // column or a wall end is no step (judge review 7; before, the a11y
+  // review named each dip of more than SIDE_STEP_SHARE).
   function detour(points, i, j, head, planSize) {
     const h = head * (Math.PI / 180), lim = SIDE_STEP_SHARE * planSize, a = points[i];
     const off = points.slice(i, j + 1).map((p) => (p[0] - a[0]) * Math.cos(h) + (p[1] - a[1]) * Math.sin(h));
     const far = off.reduce((m, o) => (Math.abs(o) > Math.abs(m) ? o : m), 0);
-    if (Math.abs(off[off.length - 1]) > lim || Math.abs(far) <= lim) return -1;
+    if (Math.abs(off[off.length - 1]) > lim || Math.abs(far) <= DIP_SHARE * planSize) return -1;
     let k = off.length - 1;
     while (!(off[k] * far > 0 && Math.abs(off[k]) > lim)) k--;
     return i + k;

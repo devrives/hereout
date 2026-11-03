@@ -1,5 +1,6 @@
-// Reads { grid, exits, taps } as JSON on stdin, prints what Field.tapStart
-// of web/route.js gives for each tap, and the route from there. Used by test_tap.py.
+// Reads { grid, exits, taps, marks? } as JSON on stdin, prints what Field.tapStart
+// of web/route.js gives for each tap, and the route from there, and for each
+// exit mark whether it reaches open floor. Used by test_tap.py.
 const R = require("../src/hereout/web/route.js");
 
 let input = "";
@@ -17,5 +18,7 @@ process.stdin.on("end", () => {
     }
     return out;
   });
-  process.stdout.write(JSON.stringify({ box: f.openBox(), taps }));
+  // An exit mark with no open cell in exit reach is refused (app.js setExit).
+  const marks = (c.marks || []).map((p) => f.exitCells(p).length > 0);
+  process.stdout.write(JSON.stringify({ box: f.openBox(), taps, marks }));
 });
