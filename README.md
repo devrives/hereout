@@ -120,6 +120,42 @@ uv run python scripts/score_exits.py <gallery folder> <labels.json> --gallery --
 
 </details>
 
+## Experiments
+
+The exits are the weak part, so most tests are about them. Each idea was tested in at least one of these ways before it shipped or was dropped:
+
+- the labelled dev set (30 gallery plans, scored as the holdout, at 5 %)
+- the holdout photos (above)
+- a check by eye on the overlays of a few plans
+- counts on the 203 gallery samples (their photos and saved readings)
+
+Two reads of one photo can differ, so a gain of a few hundredths in one read can be noise. A gain on the dev set counted only when it held on every read or on both halves of the set.
+
+| Idea | Test | Result | Shipped |
+|---|---|---|---|
+| A second call that sees the exits as marks and keeps, moves, drops or adds exits | 30 plans, by eye | 15 better, 14 no clear change, 1 mixed, 0 worse. About half of the 58 added exits were wrong (on an arrow, the paper, the legend or a stair with no exit) | Not in this form. The second look that shipped checks only exits far from a green or red mark, on zoomed crops, and adds no exit |
+| The second look on the 203 samples | 10 plans, by eye | 7 better, 1 slightly better, 1 no clear change, 1 mixed | Yes |
+| Move exits in the lower half of the image up by 10 % of their distance below the middle (`exit_fix.py`) | Dev set, four reads | Precision 0.357 to 0.391, recall 0.348 to 0.383. Better on both random halves, and no read got worse | Yes |
+| A new prompt: the door opening, one point for each exit, no direction signs | Dev set | Within the spread between two reads of the current prompt | No |
+| A vote of three reads (an exit where two agree) | Dev set, 29 plans | Precision 0.395 to 0.411, recall 0.427 to 0.439, for three calls for each photo. Most errors were the same in every read | No |
+| Temperature 0.7 in place of 0 | Dev set | Not better, and less stable: two reads agreed on 0.66 of their exits (0.81 at 0). A single read gave on average precision 0.492, recall 0.455 (0.502 and 0.487 at 0, on the same 20 plans), within the spread of single reads | No |
+| Snap each exit to green ink within 4 % of the long side, then drop repeats | Dev set and holdout | Dev set: better on all 7 reads (for example precision 0.467 to 0.495 on the saved reading). Holdout: precision and recall the same, photos all right 6 to 5 | No |
+| A prompt line that names the common errors | Dev set | Within the noise; recall at 10 % lower | No |
+| A Muse Spark check that sorts each exit crop: exit, corridor sign, passed stair or outside | Dev set | It called 18 points "outside", and 11 of them were within 10 % of a labelled exit. Recall fell from 0.386 to 0.311 | No |
+| A detector for green exit signs, to give the model candidates | 203 samples | No candidate on 115 plans; 80 of 866 exits had one near them | No |
+| Merge exits that are close together | Dev set | Never helped; at 3 % it deleted correct exits | No |
+
+Plan types, on the 203 samples:
+
+| Idea | Result | Shipped |
+|---|---|---|
+| A photo map (photo texture and strong colour, not a line drawing) gets no walls; the page names the exits | Found the 8 photo maps and no other plan | Yes |
+| A word for an outdoor area (roof, yard, street, car park, garden) makes that area outside | Found the roof on 2 plans, a court yard and a park | Yes |
+| An exit off the building next to a legend heading ("Legende:", "LEGEND") is dropped | Dropped the legend exits of 3 plans and no other exit | Yes |
+| A frame around all the drawings of a sheet is not a wall | Did not help the plan it was for, and drew new lines on the paper of 2 others | No |
+
+Most of the wrong exits that remain are a real exit with the point a little off (on the sign, in the stair or in the corridor in front of the door), and direction signs along a corridor. Neither a code rule nor the extra Muse Spark tests fixed them.
+
 ## Limits
 
 - The exits are the weak part: about half are right (above), and two reads of one photo can differ. Every route asks you to check it against the plan, and you can mark an exit yourself.
@@ -128,6 +164,17 @@ uv run python scripts/score_exits.py <gallery folder> <labels.json> --gallery --
 - Photograph the whole plan straight on. A plan that is small in the photo or cut off reads badly.
 - The steps give no distances, because a photo has no scale. The first step names a side of the plan, because a plan does not show which way you face.
 - HereOut is a reading aid. Follow the signs, the staff and the emergency services.
+
+## What's next
+
+- Better exit points, for the commonest error above: the point on the sign, in the stair or in front of the door.
+- Routes across levels, through the stairs drawn on the plan.
+- SAM 3.1: test masks of exit signs and corridors against today's exit points and walls, with the exits scored on the dev set and then once on the same 28 holdout photos. SAM 3.1 runs on the Meta Model API, and the API credit for it had not arrived by 2026-11-03.
+- A plan that turns with you: after you line it up once with the room, the phone compass turns the plan as you turn, as in a map app. Then the first step can say "turn left" in place of a side of the plan. It must be your choice: not every posted plan puts "up" where you face, and a compass can be wrong inside a building.
+- Keep the screen on while a route is open.
+- Keep a plan on the phone, so that it opens with no network.
+- Zoom and move the plan with two fingers.
+- A short vibration at each new step.
 
 ## Run locally
 

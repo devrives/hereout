@@ -484,3 +484,8 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Updated `decisions/ui-detail-pass.md`: in the 16:9 film, the story photo is at the right, apart from the words.
 - Source: the owner feedback of 2026-11-03 on the caption over the plan photo.
+
+## [2026-11-03] ingest | Experiments and next features in the README
+
+- Added `decisions/next-features.md`: the README gets "Experiments" and "What's next" now, and the features come after the submission.
+- Source: the owner request and go-ahead of 2026-11-03.
