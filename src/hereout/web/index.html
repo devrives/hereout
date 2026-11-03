@@ -6,6 +6,12 @@
 <meta name="robots" content="noindex">
 <title>HereOut</title>
 <meta name="description" content="Photograph a posted evacuation plan and see a route from where you stand to the nearest exit.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HereOut">
+<meta property="og:title" content="HereOut: your way out, drawn on the plan">
+<meta property="og:description" content="Photograph a posted evacuation plan and see a route from where you stand to the nearest exit.">
+<meta property="og:url" content="https://hereout.devrives.com/">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#07100c">
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
@@ -40,7 +46,7 @@
 <main class="layout">
   <section id="intro" class="intro" aria-labelledby="intro-head">
     <h1 id="intro-head">Your <em>way out</em>, drawn on the plan.</h1>
-    <p class="lead">New hotel or station? Photograph the evacuation plan by the door and see your way out before you need it.</p>
+    <p class="lead">In a new hotel or station, photograph the evacuation plan by the door. Muse Spark by Meta looks for the exits, and you see your way out before you need it.</p>
     <noscript><p>HereOut needs JavaScript to read the photo and draw the route.</p></noscript>
     <label class="shoot" id="shoot" hidden>
       <input id="photo" type="file" accept="image/*" aria-labelledby="shoot-text">
@@ -215,7 +221,7 @@
   <section id="demo" class="demo" hidden aria-labelledby="demo-head" data-samples="DE-commons_000023,RU-commons_000164,JP-commons_000268,DE-commons_000022">
     <h2 id="demo-head">Demo video</h2>
     <video controls playsinline preload="none" width="1920" height="1080" src="/video/demo.mp4" aria-labelledby="demo-head" aria-describedby="demo-caption"></video>
-    <p id="demo-caption" class="credit demo-caption">50 s, no sound, with captions: a recording of this page at phone size with one sample plan. <span id="demo-credits"></span></p>
+    <p id="demo-caption" class="credit demo-caption">56 s, no sound, with captions: a recording of this page at phone size with two sample plans. <span id="demo-credits"></span></p>
     <details class="transcript">
       <summary>Text of the video, with what it shows</summary>
       <ol>
@@ -229,7 +235,9 @@
         <li>Exit blocked? Tap “If blocked”. The route switches to the next exit. <em>On screen: a tap on the “If blocked” exit button under the plan; the plan comes back with the dot still in the corridor, and the route draws in to Exit 3.</em></li>
         <li>Muse Spark reads the words on the plan too. The plan's instructions in English, with the German original under each one. <em>On screen: “What the plan says” under the plan: the title, the instructions and the start of the legend in English, each with its German text under it.</em></li>
         <li>The card comes in 13 languages. Here: Korean. The steps and the labels change too. <em>On screen: the step card, the strip above the plan and the legend in Korean.</em></li>
-        <li>HereOut. hereout.devrives.com. Exits and plan words: Muse Spark, through Baseten. Walls: HereOut's own code. Routes: in your browser. Built solo for the Meta hackathon. Check every route against the plan. <em>On screen: the end card with the HereOut logo.</em></li>
+        <li>Muse Spark checks its own exits. Doubtful exits get a second look on numbered, zoomed crops. Here: 2 moved, 1 dropped. <em>On screen: a plan from Moscow with what Muse Spark read drawn over it: the floor box and its exit points. Then the sheet of three numbered crops opens larger, with “Moved”, “Dropped” and “Moved” beside the crops.</em></li>
+        <li>In a test, HereOut found about half the exits. About half of the exits it marked were wrong, so check every route against the plan. <em>On screen: a tap in the middle hall of the Moscow plan, the route to Exit 3, and under the plan the line “Check the route and the exits against the plan.”</em></li>
+        <li>HereOut. hereout.devrives.com. Exits and plan words: Muse Spark, through Baseten. Walls: HereOut's own code. Routes: in your browser. Built solo for the Meta hackathon. <em>On screen: the end card with the HereOut logo.</em></li>
       </ol>
     </details>
   </section>

@@ -211,12 +211,30 @@ def demo_page(page: str, folder: Path | None, gallery: Gallery | None) -> str:
         return re.sub(DEMO_TAG + r".*?</section>\n?", "", page, count=1, flags=re.S)
 
     poster = f' poster="{video_url(folder, "demo-poster.webp")}"' if (folder / "demo-poster.webp").is_file() else ""
-    # The first plan is the one the film opens; the others show only as start-page previews.
-    credits = " ".join(credit_html(gallery.items[i]["credit"], RECORDED if k == 0 else PREVIEW_RECORDED)
+    # The first plan is the one the film opens, the second the one of the second
+    # look (with a route too); the others show only as start-page previews.
+    changes = [RECORDED, RECORDED]
+    credits = " ".join(credit_html(gallery.items[i]["credit"], changes[k] if k < len(changes) else PREVIEW_RECORDED)
                        for k, i in enumerate(ids))
     return (page.replace('src="/video/demo.mp4"', f'src="{video_url(folder, "demo.mp4")}"{poster}', 1)
                 .replace(DEMO_TAG, DEMO_TAG.removesuffix(" hidden"), 1)
                 .replace(DEMO_CREDITS, DEMO_CREDITS.replace("></", f">{credits}</"), 1))
+
+
+SITE = "https://hereout.devrives.com"
+SHARE_AFTER = '<meta property="og:url"'
+
+
+def share_page(page: str, folder: Path | None) -> str:
+    """The start page with its share card, from the video folder (og.png): the
+    card shows a plan photo, so it is not in the repository."""
+    if not (folder and (folder / "og.png").is_file()):
+        return page
+    url = SITE + video_url(folder, "og.png")
+    tags = (f'<meta property="og:image" content="{url}">\n<meta property="og:image:width" content="1200">\n'
+            '<meta property="og:image:height" content="630">\n'
+            '<meta property="og:image:alt" content="HereOut: Your way out, drawn on the plan. A hotel evacuation plan with three numbered exits and a blue route to Exit 2.">\n')
+    return page.replace(SHARE_AFTER, tags + SHARE_AFTER, 1)
 
 
 class LongCache(StaticFiles):
@@ -360,7 +378,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return HTMLResponse(demo_page(proof_page(example_page(page, gallery, video), gallery), video, gallery))
+        return HTMLResponse(share_page(demo_page(proof_page(example_page(page, gallery, video), gallery), video, gallery), video))
 
     @app.api_route("/credits", methods=["GET", "HEAD"])
     def credits_list():

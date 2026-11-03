@@ -25,6 +25,7 @@ function setReading(on) {
   $("show-read-text").textContent = readShown ? "Hide the reading" : "Show the reading on the plan";
   $("result").classList.toggle("reading", readShown);
   pressView();  // app.js: no view button is pressed while the reading shows
+  showStages();  // app.js: the tap pill goes while the reading shows
   tapSaid = readShown ? () => t("read_tap") : tapText;
   $("tap-text").textContent = tapSaid();
   $("tap-text").hidden = !readShown && (!state || !state.start || marking);
@@ -46,6 +47,7 @@ const zoomMoved = (row) => row.zoom === "moved" &&
 // What happened to one exit point, in words.
 function readFate(row) {
   if (row.zoom === "dropped") return `dropped by the second look (crop ${row.crop})`;
+  if (row.drop === "label") return "dropped by HereOut: its label says closed or lift";
   if (row.drop === "legend") return "dropped by HereOut: in the legend";
   if (row.drop) return "dropped by HereOut: not on the drawing";
   const parts = [`Exit ${row.exit + 1}`];

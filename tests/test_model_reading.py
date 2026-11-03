@@ -70,8 +70,41 @@ def test_exit_on_a_text_block_is_dropped_as_text():
     assert [e["label"] for e in reading.exits] == ["Top"]
 
 
+def _box_plan():
+    img = np.full((500, 600, 3), 255, np.uint8)
+    img[40:300, 40:44] = img[40:300, 556:560] = img[40:44, 40:560] = img[296:300, 40:560] = 0
+    return Plan(img, np.zeros(img.shape[:2], bool), text=[])
+
+
+def test_closed_exit_and_lift_are_dropped_by_label():
+    """A label that says closed or lift is no way out (JP-commons_000268, US-commons_000003)."""
+    reading = Reading([{"x": 300, "y": 44, "label": "4 To street level"},
+                       {"x": 44, "y": 200, "label": "3 To street level closed"},
+                       {"x": 556, "y": 200, "label": "south elevator exit"}], plan_box=(30, 30, 570, 460))
+    plan = _box_plan()
+    plan.use_reading(reading)
+    rows = answer(None, plan, reading, None)["read"]["exits"]
+    assert [r.get("drop") for r in rows] == [None, "label", "label"]
+    assert [e["label"] for e in reading.exits] == ["4 To street level"]
+
+
+def test_label_drop_keeps_one_exit():
+    """When every label says closed, the exits stay: the page must still show one."""
+    reading = Reading([{"x": 300, "y": 44, "label": "Exit closed"}], plan_box=(30, 30, 570, 460))
+    plan = _box_plan()
+    plan.use_reading(reading)
+    assert len(reading.exits) == 1
+
+
 def test_no_reading_no_block():
     img = np.full((100, 100, 3), 255, np.uint8)
     plan = Plan(img, np.zeros(img.shape[:2], bool), text=[])
     plan.no_reading()
     assert "read" not in answer(None, plan, None, "model not configured")
+
+
+def test_label_rule_keeps_door_rules_and_places_near_a_lift():
+    from hereout.pipeline import not_exit
+    assert not_exit("3 To street level closed") and not_exit("south elevator exit") and not_exit("Lift")
+    for label in ("Fire door - keep closed", "Stairs next to lift", "Exit via elevator lobby", "Treppenhaus am Aufzug", "ВЫХОД"):
+        assert not not_exit(label), label

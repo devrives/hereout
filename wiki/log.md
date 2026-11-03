@@ -450,3 +450,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 - Added `decisions/one-route-line.md`: one route width, no way lines under a route, a quiet second way, a phone frame.
 - Updated `DESIGN.md`.
 - Source: the owner verdict of 2026-11-02 on the demo video.
+
+## [2026-11-03] ingest | Judge review 7
+
+- Added `decisions/judge-round-7.md`: closed and lift exits dropped by label, and one number in exit names.
+- The same page: a refused tap clears the route, a share card, and the view buttons on one row.
+- Source: the judge 7 report of 2026-11-02 and the owner go-ahead of 2026-11-03.

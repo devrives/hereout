@@ -31,6 +31,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Close the outside of the building and give closed rooms a door](decisions/outside-and-closed-rooms.md): proposed; fills, outside areas, exit placement and room doors with no model call.
 - [Fast processing of a new photo](decisions/photo-speed.md): accepted; one wall pass, text boxes during the model call, faster wall steps.
 - [Short time limits for the model calls](decisions/call-timeouts.md): accepted; 45 s main call, 25 s zoom call, page stops at 3 minutes.
+- [Judge review 7](decisions/judge-round-7.md): accepted; closed and lift exits dropped by label, a refused tap clears the route, a share card.
 - [Polish for the judging criteria](decisions/judge-polish.md): accepted; a route example, plans open on the floor, tap checks, the Muse Spark reading.
 - [Muse Spark reads the words on the plan and translates the plan view](decisions/plan-language.md): accepted; plan words, translation into 12 languages, plan card catalogue.
 - [The second look on the gallery samples](decisions/second-look-on-samples.md): accepted; the zoom check on saved readings, crop sheets in the card.

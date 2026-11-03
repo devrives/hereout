@@ -50,6 +50,7 @@
  "legend_route": "Sua rota",
  "legend_exit": "Saída, por número",
  "tap_hint": "Toque em qualquer ponto livre da planta para ver a rota a partir dali.",
+ "route_cleared": "A rota do seu ponto anterior foi removida.",
  "check_card": "Confira a rota e as saídas na planta.",
  "steps_head": "Passos",
  "steps_hint": "Toque em um passo para vê-lo na planta.",

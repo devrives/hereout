@@ -50,6 +50,7 @@
  "legend_route": "您的路线",
  "legend_exit": "出口，按编号",
  "tap_hint": "点击平面图上的任意空旷处，查看从该处出发的路线。",
+ "route_cleared": "上一个位置的路线已清除。",
  "check_card": "请将路线和出口与平面图核对。",
  "steps_head": "分步指引",
  "steps_hint": "点击某一步，在平面图上查看。",

@@ -407,3 +407,13 @@ def test_start_page_links_and_credits_page(tmp_path):
     assert '<li id="XX-test_1"><a href="/?sample=XX-test_1">Sample plan 1</a> · Photo: “T” by A, CC0 1.0' in page
     assert page.count("<li id=") == 1 and '/static/style.css?v=' in page
     assert TestClient(create_app(None, use_env=False)).get("/credits").status_code == 404
+
+
+def test_share_card_needs_the_file(tmp_path):
+    from hereout.app import SHARE_AFTER, share_page
+    page = f'<head>{SHARE_AFTER} content="x"></head>'
+    assert share_page(page, tmp_path) == page
+    (tmp_path / "og.png").write_bytes(b"png")
+    shown = share_page(page, tmp_path)
+    assert '<meta property="og:image" content="https://hereout.devrives.com/video/og.png?v=' in shown
+    assert shown.index("og:image") < shown.index(SHARE_AFTER)

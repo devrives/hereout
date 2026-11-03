@@ -50,6 +50,7 @@
  "legend_route": "Ihre Route",
  "legend_exit": "Ausgang, nach Nummer",
  "tap_hint": "Tippen Sie auf eine freie Stelle im Plan, um die Route von dort zu sehen.",
+ "route_cleared": "Die Route von Ihrem vorigen Standort ist entfernt.",
  "check_card": "Prüfen Sie Route und Ausgänge am Plan.",
  "steps_head": "Schritte",
  "steps_hint": "Tippen Sie auf einen Schritt, um ihn im Plan zu sehen.",

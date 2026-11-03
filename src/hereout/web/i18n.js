@@ -73,6 +73,7 @@ const HereOutI18n = (() => {
     legend_route: "Your route",
     legend_exit: "Exit, by number",
     tap_hint: "Tap any open spot on the plan to see the route from there.",
+    route_cleared: "The route from your last spot is cleared.",
     // Answer card
     check_card: "Check the route and the exits against the plan.",
     steps_head: "Steps",

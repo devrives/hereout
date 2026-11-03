@@ -1110,7 +1110,8 @@ function showStages() {
   const prompt = $("tap-prompt");
   const was = prompt.hidden;
   const note = pillNote && performance.now() < pillNote.until ? pillNote : null;
-  const words = photoOnly ? "" : note ? note.text()
+  // While the reading shows, a tap does not set a start: no pill.
+  const words = photoOnly || (typeof readingOn === "function" && readingOn()) ? "" : note ? note.text()
     : marking ? t(addExit ? "msg_mark_tap_add" : "msg_mark_tap")
     : now === "you" && !state.start && view.reachable ? t("tap_prompt") : "";
   prompt.hidden = !words;
@@ -1147,7 +1148,7 @@ function placePrompt() {
     for (let k = 0; k <= n; k++) pts.push([leg.a[0] + (leg.b[0] - leg.a[0]) * k / n, leg.a[1] + (leg.b[1] - leg.a[1]) * k / n, 1]);
   }
   for (const e of state.exits) pts.push([e.x, e.y, 50]);
-  // A refused tap keeps the old route: the pill does not cover it or the dot.
+  // The pill does not cover the route or the dot.
   if (state.start) pts.push([state.start[0], state.start[1], 80]);
   for (const r of [view.route, view.backup]) {
     const line = r && r.points;
@@ -1591,14 +1592,33 @@ function exitName(i) {
   return l && new RegExp(`\\bexit\\s*${i + 1}\\b`, "i").test(l) ? (words && words.labels && words.labels[l]) || l : t("exit_n", { n: i + 1 });
 }
 
+// A number at the start of a label is the plan's own exit number ("4" in
+// "4 To street level"). Beside the number of the page it reads as a second
+// number ("Exit 1: 4 To street level"), so the name leaves it out. When two
+// names would then be the same, the plan's number stays, set apart: "4 · To
+// street level" (ux review: in a station the signs carry that number).
+const LEAD_NUMBER = /^\s*(?:№|no\.?|#)?\s*(\p{Nd}+)[.):]?\s+(?=\p{L})/iu;
+function shownLabel(i) {
+  const l = (state.exits[i].label || "").trim();
+  const words = wordsIn(lang);
+  return (words && words.labels && words.labels[l]) || l;
+}
+function withoutNumber(i) {
+  const shown = shownLabel(i);
+  const m = shown.match(LEAD_NUMBER);
+  if (!m) return shown;
+  const rest = shown.slice(m[0].length);
+  const same = state.exits.some((e, j) => j !== i && shownLabel(j).replace(LEAD_NUMBER, "") === rest);
+  return same && Number(m[1]) !== i + 1 ? `${m[1]} · ${rest}` : rest;
+}
+
 // The label of exit i that its name shows after the number ("ВЫХОД" in
 // "Exit 4: ВЫХОД"), in the language when it has come; "" when the name is
 // only the number, or the label already has the number.
 function exitLabel(i) {
   const l = (state.exits[i].label || "").trim();
   if (!l || /^exit$/i.test(l)) return "";
-  const words = wordsIn(lang);
-  const shown = (words && words.labels && words.labels[l]) || l;
+  const shown = withoutNumber(i);
   // A label that only says "exit" in the language ("ВЫХОД" in Korean) is the plain name too.
   const bare = (s) => s.trim().toLocaleLowerCase();
   if (shown !== l && [t("exit_word"), t("exit_n", { n: "" })].some((w) => bare(w) === bare(shown))) return "";
@@ -1749,8 +1769,9 @@ function update() {
   showExits();
   showAnswer();
   $("found-exits").hidden = !state.exitsMarked || !state.foundExits.length;
-  // With no start, the status line gives the same instruction.
-  $("tap-text").hidden = !state.start || marking;
+  // With no start, the status line gives the same instruction. A photo map
+  // takes no start, so it never shows the tap hint.
+  $("tap-text").hidden = !state.start || marking || !!state.photo_map;
   showLegend();
   showStages();
   showNow();
@@ -1962,7 +1983,9 @@ function setStart(x, y) {
   if (!cardWas) showNowInView();
 }
 
-// A tap off the floor drawing gives no route, and the old route stays. A tap
+// A tap off the floor drawing gives no route. The tap says "I am here", so
+// the old start and its route go too: a route from the old spot left on the
+// plan looked as if the tap did nothing (judge review, 2026-11-02). A tap
 // on a wall or on ink next to open floor starts on that floor (route.js
 // Field.tapStart). The keyboard marker follows the same rules.
 const tapText = () => t("tap_hint");
@@ -1978,13 +2001,25 @@ function startFromTap(x, y) {
   const t = view.field.tapStart([x, y], fingerReach());
   // Off the plan and on a wall give the same words (ux review): the edge
   // between the two does not show on the plan.
-  if (t.at === "outside" || t.at === "wall") { refuseTap(ROUTE_ERRORS["start is inside a wall"], [x, y]); return; }
+  if (t.at === "outside" || t.at === "wall") { refuseTap(ROUTE_ERRORS["start is inside a wall"], [x, y], dropStart()); return; }
   // A large floor with no exit is another floor of the sheet: the start
   // stays there, and the plan asks for the exit of that floor (explain,
   // NO_EXIT_HERE). A small closed area gives no start (ux review).
-  if (t.at === "noway" && view.field.areaShare(view.field.toPx(t.cell)) < FLOOR_SHARE) { refuseTap(ROUTE_ERRORS["no open way to an exit"], [x, y]); return; }
+  if (t.at === "noway" && view.field.areaShare(view.field.toPx(t.cell)) < FLOOR_SHARE) { refuseTap(ROUTE_ERRORS["no open way to an exit"], [x, y], dropStart()); return; }
   if (t.at === "moved" || t.at === "noway") [x, y] = view.field.toPx(t.cell);
   setStart(x, y);
+}
+
+// True when a start and its route went.
+function dropStart() {
+  if (!state.start) return false;
+  state.start = null;
+  state.exitChoice = -1;
+  hereAnim = routeAnim = null;
+  reveal = null;
+  update();
+  remember();
+  return true;
 }
 
 // The message goes under the plan, where the eyes are after a tap, and to
@@ -1996,11 +2031,19 @@ function startFromTap(x, y) {
 const NOTE_MS = 3500, RING_MS = 600;
 let pillNote = null;  // { text, until } while the pill shows a refusal
 let tapRing = null;   // { at, t0 } while the ring at a refused tap fades
-function refuseTap(text, at = null) {
+// dropped: the tap removed a start and its route. The live line says so too,
+// for a screen reader (a11y review); the plan shows the route go.
+function refuseTap(text, at = null, dropped = false) {
   pillNote = { text, until: performance.now() + NOTE_MS };
   tapRing = at && !stillMotion() ? { at, t0: performance.now() } : null;
   clearTimeout(refuseTap.timer);
-  refuseTap.timer = setTimeout(() => { if (state) showStages(); }, NOTE_MS + 50);
+  // With no start left, the page then asks for a tap again, in the card too
+  // (ux review: on a wide screen the card kept only "Mark the exit").
+  refuseTap.timer = setTimeout(() => {
+    if (!state) return;
+    if (!state.start && !marking) clearRefusal();
+    showStages();
+  }, NOTE_MS + 50);
   showStages();
   if (tapRing) animate();
   tapSaid = text;
@@ -2008,7 +2051,7 @@ function refuseTap(text, at = null) {
   $("tap-text").hidden = false;
   $("tap-hint").classList.add("refused");
   $("plan-status").classList.add("sr");
-  sayPlan(text);
+  sayPlan(dropped ? () => I.join([text(), t("route_cleared")]) : text);
 }
 
 function clearRefusal() {
@@ -2017,8 +2060,10 @@ function clearRefusal() {
   $("tap-hint").classList.remove("refused");
   tapSaid = tapText;
   $("tap-text").textContent = tapText();
-  $("tap-text").hidden = !state || !state.start || marking;
+  $("tap-text").hidden = !state || !state.start || marking || !!state.photo_map;
   if (view) showAnswer();
+  // The refusal leaves the live line; with no start it asks for a tap again (a11y review).
+  if (state && view && !state.start) explain();
 }
 
 function place(x, y) {

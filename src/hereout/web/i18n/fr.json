@@ -50,6 +50,7 @@
  "legend_route": "Votre itinéraire",
  "legend_exit": "Sortie, par numéro",
  "tap_hint": "Touchez un endroit dégagé sur le plan pour voir l’itinéraire depuis ce point.",
+ "route_cleared": "L’itinéraire depuis votre point précédent est effacé.",
  "check_card": "Vérifiez l’itinéraire et les sorties sur le plan.",
  "steps_head": "Étapes",
  "steps_hint": "Touchez une étape pour la voir sur le plan.",

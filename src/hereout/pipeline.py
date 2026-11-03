@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -19,6 +20,21 @@ from .wall_lines import plan_walls
 from .walls import strong_ink
 
 WORK_SIDE = 1600  # every coordinate the client sees is in this image
+
+# An exit whose label says that it is closed, or that it is a lift, is not a way
+# out in a fire (JP-commons_000268 "To street level closed", US-commons_000003
+# "south elevator exit" on a plan that says "Do not use the elevator").
+# A door that is kept closed ("Fire door - keep closed") is still a way out, and
+# a lift word next to a stair or door word ("Stairs next to lift") names a
+# place, not the lift (ux review).
+CLOSED = re.compile(r"(?<!keep )(?<!kept )\b(closed|not in use|out of service|do not use|no exit)\b|閉鎖|폐쇄", re.I)
+LIFT = re.compile(r"\b(elevators?|lifts?)\b|エレベーター|엘리베이터|电梯|電梯|лифт|Aufzug|ascenseur|ascensor", re.I)
+NEAR_LIFT = re.compile(r"\b(stairs?|staircase|stairway|door|lobby|next to|near|beside|via)\b|階段|계단|楼梯|樓梯|лестниц|Treppe|escalier|escalera", re.I)
+
+
+def not_exit(label: str) -> bool:
+    """A label that says the exit is closed, or that it is a lift."""
+    return bool(CLOSED.search(label) or (LIFT.search(label) and not NEAR_LIFT.search(label)))
 
 
 class BadPhoto(Exception):
@@ -57,14 +73,19 @@ class Plan:
         if self.text is None:
             self.text = text_boxes(self.image)
         given = list(reading.exits)
+        # The exits with a closed or lift label go, but never every exit.
+        shut = {id(e) for e in given if not_exit(str(e.get("label", "")))}
+        if len(shut) == len(given):
+            shut = set()
         # An exit goes when its point or the model's own point (exit_fix) is in a legend or a text block.
         def both(drop, exits: list[dict], *args) -> list[dict]:
             raw = [{**e, "x": e["model"][0], "y": e["model"][1]} if e.get("model") else e for e in exits]
             kept = {id(e) for e in drop(self.image, self.text, exits, *args)}
             kept_raw = {id(e) for e in drop(self.image, self.text, raw, *args)}
             return [e for e, r in zip(exits, raw) if id(e) in kept and id(r) in kept_raw] or exits
-        exits = both(drop_legend_exits, given, reading.plan_box)
-        legend = {id(e) for e in given} - {id(e) for e in exits}
+        open_ = [e for e in given if id(e) not in shut]
+        exits = both(drop_legend_exits, open_, reading.plan_box)
+        legend = {id(e) for e in open_} - {id(e) for e in exits}
         exits = both(drop_text_exits, exits)
         # Walls found in an aerial photo are roofs and trees: the page shows
         # the exits and points to the printed route.
@@ -78,7 +99,7 @@ class Plan:
         # What the code did with each exit of the model, for the page (model_reading).
         at = {id(e): p for e, p in zip(exits, placed)}
         reading.given = given
-        reading.code = [{"drop": "legend"} if id(e) in legend else {"drop": "text"} if id(e) not in at
+        reading.code = [{"drop": "label"} if id(e) in shut else {"drop": "legend"} if id(e) in legend else {"drop": "text"} if id(e) not in at
                         else {"drop": "off"} if at[id(e)] is None else {"at": at[id(e)]} for e in given]
 
     def no_reading(self) -> None:

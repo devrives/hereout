@@ -325,11 +325,15 @@ html { scroll-padding-bottom: var(--bar-room, 0px); }
 @media (min-width: 960px) { .now-card { display: none !important; } }
 
 /* The plan and its controls */
+/* The larger-plan key stays on the row of the view buttons: a longer label (Arabic at 390 px) takes two lines
+   (judge review). The buttons go to their own row only when their longest words do not fit (larger text, ux review). */
 .view { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-.seg { display: flex; flex: 1 1 auto; min-width: min-content; gap: 2px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+.seg { display: flex; flex: 1 1 0; min-width: min-content; gap: 2px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
 /* On a narrow screen a label can take two lines; it never runs under the next button. */
-.seg button { flex: 1 1 auto; min-height: 40px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; font-size: 0.85rem; line-height: 1.15; white-space: nowrap; color: var(--muted); font-weight: 500; }
-@media (max-width: 380px) { .seg { flex-basis: 0; } .seg button { flex-basis: 0; white-space: normal; } }
+.seg button { flex: 1 1 auto; min-height: 40px; padding: 4px 8px; border: 0; border-radius: 999px; background: transparent; font-size: 0.85rem; line-height: 1.15; color: var(--muted); font-weight: 500; }
+/* On a phone the buttons share the width; a label takes two lines, and a button goes to a second row
+   only when its longest word does not fit (Russian at 320 px or with larger text, a11y review). */
+@media (max-width: 440px) { .seg { flex-wrap: wrap; border-radius: 22px; } .seg button { flex-basis: 0; min-width: min-content; } }
 .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); font-weight: 600; }
 .seg button:disabled { cursor: not-allowed; }
 .enlarge { flex: none; min-width: 52px; min-height: 50px; padding: 8px 14px; }

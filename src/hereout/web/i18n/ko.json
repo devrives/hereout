@@ -50,6 +50,7 @@
  "legend_route": "내 경로",
  "legend_exit": "출구, 번호별",
  "tap_hint": "평면도의 빈 곳을 탭하면 그곳에서의 경로가 보여요.",
+ "route_cleared": "이전 위치에서의 경로는 지웠어요.",
  "check_card": "평면도와 경로, 출구를 대조해 확인하세요.",
  "steps_head": "순서",
  "steps_hint": "단계를 탭하면 평면도에서 볼 수 있어요.",

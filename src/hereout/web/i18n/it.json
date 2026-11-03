@@ -50,6 +50,7 @@
  "legend_route": "Il tuo percorso",
  "legend_exit": "Uscita, per numero",
  "tap_hint": "Toccare un punto libero sulla pianta per vedere il percorso da lì.",
+ "route_cleared": "Il percorso dal punto precedente è stato rimosso.",
  "check_card": "Verificare il percorso e le uscite sulla pianta.",
  "steps_head": "Passi",
  "steps_hint": "Toccare un passo per vederlo sulla pianta.",
