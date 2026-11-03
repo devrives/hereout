@@ -64,7 +64,7 @@ html:not(.has-plan) { scroll-padding-top: 76px; }
 /* Narrow screens keep fewer links: the photo button and the samples come first. */
 @media (max-width: 719px) { .nav-how { display: none !important; } }
 @media (max-width: 479px) { .nav-demo { display: none !important; } .nav a { padding: 0 8px; } }
-@media (max-width: 359px) { .nav-samples { display: none !important; } }
+@media (max-width: 359px) { .nav-code { display: none !important; } }  /* the footer links the code */
 /* With a plan open, the start page parts are gone: the links to them go too. */
 html.has-plan .nav-how, html.has-plan .nav-demo { display: none !important; }
 @media (max-width: 599px) { html.has-plan .nav-samples { display: none !important; } }
@@ -81,7 +81,7 @@ html:not(.has-plan) .new-photo { display: none; }
 .new-photo { flex: none; }
 /* With a plan open, the start page text goes. Its h1 stays for a screen reader. */
 html.has-plan .intro { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how, html.has-plan .proof, html.has-plan .about { display: none; }
+html.has-plan .intro > :not(h1), html.has-plan .demo, html.has-plan .hero, html.has-plan .how, html.has-plan .about { display: none; }
 /* While a plan from the address loads, the samples wait under it, so they do not jump down. */
 html.has-plan #result[hidden] ~ .gallery-wrap { display: none !important; }
 .new-photo input, .shoot input { position: absolute; opacity: 0; width: 1px; height: 1px; }
@@ -197,15 +197,6 @@ html:not(.js) .loop-phone video, html:not(.js) .loop-toggle { display: none; }
 .has-loop .example-bar { justify-content: center; flex-wrap: wrap; gap: 4px 12px; min-height: 44px; padding: 14px 0 0; border: 0; background: none; text-align: center; }
 .has-loop .credit { max-width: 52ch; margin-top: 4px; text-align: center; }
 
-/* The counts under the hero, one link to the samples (app.js showGallery). */
-.proof { margin: 40px 0 0; }
-.proof a { display: flex; flex-wrap: wrap; gap: 6px 0; color: var(--muted); text-decoration: none; font-size: 1.05rem; }
-.proof span { display: inline-flex; align-items: baseline; gap: 8px; padding-right: 24px; }
-.proof b { font: 700 1.5rem/1.2 "Geist Mono", ui-monospace, monospace; color: var(--fg); letter-spacing: -0.02em; }
-.proof a:hover b { color: var(--accent); }
-.proof a:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; border-radius: 4px; }
-@media (min-width: 600px) { .proof span + span { padding-left: 24px; border-left: 1px solid var(--line); } }
-
 /* From photo to route: the four parts of the work, as the page shows them. */
 .how { margin: 28px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .how ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); }
@@ -250,7 +241,6 @@ html:not(.js) .loop-phone video, html:not(.js) .loop-toggle { display: none; }
   .vertical .demo-play-time { left: calc(8.3% + 64px); top: 84%; height: 52px; font-size: 1rem; }
 }
 .demo-meta { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 12px 0 0; color: var(--muted); font-size: 0.95rem; }
-.demo-meta a { font-weight: 550; }
 .transcript { margin-top: 12px; }
 .transcript h3 { margin: 20px 0 6px; font-size: 1rem; }
 .transcript summary { cursor: pointer; min-height: 24px; }
@@ -503,9 +493,8 @@ ol:focus:not(:focus-visible), h2:focus:not(:focus-visible) { outline: none; }
   .top-in, .layout { padding-left: 48px; padding-right: 48px; }
   .top-in { min-height: 72px; }
   .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); column-gap: 64px; align-items: center;
-            grid-template-areas: "intro hero" "status status" "proof proof" "how how" "gallery gallery" "demo demo" "about about" "result result"; }
+            grid-template-areas: "intro hero" "status status" "how how" "gallery gallery" "demo demo" "about about" "result result"; }
   .about { grid-area: about; }
-  .proof { grid-area: proof; }
   .intro { grid-area: intro; }
   .hero { grid-area: hero; margin-top: 24px; }
   /* The phone fits the screen height beside the start text. */

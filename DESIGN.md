@@ -312,7 +312,6 @@ All in `style.css` and `index.html`.
 - Photo buttons (`button-primary`, `button-new-photo`): a file input behind a label. They show only with JS.
 - Sample row: under the photo button, "Or open a sample plan" and three sample thumbnails (fixed in `index.html`, plans whose exits are right). They are in the page from the start, so nothing moves when the gallery comes. One tap opens the plan, as in the gallery.
 - Hero phone (`loop-phone`): a phone frame with a muted loop of the page at 390 px (`hero-loop.mp4` and `.webm` in the video folder, made by the hub script `docs/hackathon-hereout-submission-2026-10-31/hero_loop.mjs`). The phone is the link that opens the same plan. The server shows it only when the file is there, else the still example picture. The loop shows the plan with no page header. A hidden line tells a screen reader what the loop shows. Without JS the phone shows the poster only. The loop plays only on the screen. With reduced motion it shows the poster. The round button on the foot of the screen (`loop-toggle`) pauses and plays it (WCAG 2.2.2). The credit line of the photo is under it.
-- Count row: plans, countries and regions, languages, in Geist Mono `fg` with `muted` words, divided by `line`. It is one link to the samples. The server puts the counts in the page (`app.py` `proof_page`), from the gallery and the language list.
 - `button-secondary` is every other button: `card` ground, a `line` border.
 - The stage strip (`stage-chip`): four labels above the plan. Done parts have a green dot, the part that shows now is green with a green border (`stage-chip-now`).
 - The view control (`seg`, `seg-item`): "Escape map", "Photo only", "Routes only". It is one choice of three: exactly one button has `aria-pressed="true"`. "Routes only" shows the walls with the ways out, with no photo. In the reading view no button is pressed. A photo map has no "Routes only". Beside it, the larger-plan button.
@@ -362,7 +361,7 @@ The current code differs from `references/house-ui-rules.md` in these places. Th
 
 ## Screens
 
-Widths: 390 and 1280. Without JS, the start page shows one line that says HereOut needs JavaScript, no photo button, no sample row and no count row (`.js-only`, set by `early.js`).
+Widths: 390 and 1280. Without JS, the start page shows one line that says HereOut needs JavaScript, no photo button and no sample row (`.js-only`, set by `early.js`).
 
 | Screen | Route | States |
 |---|---|---|

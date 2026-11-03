@@ -43,6 +43,7 @@ Read `glossary.md` before you write. Read `log.md` to see the last operations.
 - [Demo video on the start page](decisions/demo-video.md): accepted; an MP4 file outside the repository, with the caption text and the photo credits.
 - [Hover and press feedback, and a calmer demo player](decisions/ui-detail-pass.md): accepted; a hand cursor on the plan, press states, one play button.
 - [Features for after the submission, and a plan that turns with you](decisions/next-features.md): proposed; README sections now, features after the event.
+- [Fewer repeated lines on the start page](decisions/start-page-trims.md): accepted; no count row, no second credits link under the video, a short footer.
 - [Fast first tap and smaller sample plans](decisions/page-speed.md): accepted; the worker makes the trees to single exits, faster loops, sample images as WebP files.
 - [One network of way lines: links between exits, lines along corridors](decisions/connected-way-lines.md): accepted; links join the exits, and corridors get lines.
 - [Clean way lines: no jogs, closed gaps, routes on the lines](decisions/clean-way-lines.md): accepted; side steps, ticks and gaps go, and routes keep to the lines.

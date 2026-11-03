@@ -55,6 +55,7 @@ sources:
 - The link of the phone has a hidden line that tells a screen reader what the loop shows.
 - The sample row is in `index.html`, with fixed ids. The server puts the counts in the page (`app.py` `proof_page`). The page does not move when the gallery comes (layout shift 0.115 before, 0 after, at 390 px with a slow gallery).
 - `early.js` adds the class `js`. Without it, the sample row, the count row and the samples link do not show, and the phone shows the poster (`noscript`) with no video.
+- Later (2026-11-03), the count row went: see [Fewer repeated lines on the start page](start-page-trims.md).
 - The hero loop has no page header, so the hero has one call to action. The hub script `hero_loop.mjs` hides the header in the video. The agent made the loop again after this round.
 
 ## Consequences

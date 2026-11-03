@@ -163,21 +163,16 @@ def example_page(page: str, gallery: Gallery | None, folder: Path | None = None)
                 .replace(EXAMPLE_CREDIT, EXAMPLE_CREDIT.replace("></", f">{credit}</"), 1))
 
 
-PROOF_TAG = '<p id="proof" class="proof js-only" hidden'
-
-
-def proof_page(page: str, gallery: Gallery | None) -> str:
-    """The start page with the counts of the samples in place (app.js fills
-    them too), so the row under the hero does not move the page when the
-    gallery comes. With no gallery, the row stays hidden."""
+def counts_page(page: str, gallery: Gallery | None) -> str:
+    """The start page with the counts of the samples in the heading of the
+    gallery (app.js fills them too)."""
     plans = gallery.listing() if gallery else []
     if not plans:
         return page
     countries = len({p["country"] for p in plans if p["country"] != "XX"})
-    for key, n in (("proof-plans", len(plans)), ("proof-countries", countries),
-                   ("gallery-count", len(plans)), ("gallery-countries", countries)):
+    for key, n in (("gallery-count", len(plans)), ("gallery-countries", countries)):
         page = page.replace(f'id="{key}"></', f'id="{key}">{n}</', 1)
-    return page.replace(PROOF_TAG, PROOF_TAG.removesuffix(" hidden"), 1)
+    return page
 
 
 CREDITS_LIST = '<ol id="credits" class="credit-list" role="list"></ol>'
@@ -390,7 +385,7 @@ def create_app(client: ModelClient | None = None, use_env: bool = True,
 
     @app.api_route("/", methods=["GET", "HEAD"])
     def index():
-        return HTMLResponse(share_page(demo_page(proof_page(example_page(page, gallery, video), gallery), video, gallery), video))
+        return HTMLResponse(share_page(demo_page(counts_page(example_page(page, gallery, video), gallery), video, gallery), video))
 
     @app.api_route("/credits", methods=["GET", "HEAD"])
     def credits_list():

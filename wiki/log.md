@@ -489,3 +489,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Added `decisions/next-features.md`: the README gets "Experiments" and "What's next" now, and the features come after the submission.
 - Source: the owner request and go-ahead of 2026-11-03.
+
+## [2026-11-03] ingest | Fewer repeated lines on the start page
+
+- Added `decisions/start-page-trims.md`: the count row, the second credits link under the video and the tool list of the footer went.
+- Updated `decisions/plan-page-fixes.md`: a pointer to the new page.
+- Source: the owner request of 2026-11-03 and the walk-through of the agent.

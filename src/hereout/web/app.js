@@ -2578,8 +2578,6 @@ function setUpDemo() {
     v.focus();
     v.play().catch(() => {});
   });
-  // The credits are in the text of the video: their link opens it.
-  document.querySelector(".demo-meta a").addEventListener("click", () => { $("demo-text").open = true; });
 }
 setUpDemo();
 
@@ -2683,9 +2681,8 @@ async function showGallery() {
   };
   // "XX" marks photos whose country is not known.
   const countries = String(new Set(plans.map((p) => p.country).filter((c) => c !== "XX")).size);
-  $("gallery-count").textContent = $("proof-plans").textContent = String(plans.length);
-  $("gallery-countries").textContent = $("proof-countries").textContent = countries;
-  $("proof").hidden = false;
+  $("gallery-count").textContent = String(plans.length);
+  $("gallery-countries").textContent = countries;
   showTry(plans);
   $("gallery-more").addEventListener("click", () => {
     const first = shown;

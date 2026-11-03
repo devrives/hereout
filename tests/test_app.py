@@ -390,15 +390,13 @@ def test_example_plays_the_loop(tmp_path):
 
 
 def test_counts_in_the_start_page(tmp_path):
-    """The row of counts is in the page from the server, so the hero does not move when the gallery comes."""
-    from hereout.app import WEB, proof_page
+    """The counts of the samples are in the gallery heading from the server."""
+    from hereout.app import WEB, counts_page
     real = (WEB / "index.html").read_text()
-    assert proof_page(real, None) == real
-    shown = proof_page(real, make_gallery(tmp_path))
-    assert '<p id="proof" class="proof js-only">' in shown
-    assert '<b id="proof-plans">1</b>' in shown and '<b id="proof-countries">0</b>' in shown
-    assert 'proof-langs' not in shown  # the card languages are not a count of the samples (copy review)
-    assert '<span id="gallery-count">1</span>' in shown
+    assert counts_page(real, None) == real
+    shown = counts_page(real, make_gallery(tmp_path))
+    assert 'id="proof"' not in shown  # the heading of the gallery gives the counts (owner, 2026-11-03)
+    assert '<span id="gallery-count">1</span>' in shown and '<span id="gallery-countries">0</span>' in shown
 
 
 def test_start_page_links_and_credits_page(tmp_path):

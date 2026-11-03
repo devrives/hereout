@@ -32,7 +32,7 @@ sources:
 - The language menu has a hand cursor.
 - A pressed button dips and gets an accent border. The browser's grey tap flash is off. The transitions run only with no request for reduced motion.
 - The demo video has one play button over a title frame of the film. The browser controls come with the first play. Without the script, the video keeps its own controls.
-- Under the video there is one short line: the length, "no sound, with captions", and a link to the photo credits. The credits are in the one disclosure, after the text of the video. The link opens the disclosure. The credit text of each photo did not change.
+- Under the video there is one short line: the length, "no sound, with captions", and a link to the photo credits. The credits are in the one disclosure, after the text of the video. The link opens the disclosure. The credit text of each photo did not change. Later (2026-11-03), the line kept only "No sound, with captions": see [Fewer repeated lines on the start page](start-page-trims.md).
 - A screen under 600 px gets a 4:5 cut of the film (`demo-vertical.mp4`), with the captions under the phone, and its own poster. A wider screen gets the 16:9 film.
 - When the 4:5 file is not in the video folder, the server removes its source, and the box of the player stays 16:9.
 - The hub script `film.mjs` makes both cuts (`--vertical` for 4:5). In both:
