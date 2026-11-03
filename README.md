@@ -1,20 +1,53 @@
 # HereOut
 
-HereOut reads a photo of a posted evacuation plan and shows the way out from where you stand. You take a photo of the plan on the wall. Muse Spark finds the exits. You tap where you stand, and HereOut draws a route that stays inside the walls and gives the steps. It is for a person in an unfamiliar building (a hotel, a station, a school) who sees the plan but cannot read it fast, often because it is in another language. Muse Spark also reads the words on the plan, and the plan card (steps, exit names, title, legend, printed instructions) comes in the user's language.
+**Your way out, drawn on the plan.** Photograph a posted evacuation plan, tap where you stand, and HereOut draws the route to the nearest exit, step by step, in your language.
 
-Live: <https://hereout.devrives.com/>
+[Live demo](https://hereout.devrives.com/) · [Demo video](https://hereout.devrives.com/#demo) · Entry for the Meta Global AI Developer Hackathon (Indie track, 2026-10-26 to 2026-11-04 ET)
 
-Entry for the Meta Global AI Developer Hackathon (2026-10-26 to 2026-11-04 ET).
+![How HereOut works: you photograph the plan, Muse Spark reads it, code finds the ways out, and you tap your spot to get the route](docs/how-it-works.png)
 
 ## Try it
 
-1. Open <https://hereout.devrives.com/>.
-2. Pick a plan from the gallery: 203 open-licensed photos of real posted plans. A gallery plan opens from a saved reading, so it makes no model call for the exits. Or upload your own photo of a plan.
-3. The plan opens in the order of the work: the exits that Muse Spark found, then the ways out that the code drew. Tap where you stand: the route draws in from your spot, with the steps. Tap another spot for another route.
-4. Pick a language in the plan card, or let the browser pick it: Spanish, French, German, Italian, Portuguese, Russian, Ukrainian, Japanese, Korean, Simplified Chinese, Hindi or Arabic. "What the plan says" shows the plan's own title, legend and instructions, translated, each with its original text under it.
-5. Open "What Muse Spark read" to see the floor box and exit points that the model gave, what the second look did with each one (with the zoomed crops the model saw), and what the code changed after the model.
+1. Open <https://hereout.devrives.com/> and pick one of 203 photos of real plans, or upload your own.
+2. Tap where you stand. "If blocked" switches the route to the next exit.
+3. Open "What Muse Spark read" to see the model's points, the crops of its second look and what the code changed.
 
-## How it works
+## What Muse Spark does
+
+| Job | How | On the page |
+|---|---|---|
+| Exits | One call on the whole photo asks for the floor box and every final exit, as points on a 0 to 1000 grid | The numbered exits |
+| Second look | Exits far from any green or red mark go on numbered, zoomed crops in one multi-image call; the model keeps, moves or drops each one | "What Muse Spark read", with the crops |
+| Plan words | A parallel call reads the title, the legend and the printed instructions | "What the plan says", with the original under each item |
+| Translation | A text-only call puts the plan words and exit names into 12 languages besides English, cached | The plan card in your language |
+
+Walls, routes and steps come from code, and the start is always your tap. HereOut uses no other Meta model. Model: `meta-models/muse-spark-open-1026` through Baseten, standard mode only, every call under one spend cap.
+
+<details>
+<summary>Settings, prompts and time limits of each call</summary>
+
+| Item | Value | Where |
+|---|---|---|
+| Model | `meta-models/muse-spark-open-1026` | `DEFAULT_MODEL` in `src/hereout/reader.py` |
+| Provider | Baseten Model API, OpenAI-compatible chat completions (`https://inference.baseten.co/v1/chat/completions`) | `API_URL` |
+| Mode | Standard mode only. The client refuses any model name that ends in `-contributor` (those send the content to training). | `ModelClient.__init__` |
+| Settings | `reasoning_effort: low`, `temperature: 0`, `max_tokens: 12000` | `DEFAULT_EFFORT`, `MAX_TOKENS` |
+| First call | `PROMPT`: the whole plan image (long side at most 1600 px); asks for the "final exits" and the box of the "floor drawing", as 0 to 1000 grid points, in JSON. A final exit is the end of an escape route: a door in the outer wall or the door of a protected staircase; on a plan with several levels, the exits of every level. | `PROMPT`, `parse_answer` |
+| Second look | `ZOOM_PROMPT`: only for exits farther than 1.5 % of the long side from any green or red mark. Crops of 18 % of the long side around each suspect exit, marked with a cross, four to a sheet, with the full image. The model keeps, moves or drops each one. A move of more than 7 % of the long side is used only when the new point is on a green or red mark and inside the floor box. Skipped when the first call took more than 30 s. | `suspect_exits`, `zoom_exits`, `ZOOM_*` |
+| Text read | `TEXT_PROMPT`: the same image, in parallel with the first call; the plan waits for it at most 2 s, and later words reach the page when the read ends. It gives the plan's language, title, legend entries and printed instructions (12 legend entries and instructions at most), each with its original text and an English text, and no positions. The plan opens without the words when the call fails. | `read_text`, `parse_plan_text` |
+| Translation | `TRANSLATE_PROMPT`: a text-only call that translates the plan words and the exit labels into one of 12 languages, on demand. Gallery answers stay in a disk cache; the words of an uploaded photo stay in memory only. English needs no call, except for exit labels in another script. | `translate`, `src/hereout/translate.py` |
+| Plan card texts | The texts of the plan card (steps, labels, messages) were translated once per language by Muse Spark with `scripts/translate_ui.py`. Three hand fixes after review (two Arabic steps, two Korean texts) are listed in `wiki/decisions/plan-language.md`. | `src/hereout/web/i18n/` |
+| Time limits | 45 s for the first call (one more try on a timeout or a 5xx answer), 25 s for the second look | `CALL_TIMEOUT`, `ZOOM_TIMEOUT`, `MAIN_TRIES` |
+| Spend cap | Every call goes through one `ModelClient`. It reserves the worst-case cost in a file ledger before the call and refuses a call that could pass the cap (`HEREOUT_SPEND_CAP_USD`, default 5 USD). A timed-out call is counted at the worst case. | `SpendLedger`, `ModelClient._ask` |
+| Use limit | 12 photos to the model for each address in 10 minutes; after that the user marks the exits by hand | `READS_PER_WINDOW` in `src/hereout/app.py` |
+
+
+On the 203 gallery plans, the second look was run on the saved readings (`scripts/zoom_saved.py`): 142 plans had at least one suspect exit. The card of each sample shows the crops and the result.
+
+</details>
+
+<details>
+<summary>The full pipeline</summary>
 
 ```mermaid
 flowchart TD
@@ -32,32 +65,21 @@ flowchart TD
     H --> I[Tap: route from that spot<br/>and the steps]
 ```
 
-- The model gives the floor box, the exits and the words of the plan. The start always comes from the user's tap, not from the model.
+- The model gives the floor box, the exits and the words of the plan.
 - The browser finds every route. The server sends the wall grid once, and each tap is answered on the device.
 - The steps name turns and say "short", "medium" or "long" walks. They give no metres, because a photo has no reliable scale.
 
-## How Muse Spark is used
-
-| Item | Value | Where |
-|---|---|---|
-| Model | `meta-models/muse-spark-open-1026` | `DEFAULT_MODEL` in `src/hereout/reader.py` |
-| Provider | Baseten Model API, OpenAI-compatible chat completions (`https://inference.baseten.co/v1/chat/completions`) | `API_URL` |
-| Mode | Standard mode only. The client refuses any model name that ends in `-contributor` (those send the content to training). | `ModelClient.__init__` |
-| Settings | `reasoning_effort: low`, `temperature: 0`, `max_tokens: 12000` | `DEFAULT_EFFORT`, `MAX_TOKENS` |
-| First call | `PROMPT`: the whole plan image (long side at most 1600 px); asks for the "final exits" and the box of the "floor drawing", as 0 to 1000 grid points, in JSON. A final exit is the end of an escape route: a door in the outer wall or the door of a protected staircase; on a plan with several levels, the exits of every level. | `PROMPT`, `parse_answer` |
-| Second look | `ZOOM_PROMPT`: only for exits farther than 1.5 % of the long side from any green or red mark. Crops of 18 % of the long side around each suspect exit, marked with a cross, four to a sheet, with the full image. The model keeps, moves or drops each one. A move of more than 7 % of the long side is used only when the new point is on a green or red mark and inside the floor box. Skipped when the first call took more than 30 s. | `suspect_exits`, `zoom_exits`, `ZOOM_*` |
-| Text read | `TEXT_PROMPT`: the same image, in parallel with the first call; the plan waits for it at most 2 s, and later words reach the page when the read ends. It gives the plan's language, title, legend entries and printed instructions (12 legend entries and instructions at most), each with its original text and an English text, and no positions. The plan opens without the words when the call fails. | `read_text`, `parse_plan_text` |
-| Translation | `TRANSLATE_PROMPT`: a text-only call that translates the plan words and the exit labels into one of 12 languages, on demand. Gallery answers stay in a disk cache; the words of an uploaded photo stay in memory only. English needs no call, except for exit labels in another script. | `translate`, `src/hereout/translate.py` |
-| Plan card texts | The texts of the plan card (steps, labels, messages) were translated once per language by Muse Spark with `scripts/translate_ui.py`. Three hand fixes after review (two Arabic steps, two Korean texts) are listed in `wiki/decisions/plan-language.md`. | `src/hereout/web/i18n/` |
-| Time limits | 45 s for the first call (one more try on a timeout or a 5xx answer), 25 s for the second look | `CALL_TIMEOUT`, `ZOOM_TIMEOUT`, `MAIN_TRIES` |
-| Spend cap | Every call goes through one `ModelClient`. It reserves the worst-case cost in a file ledger before the call and refuses a call that could pass the cap (`HEREOUT_SPEND_CAP_USD`, default 5 USD). A timed-out call is counted at the worst case. | `SpendLedger`, `ModelClient._ask` |
-| Use limit | 12 photos to the model for each address in 10 minutes; after that the user marks the exits by hand | `READS_PER_WINDOW` in `src/hereout/app.py` |
-
-HereOut uses no other Meta model. Walls, routes and steps come from code.
-
-On the 203 gallery plans, the second look was run on the saved readings (`scripts/zoom_saved.py`): 142 plans had at least one suspect exit. The card of each sample shows the crops and the result.
+</details>
 
 ## Evaluation
+
+| Test | Result |
+|---|---|
+| Exits on 28 test photos that no exit rule was tuned on (radius 5 %) | Found 53 % of the sure exits (recall 0.53). 47 % of its scored exits were right (precision 0.47; exits on unsure labels not counted). Every exit was right on 6 of the 26 photos that could be judged. |
+| All 203 gallery photos once through the photo button (code of 2026-11-01) | 203 opened, 0 failed, median 23.3 s from upload to plan ([each result](https://hereout.devrives.com/review/)) |
+
+<details>
+<summary>How the exits were measured</summary>
 
 **Photo set.** 28 photos of posted plans from Wikimedia Commons, 14 countries and regions, none of them in the gallery that the code was tuned on: each photo that was in the gallery or near one (by title, source address or a perceptual hash) was left out. The photos are not in this repository.
 
@@ -84,20 +106,27 @@ On the 203 gallery plans, the second look was run on the saved readings (`script
 
 The run of 2026-11-01 came before three later changes (far points of the second look on route marks, wall lines off the building, staircase steps). Each code version was run once. Two reads of the same photo can differ, so a change of a few hundredths is within noise.
 
-**Upload path.** All 203 gallery photos went once through the photo button of the page, on a local server with the code of 2026-11-01 (commit 8636f92): 203 plans opened, 0 failed, and the median time from the upload to the open plan was 23.3 s. Each plan with its result: https://hereout.devrives.com/review/
-
 **Dev set.** The code was tuned on a separate dev set: 30 gallery plans picked at random by country (seed 20261101), labelled the same way, by agents that had not seen the readings. On it, Muse Spark's exits in the lower half of the image were consistently a little too low, so `exit_fix.py` moves them up by 10 % of their distance below the middle (dev set, 5 %: precision 0.357 to 0.391, recall 0.348 to 0.383, four reads; better on both random halves of the dev set, and no read got worse). A new prompt scored within the noise between two reads and did not ship. A vote of three reads of each plan (an exit where two reads agree) gained 1 to 3 points at 5 % for three times the calls, so it did not ship either (`scripts/vote_reads.py`, `wiki/decisions/exit-vote.md`). No exit rule was chosen on the holdout photos. Only the time limits of the model calls, and the skip of the second look after a slow first call, came from their slow calls on 2026-10-29.
 
 On the overlays of the 2026-10-29 run, the misses and false exits were points on the sign or the name plate beside a stair instead of its door, points on the paper or the street outside the building, the same exit given twice (stair and sign), direction signs along a corridor taken as exits, and staircases on a ground floor where every printed route goes past them to the main door. Some points are on the right door but just outside R, which is why the scores at 10 % are higher.
 
+Evaluation on a photo set (the folder must be outside the repository):
+
+```sh
+uv run --env-file .env python scripts/run_set.py <index.csv> <out folder> --workers 2   # paid: one or two model calls per photo
+uv run python scripts/score_exits.py <out folder> <labels.json> --overlays <out folder>/score
+uv run python scripts/score_exits.py <gallery folder> <labels.json> --gallery --out <file>   # saved gallery readings, no model call
+```
+
+</details>
+
 ## Limits
 
-- The exits are the weak part. On the photo set above, the run of 2026-11-01 found about half of the labelled exits, and about half of the exits it gave were false (radius 5 %). A wrong exit gives a wrong route, so every route says to check it against the plan, and the user can mark an exit by hand.
-- The model can give different exits for the same photo in different reads.
-- A route does not go from the stairs of one level to the exits of another level. Each level is a separate drawing.
-- Walls come from the ink. Wavy walls and the grey middle of a printed escape arrow can give wrong walls, so a route can cross a wall or find no way.
-- A plan that is small in the photo, cut off, or seen through glare is read badly.
-- The steps give no distances, and the first step names a side of the plan ("toward the top of the plan"), not left or right of your body.
+- The exits are the weak part: about half are right (above), and two reads of one photo can differ. Every route asks you to check it against the plan, and you can mark an exit yourself.
+- A route stays on one level. It does not take the stairs to the exits of another level.
+- Walls come from the ink. Wavy or grey walls can let a route cross a wall.
+- Photograph the whole plan straight on. A plan that is small in the photo or cut off reads badly.
+- The steps give no distances, because a photo has no scale. The first step names a side of the plan, because a plan does not show which way you face.
 - HereOut is a reading aid. Follow the signs, the staff and the emergency services.
 
 ## Run locally
@@ -124,15 +153,8 @@ uv run --env-file .env uvicorn hereout.app:app --port 8000
 
 Without a key the server still runs: the user marks the exits by hand. The gallery photos are not in this repository, so a local server has no gallery unless `HEREOUT_GALLERY` points to a folder made with `scripts/run_set.py`.
 
-Evaluation on a photo set (the folder must be outside the repository):
-
-```sh
-uv run --env-file .env python scripts/run_set.py <index.csv> <out folder> --workers 2   # paid: one or two model calls per photo
-uv run python scripts/score_exits.py <out folder> <labels.json> --overlays <out folder>/score
-uv run python scripts/score_exits.py <gallery folder> <labels.json> --gallery --out <file>   # saved gallery readings, no model call
-```
-
-## Project layout
+<details>
+<summary>Project layout</summary>
 
 ```
 src/hereout/
@@ -155,6 +177,8 @@ scripts/          run_set.py, summarize_set.py, score_exits.py, save_answers.py,
 tests/            pytest, plus node checks of web/route.js
 wiki/             decisions, components and history (why and when)
 ```
+
+</details>
 
 ## Data and licences
 

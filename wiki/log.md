@@ -466,3 +466,9 @@ Add one entry for each operation. Put the newest entry at the bottom.
 
 - Added `decisions/judge-round-8.md`: step dips, lines past exits, refused marks, touch hints, English names for Latin labels, the code licence.
 - Source: the judge 8 report and the owner request of 2026-11-03.
+
+## [2026-11-03] ingest | Public docs cut down
+
+- Updated `components/plan-reader.md`: an upload over 1 MB passes through a temporary file, deleted with the request.
+- The README now opens with the diagram `docs/how-it-works.png` and three tables. The detail is in folded parts.
+- Source: the owner request of 2026-11-03 and the fact check of the new text.
