@@ -169,7 +169,7 @@ Most of the wrong exits that remain are a real exit with the point a little off 
 
 - Better exit points, for the commonest error above: the point on the sign, in the stair or in front of the door.
 - Routes across levels, through the stairs drawn on the plan.
-- SAM 3.1: test masks of exit signs and corridors against today's exit points and walls, with the exits scored on the dev set and then once on the same 28 holdout photos. SAM 3.1 runs on the Meta Model API, and the API credit for it had not arrived by 2026-11-03.
+- SAM 3.1: test masks of exit signs and corridors against today's exit points and walls, with the exits scored on the dev set and then once on the same 28 holdout photos.
 - A plan that turns with you: after you line it up once with the room, the phone compass turns the plan as you turn, as in a map app. Then the first step can say "turn left" in place of a side of the plan. It must be your choice: not every posted plan puts "up" where you face, and a compass can be wrong inside a building.
 - Keep the screen on while a route is open.
 - Keep a plan on the phone, so that it opens with no network.
